@@ -95,9 +95,12 @@ El backend sigue una arquitectura limpia orientada a responsabilidades. Todo el 
 A nivel de producto, el flujo principal de ModelFuse es el siguiente:
 
 1. El usuario escribe un prompt en el área principal de chat.
-2. El sistema envía ese prompt a tres modelos distintos.
+2. El sistema envía ese prompt a tres modelos distintos; cada modelo recibe solo
+   su propio historial individual.
 3. Cada modelo responde en su tab correspondiente.
-4. El sistema pasa esas tres respuestas a un cuarto modelo integrador.
+4. El sistema pasa esas tres respuestas nuevas a un cuarto modelo integrador,
+   junto con el historial consolidado propio de este último, pero sin los
+   historiales completos de los otros modelos.
 5. El cuarto modelo genera una respuesta unificada y enriquecida.
 6. La conversación queda persistida para continuar iterando después.
 7. El usuario puede reabrir conversaciones guardadas desde la barra lateral o limpiar la actual para comenzar una nueva.
@@ -122,6 +125,10 @@ Ejemplos de responsabilidades de configuración:
 ## 🤖 Instrucciones para Agentes de IA (AI Agents)
 
 Si eres un agente de IA trabajando en este repositorio, **debes seguir estas reglas estrictamente**:
+
+La [constitución del proyecto](.specify/memory/constitution.md) es la autoridad
+principal. Estas instrucciones operativas deben interpretarse dentro de sus
+límites.
 
 ### 1. Gestión de Componentes UI (Shadcn)
 - **Cómo saber qué está instalado**: Para saber qué componentes de Shadcn UI existen en el proyecto, DEBES usar siempre la herramienta `list_dir` (o equivalente) para explorar el directorio `packages/ui/src/components`.
@@ -170,7 +177,7 @@ Toda integración con modelos externos debe diseñarse para ser:
 
 ## 📌 Principios del proyecto
 
-Las decisiones de implementación dentro de ModelFuse deberían alinearse con estos principios:
+Las decisiones de implementación dentro de ModelFuse DEBEN alinearse con estos principios:
 
 - **Separación clara de responsabilidades**.
 - **Escalabilidad para agregar más modelos o estrategias de fusión**.

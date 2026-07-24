@@ -80,6 +80,9 @@
 <!--
   ACTION REQUIRED: The content in this section represents placeholders.
   Fill them out with the right functional requirements.
+  Make persistence effects, model-context behavior, trust-boundary validation,
+  and failure recovery explicit when they apply. Keep architecture and stack
+  mapping in plan.md, where the Constitution Check governs implementation.
 -->
 
 ### Functional Requirements
