@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Aquí se incluirán los archivos master de cada módulo a medida que se vayan creando. -->
+    <!-- Ejemplo: <include file="modulo_usuarios/db.changelog-usuarios.xml" relativeToChangelogFile="true"/> -->
+
+</databaseChangeLog>

@@ -1,0 +1,56 @@
+services:
+  postgres_template:
+    image: postgres:16-alpine
+    container_name: dev_postgres_template
+    restart: unless-stopped
+    env_file:
+      - ./apps/backend/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_template_data:/var/lib/postgresql/data
+    networks:
+      - dev_template_network
+
+  pgadmin_template:
+    image: dpage/pgadmin4:latest
+    container_name: dev_pgadmin_template
+    restart: unless-stopped
+    env_file:
+      - ./apps/backend/.env
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres_template
+    networks:
+      - dev_template_network
+    volumes:
+      - pgadmin_template_data:/var/lib/pgadmin
+
+  liquibase_template:
+    image: liquibase/liquibase:4.30.0
+    container_name: dev_liquibase_template
+    env_file:
+      - ./apps/backend/.env
+    volumes:
+      - ./db/changelogs:/liquibase/changelog
+    command: 
+      - --url=jdbc:postgresql://postgres_template:5432/${POSTGRES_DB:-db_dev}
+      - --search-path=/liquibase/changelog
+      - --changelog-file=db.changelog-master.xml
+      - --username=${POSTGRES_USER:-postgres}
+      - --password=${POSTGRES_PASSWORD:-postgres}
+      - update
+    depends_on:
+      postgres_template:
+        condition: service_started
+    networks:
+      - dev_template_network
+
+volumes:
+  postgres_template_data:
+  pgadmin_template_data:
+
+networks:
+  dev_template_network:
+    driver: bridge

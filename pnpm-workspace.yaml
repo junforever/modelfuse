@@ -1,0 +1,16 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+allowBuilds:
+  esbuild: true
+  msw: false
+
+minimumReleaseAgeExclude:
+  - lucide-react@1.26.0
+
+# minimumReleaseAgeExclude:
+#  - lucide-react@1.26.0
+
+# ultimos 3 dias
+# minimumReleaseAge: 4320
