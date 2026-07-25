@@ -11,6 +11,7 @@
 
 - Q: ¿Qué historial recibe cada modelo en los turnos siguientes? → A: Cada modelo principal conserva solo su historial individual; el integrador conserva su historial consolidado y recibe únicamente las tres respuestas nuevas del turno.
 - Q: ¿Cómo se administran las conversaciones desde la barra lateral? → A: Cada conversación ofrece un menú de tres puntos para renombrar mediante un modal con límite de 80 caracteres o eliminar mediante confirmación.
+- Q: ¿Cómo se recupera y navega el historial dentro de una conversación? → A: Se cargan inicialmente los últimos 3 turnos como unidades completas y los bloques anteriores se recuperan al hacer scroll hacia arriba, sin botones ni números de página.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -53,17 +54,19 @@ Como usuario, quiero ver las conversaciones guardadas en una barra lateral izqui
 
 **Why this priority**: La persistencia convierte el historial en trabajo reutilizable y evita perder el contexto entre sesiones.
 
-**Independent Test**: Se puede probar creando una conversación, cerrando y volviendo a abrir la aplicación, seleccionándola desde la barra lateral y enviando un nuevo mensaje contextual.
+**Independent Test**: Se puede probar con una conversación de más de seis turnos, reabriéndola para verificar que aparecen inicialmente solo los últimos tres turnos completos y que los anteriores se incorporan en bloques al hacer scroll hacia arriba, sin controles de paginación.
 
 **Acceptance Scenarios**:
 
 1. **Given** conversaciones guardadas, **When** el usuario abre la aplicación, **Then** la barra lateral las lista con información suficiente para distinguirlas y con las más recientes primero.
-2. **Given** una conversación listada, **When** el usuario la selecciona, **Then** se cargan todos sus turnos y respuestas conservando el modelo al que pertenece cada una.
-3. **Given** una conversación recuperada, **When** el usuario envía otro mensaje, **Then** el nuevo turno se agrega a esa misma conversación y queda persistido.
-4. **Given** que no existen conversaciones guardadas, **When** el usuario abre la aplicación, **Then** ve un estado vacío claro y puede iniciar una conversación nueva.
-5. **Given** una conversación guardada, **When** el usuario abre su menú de tres puntos y elige renombrar, **Then** aparece un modal con un campo de hasta 80 caracteres y acciones explícitas para renombrar o cancelar.
-6. **Given** un nombre válido en el modal de renombrado, **When** el usuario confirma, **Then** el nuevo nombre se muestra en la barra lateral y permanece después de recargar la aplicación.
-7. **Given** una conversación guardada, **When** el usuario elige eliminar en su menú, **Then** debe confirmar la acción en un modal antes de que la conversación sea eliminada de forma persistente.
+2. **Given** una conversación guardada con más de tres turnos, **When** el usuario la selecciona, **Then** se cargan únicamente sus últimos tres turnos como unidades completas, ordenados cronológicamente y mostrando primero el tramo más reciente.
+3. **Given** una conversación con historial anterior disponible, **When** el usuario llega al inicio del tramo cargado haciendo scroll hacia arriba, **Then** se antepone el bloque anterior de hasta tres turnos completos sin reemplazar el historial ya visible.
+4. **Given** una conversación abierta, **When** el usuario carga bloques anteriores, **Then** conserva una experiencia de chat continuo sin botones, números de página ni navegación a una vista distinta.
+5. **Given** una conversación recuperada, **When** el usuario envía otro mensaje, **Then** el nuevo turno se agrega a esa misma conversación, queda persistido y el historial anterior continúa disponible mediante scroll ascendente.
+6. **Given** que no existen conversaciones guardadas, **When** el usuario abre la aplicación, **Then** ve un estado vacío claro y puede iniciar una conversación nueva.
+7. **Given** una conversación guardada, **When** el usuario abre su menú de tres puntos y elige renombrar, **Then** aparece un modal con un campo de hasta 80 caracteres y acciones explícitas para renombrar o cancelar.
+8. **Given** un nombre válido en el modal de renombrado, **When** el usuario confirma, **Then** el nuevo nombre se muestra en la barra lateral y permanece después de recargar la aplicación.
+9. **Given** una conversación guardada, **When** el usuario elige eliminar en su menú, **Then** debe confirmar la acción en un modal antes de que la conversación sea eliminada de forma persistente.
 
 ---
 
@@ -94,6 +97,9 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - Si el nuevo nombre está vacío, contiene solo espacios o supera 80 caracteres, el sistema no permite confirmar el renombrado y conserva el nombre anterior.
 - Si el usuario cancela el renombrado o la eliminación, la conversación no cambia.
 - Si el usuario elimina la conversación activa, el sistema muestra una conversación nueva y vacía; las demás conversaciones guardadas permanecen intactas.
+- Si una conversación contiene tres turnos o menos, la carga inicial muestra todos sus turnos y no intenta recuperar un bloque anterior.
+- Si un turno contiene respuestas pendientes o fallidas, se carga como una unidad con el prompt y todos los estados de respuesta asociados; nunca se divide en mensajes sueltos.
+- Al anteponer turnos anteriores, el sistema conserva la posición visual del usuario para evitar un salto brusco del contenido.
 
 ## Requirements *(mandatory)*
 
@@ -115,7 +121,7 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - **FR-014**: El sistema DEBE persistir automáticamente las conversaciones con contenido, incluidos sus turnos, respuestas, estados incompletos y fechas de creación y actualización.
 - **FR-015**: El sistema DEBE listar en una barra lateral izquierda las conversaciones guardadas, ordenadas de la más recientemente actualizada a la menos reciente.
 - **FR-016**: Cada entrada del historial DEBE mostrar un título reconocible, la fecha de actualización y un menú de tres puntos situado al final del nombre.
-- **FR-017**: El usuario DEBE poder seleccionar una conversación guardada, revisar todos sus turnos y continuarla con contexto.
+- **FR-017**: El usuario DEBE poder seleccionar una conversación guardada, revisar progresivamente todos sus turnos y continuarla con contexto.
 - **FR-018**: El usuario DEBE poder iniciar una conversación nueva y vacía sin eliminar ni modificar conversaciones previamente guardadas.
 - **FR-019**: El sistema NO DEBE crear una entrada persistida para una conversación que todavía no contenga mensajes.
 - **FR-020**: El sistema DEBE leer las credenciales requeridas para cada proveedor y validar su disponibilidad antes de solicitar una respuesta.
@@ -128,11 +134,17 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - **FR-027**: El sistema DEBE aceptar como nombre manual únicamente texto de 1 a 80 caracteres después de eliminar espacios al inicio y al final, y DEBE conservar el nombre anterior si el usuario cancela o el valor no es válido.
 - **FR-028**: La acción de eliminar DEBE abrir un modal de confirmación y NO DEBE eliminar ningún dato antes de que el usuario confirme explícitamente.
 - **FR-029**: Tras la confirmación, el sistema DEBE eliminar de forma persistente la conversación y todos sus turnos y respuestas; si era la conversación activa, DEBE mostrar una conversación nueva y vacía.
+- **FR-030**: Al abrir o reabrir una conversación, el sistema DEBE cargar inicialmente como máximo sus últimos tres turnos y NO DEBE recuperar automáticamente todo el historial.
+- **FR-031**: La unidad de recuperación DEBE ser el turno completo, compuesto por el prompt del usuario y todas las respuestas y estados asociados a ese turno; el sistema NO DEBE paginar mensajes individuales.
+- **FR-032**: Cuando el usuario alcance el inicio del tramo visible mediante scroll ascendente, el sistema DEBE cargar y anteponer incrementalmente el bloque anterior de hasta tres turnos completos.
+- **FR-033**: La navegación del historial dentro de la conversación NO DEBE mostrar botones de anterior/siguiente, números de página ni controles equivalentes.
+- **FR-034**: La carga incremental DEBE conservar el orden cronológico, los turnos ya visibles y la posición visual del usuario.
+- **FR-035**: El mismo comportamiento de ventana inicial y scroll ascendente DEBE aplicarse tanto al reabrir una conversación guardada como al continuar una conversación existente.
 
 ### Key Entities
 
 - **Conversación**: Sesión continua con identidad, título renombrable de hasta 80 caracteres, fechas de creación y actualización, estado, una secuencia ordenada de turnos y cuatro hilos de contexto independientes.
-- **Turno**: Interacción dentro de una conversación que contiene el prompt del usuario, su posición, las tres respuestas individuales nuevas que alimentan al integrador y la respuesta consolidada.
+- **Turno**: Unidad atómica de recuperación dentro de una conversación que contiene el prompt del usuario, su posición, las tres respuestas individuales nuevas que alimentan al integrador, la respuesta consolidada y sus estados asociados.
 - **Respuesta de modelo**: Resultado asociado a un turno y a un modelo específico, con contenido completo, estado de procesamiento y detalle de error recuperable cuando corresponda.
 - **Modelo participante**: Identidad visible y rol de uno de los tres modelos de comparación o del modelo integrador.
 - **Configuración de credencial**: Disponibilidad y validez operativa de la credencial requerida por cada proveedor, sin formar parte del contenido conversacional.
@@ -149,6 +161,7 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - **SC-006**: En el 100% de las pruebas donde falla un único modelo, las respuestas exitosas siguen disponibles y el usuario recibe una indicación clara del fallo y de la acción posible.
 - **SC-007**: El 100% de las etiquetas de respuesta permite identificar el modelo o rol sin depender exclusivamente del color.
 - **SC-008**: En el 100% de las pruebas de gestión del historial, un renombrado confirmado permanece tras recargar, una cancelación no altera datos y una eliminación solo ocurre después de confirmación.
+- **SC-009**: En el 100% de las pruebas con conversaciones de más de tres turnos, la carga inicial contiene únicamente los tres más recientes y cada scroll ascendente incorpora el bloque anterior completo sin controles de paginación ni pérdida de la posición visual.
 
 ## Assumptions
 
