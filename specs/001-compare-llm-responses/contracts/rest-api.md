@@ -78,8 +78,9 @@ Ordering is `updatedAt DESC, id DESC`.
 
 ### GET /conversations/:conversationId
 
-Response: `200`, conversation summary plus turns ordered by ordinal and all four
-response slots. Missing conversation: `404 CONVERSATION_NOT_FOUND`.
+Response: `200`, conversation metadata only. Turns are retrieved separately to
+avoid loading the full history. Missing conversation: `404
+CONVERSATION_NOT_FOUND`.
 
 ### PATCH /conversations/:conversationId
 
@@ -92,6 +93,35 @@ VALIDATION_ERROR`.
 
 Response: `204 No Content`. Deletion cascades to turns and responses. Active
 provider calls are cancelled best-effort; late results are discarded.
+
+### GET /conversations/:conversationId/turns
+
+Query:
+
+- `limit`: default 3, maximum 20.
+- `before`: optional opaque Base64URL cursor. Omit it for the newest block.
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "ordinal": 8,
+      "prompt": "mensaje",
+      "status": "completed",
+      "responses": []
+    }
+  ],
+  "olderCursor": "opaque-or-null",
+  "hasOlder": true
+}
+```
+
+`items` are complete turns in chronological order. The cursor identifies the
+oldest returned turn; a subsequent request returns only earlier turns. The API
+never splits a prompt from its four response slots.
 
 ### POST /conversations/:conversationId/turns
 
@@ -122,6 +152,7 @@ consolidator after the base finishes. Invalid state: `409 RESPONSE_NOT_RETRYABLE
 | HTTP | Code | Meaning |
 |---|---|---|
 | 400 | `INVALID_JSON` | Request body is not valid JSON |
+| 400 | `INVALID_CURSOR` | Cursor cannot be decoded or validated |
 | 404 | `CONVERSATION_NOT_FOUND` | Conversation does not exist |
 | 404 | `TURN_NOT_FOUND` | Turn does not belong to conversation |
 | 409 | `TURN_IN_PROGRESS` | Previous turn is not terminal |
@@ -134,4 +165,3 @@ consolidator after the base finishes. Invalid state: `409 RESPONSE_NOT_RETRYABLE
 
 Provider failures are normally represented per slot inside a successful turn
 resource rather than failing the polling endpoint.
-

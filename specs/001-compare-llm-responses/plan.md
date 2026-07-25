@@ -1,71 +1,59 @@
 # Implementation Plan: Comparación y consolidación de respuestas LLM
 
-**Branch**: `001-compare-llm-responses` | **Date**: 2026-07-24 | **Spec**: [spec.md](./spec.md)  
+**Branch**: `001-compare-llm-responses` | **Date**: 2026-07-24 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `specs/001-compare-llm-responses/spec.md`
 
 ## Summary
 
-ModelFuse se implementará como un monolito modular dentro del monorepo existente:
-React/Vite en `apps/frontend`, Express/TypeScript en `apps/backend`, componentes
-Shadcn/Tailwind agnósticos en `packages/ui` y PostgreSQL gobernado por Liquibase.
+ModelFuse seguirá como monolito modular: React/Vite en `apps/frontend`,
+Express/TypeScript en `apps/backend`, primitives Shadcn/Tailwind en `packages/ui`
+y PostgreSQL gobernado por Liquibase. Cada prompt genera un turno con tres slots
+base ejecutados en paralelo y un slot consolidador posterior.
 
-Cada prompt crea un turno persistido con cuatro slots de respuesta. El backend
-ejecuta los tres slots base en paralelo, persiste cada resultado y después llama al
-consolidador con su historial propio y las respuestas nuevas disponibles. La API
-REST devuelve `202 Accepted`; el frontend consulta el turno mientras haya slots no
-terminales. No se añaden WebSockets, SSE, una cola externa ni un framework de
-estado remoto para la primera versión.
+La API REST persiste primero y responde `202`; TanStack Query v5 administra todo
+el server state: listas, detalle, historial infinito por cursor, polling del turno
+activo y mutaciones. Al abrir una conversación se consultan tres turnos completos;
+un sentinel superior carga bloques anteriores sin paginación visible.
 
 ## Technical Context
 
 **Language/Version**: Node.js >=22, TypeScript ~6, React 19.2, Express 5.2  
-**Primary Dependencies**: Vite 8, Shadcn UI 4, Tailwind CSS 4, Axios, Zod 4,
-`pg`, Pino; pnpm 11 y Turborepo  
-**Storage**: PostgreSQL 16; Liquibase 4.30 con SQL formateado  
-**Testing**: Vitest 4, Testing Library, Supertest; Playwright para los flujos E2E
-críticos  
-**Target Platform**: Navegadores modernos y backend Node.js desplegable en
-Linux/contenedores  
-**Project Type**: Aplicación web en monorepo, monolito modular  
-**Performance Goals**: `202` en menos de 1 segundo bajo carga de un usuario; los
-cuatro slots alcanzan un estado terminal dentro de 60 segundos en al menos 95% de
-las consultas con proveedores disponibles  
-**Constraints**: Cuatro slots fijos por turno; secretos solo en entorno; contexto
-acotado por turnos y presupuesto; ningún prompt o respuesta en logs  
-**Scale/Scope**: Primera versión privada para un usuario, tres modelos base y un
-consolidador; historial paginado por cursor
+**Primary Dependencies**: Vite 8, `@tanstack/react-query` v5, Shadcn UI 4,
+Tailwind CSS 4, Axios, Zod 4, `pg`, Pino, pnpm 11 y Turborepo
+**Storage**: PostgreSQL 16; Liquibase 4.30 con SQL formateado
+**Testing**: Vitest 4, Testing Library, Supertest y Playwright
+**Target Platform**: Navegadores modernos y Node.js en Linux/contenedores
+**Project Type**: Aplicación web en monorepo, monolito modular
+**Performance Goals**: `202` en menos de 1 segundo; estados terminales en menos
+de 60 segundos en 95% de consultas disponibles; primer bloque de historial en
+menos de 1 segundo bajo carga de un usuario
+**Constraints**: Cuatro slots fijos; bloque de historial de tres turnos; contexto
+LLM acotado; secretos y contenido fuera de logs
+**Scale/Scope**: Primera versión privada para un usuario; cursores opacos y una
+conversación visible a la vez
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-checked after Phase 1 design.*
 
-- [x] Las rutas reales permanecen en `apps/frontend`, `apps/backend`,
-      `packages/ui` y `db`; no hay imports entre aplicaciones.
-- [x] `index.ts` conserva arranque/parada; `app.ts` configura Express; rutas,
-      controllers, middleware, services e infrastructure tienen responsabilidades
-      separadas.
-- [x] Los proveedores implementan un contrato común y el consolidador consume
-      respuestas normalizadas.
-- [x] PostgreSQL es la fuente de verdad y los cuatro contextos lógicos permanecen
+- [x] Ownership permanece en `apps/frontend`, `apps/backend`, `packages/ui` y
+      `db`, sin imports cruzados entre aplicaciones.
+- [x] `index.ts` arranca/detiene; `app.ts` configura; rutas, controllers,
+      middleware, services e infrastructure conservan límites explícitos.
+- [x] Los adapters LLM normalizan proveedor/modelo antes de orquestación.
+- [x] PostgreSQL es fuente de verdad y los cuatro historiales lógicos están
       aislados.
-- [x] Los primitives reutilizables viven en `packages/ui`; los componentes de
-      producto permanecen en frontend.
-- [x] Todo esquema se entrega como SQL formateado e incluido desde changelogs XML
-      de módulo.
-- [x] Zod valida configuración y fronteras HTTP; secretos y contenido no se
-      registran.
-- [x] El plan incluye unitarias, integración, validación de migraciones y E2E para
-      los recorridos críticos.
-- [x] Cada área puede asignarse a frontend, backend, UI/DB y testing sin propiedad
-      ambigua.
-- [x] No existen violaciones que requieran Complexity Tracking.
+- [x] TanStack Query vive en frontend; `packages/ui` solo contiene primitives.
+- [x] Todo esquema se entrega como SQL formateado incluido por XML de módulo.
+- [x] Zod valida HTTP y entorno; claves, prompts y respuestas no se registran.
+- [x] El plan cubre unitarias, integración, migraciones y E2E.
+- [x] Las tareas pueden asignarse a owners FE, BE, UI, DB y TEST.
+- [x] No existen violaciones que requieran excepción.
 
 **Gate result before research**: PASS  
 **Gate result after design**: PASS
 
 ## Project Structure
-
-### Documentation (this feature)
 
 ```text
 specs/001-compare-llm-responses/
@@ -76,222 +64,236 @@ specs/001-compare-llm-responses/
 ├── contracts/
 │   ├── rest-api.md
 │   └── llm-provider.md
-└── tasks.md                 # generado posteriormente por /speckit-tasks
-```
+└── tasks.md
 
-### Source Code (repository root)
-
-```text
 apps/
 ├── frontend/
 │   ├── e2e/
 │   └── src/
 │       ├── components/layout/
+│       ├── providers/query-provider.tsx
 │       └── features/conversations/
 │           ├── api/
 │           ├── components/
 │           ├── hooks/
+│           ├── queries/conversation-keys.ts
 │           ├── schemas/
 │           ├── types/
 │           └── __tests__/
-└── backend/
-    └── src/
-        ├── controllers/conversations/
-        ├── routes/conversations/
-        ├── middleware/validation/
-        ├── services/conversations/
-        ├── services/llm/
-        ├── infrastructure/config/
-        ├── infrastructure/llm/providers/
-        ├── infrastructure/postgres/repositories/
-        ├── types/
-        └── utils/
-packages/
-└── ui/src/components/
-db/
-└── changelogs/
-    ├── conversations/
-    ├── messages/
-    └── db.changelog-master.xml
+└── backend/src/
+    ├── controllers/conversations/
+    ├── routes/conversations/
+    ├── middleware/validation/
+    ├── services/conversations/
+    ├── services/llm/
+    ├── infrastructure/config/
+    ├── infrastructure/llm/providers/
+    ├── infrastructure/postgres/repositories/
+    ├── types/
+    └── utils/
+
+packages/ui/src/components/
+
+db/changelogs/
+├── conversations/
+├── messages/
+└── db.changelog-master.xml
 ```
 
-**Structure Decision**: Se conserva el monorepo y el monolito modular actuales.
-No se crea un cuarto workspace ni un paquete de contratos hasta que exista un
-segundo consumidor fuera de estas dos aplicaciones.
+**Structure Decision**: Se reutilizan los workspaces actuales. TanStack Query se
+añade solo a frontend; no se crea un paquete de estado ni un workspace de
+contratos sin un segundo consumidor.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI["React conversation workspace"] -->|"REST: create turn / poll state"| API["Express API"]
+    UI["React + TanStack Query"] -->|"REST 202 / cursor GET"| API["Express API"]
     API --> ORCH["TurnOrchestrator"]
     ORCH --> CTX["ContextBuilder"]
     ORCH --> REG["Provider registry"]
-    REG --> B1["Base slot 1"]
-    REG --> B2["Base slot 2"]
-    REG --> B3["Base slot 3"]
+    REG --> B1["Base 1"]
+    REG --> B2["Base 2"]
+    REG --> B3["Base 3"]
     B1 --> ORCH
     B2 --> ORCH
     B3 --> ORCH
-    ORCH --> INT["Consolidator slot"]
+    ORCH --> C["Consolidator"]
     ORCH <--> DB["PostgreSQL"]
-    UI -->|"GET conversation / turn"| API
+    API <--> DB
 ```
 
-Una conversación de producto es un solo agregado persistido, no cuatro filas de
-conversación. Cada turno contiene un prompt y cuatro respuestas identificadas por
-slot (`base-1`, `base-2`, `base-3`, `consolidator`). Las cuatro conversaciones
-lógicas se reconstruyen por slot:
+Una conversación persistida contiene turnos; cada turno contiene un prompt y
+cuatro respuestas por slot. Los contextos se reconstruyen por slot, no con cuatro
+filas de conversación:
 
-- cada slot base combina los prompts previos con sus propias respuestas;
-- el consolidador combina prompts previos con respuestas consolidadas previas y
-  añade únicamente las respuestas base nuevas del turno actual;
-- el consolidador nunca recibe los historiales completos de los slots base.
+- cada base usa prompts previos y solo sus propias respuestas;
+- el consolidador usa prompts/respuestas consolidadas previas y las respuestas
+  base nuevas del turno actual;
+- nunca recibe historiales base completos.
 
-### Request lifecycle
+### Turn lifecycle
 
-1. El frontend envía `clientRequestId` y prompt.
-2. Una transacción crea conversación/turno y cuatro slots `pending`.
-3. La API devuelve `202` inmediatamente con el turno persistido.
-4. `TurnOrchestrator` ejecuta los tres adapters base con `Promise.allSettled` y
-   persiste cada slot al terminar.
-5. Con las respuestas disponibles crea el contexto del consolidador y ejecuta su
-   adapter.
-6. El frontend consulta el turno usando `Retry-After: 1` hasta que todos los slots
-   sean terminales.
-7. Un retry cambia solo el slot fallido. Si es base, la consolidación se vuelve a
-   ejecutar para no conservar un resultado obsoleto.
+1. La mutación envía `clientRequestId` y prompt.
+2. Una transacción crea turno y cuatro slots `pending`.
+3. La API devuelve `202`.
+4. `Promise.allSettled` ejecuta los tres base y persiste cada resultado.
+5. El consolidador usa las respuestas disponibles y persiste su resultado.
+6. `useQuery` consulta el turno activo cada segundo hasta estado terminal.
+7. Retry modifica solo el slot fallido; si es base, recalcula consolidación.
 
-La ejecución vive en el proceso Node, pero todo estado durable vive en PostgreSQL.
-Al arrancar, el backend marca como `failed/interrupted` los slots `running` que
-superen el umbral configurado. Una cola durable se añadirá únicamente cuando haya
-múltiples instancias, reintentos automáticos o necesidad de supervivencia exacta a
-reinicios.
+La ejecución inicial vive en Node y el estado durable en PostgreSQL. Una cola se
+añade solo al adoptar multiinstancia o reintentos durables. SSE/WebSocket se
+difiere hasta que streaming o carga haga insuficiente el polling.
 
 ## REST API
 
-Base path: `/api/v1`. El contrato detallado está en
-[contracts/rest-api.md](./contracts/rest-api.md).
+Contrato detallado: [contracts/rest-api.md](./contracts/rest-api.md).
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/conversations` | Crear conversación con su primer prompt y devolver `202` |
-| `GET` | `/conversations` | Listar resúmenes por cursor, más recientes primero |
-| `GET` | `/conversations/:conversationId` | Recuperar conversación y turnos |
-| `PATCH` | `/conversations/:conversationId` | Renombrar con título de 1–80 caracteres |
-| `DELETE` | `/conversations/:conversationId` | Eliminar conversación y datos relacionados |
-| `POST` | `/conversations/:conversationId/turns` | Crear el siguiente turno y devolver `202` |
-| `GET` | `/conversations/:conversationId/turns/:turnId` | Consultar estados y respuestas del turno |
-| `POST` | `/conversations/:conversationId/turns/:turnId/responses/:slot/retry` | Reintentar un slot fallido |
+| `POST` | `/api/v1/conversations` | Crear conversación y primer turno (`202`) |
+| `GET` | `/api/v1/conversations?limit&cursor` | Sidebar por cursor |
+| `GET` | `/api/v1/conversations/:id` | Metadatos, sin historial |
+| `PATCH` | `/api/v1/conversations/:id` | Renombrar |
+| `DELETE` | `/api/v1/conversations/:id` | Eliminar en cascade |
+| `GET` | `/api/v1/conversations/:id/turns?limit=3&before` | Bloque más reciente o anterior |
+| `POST` | `/api/v1/conversations/:id/turns` | Crear turno (`202`) |
+| `GET` | `/api/v1/conversations/:id/turns/:turnId` | Estado/respuestas para polling |
+| `POST` | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/retry` | Retry de slot |
 
-La consolidación inicial forma parte del envío del turno, por lo que no se crea un
-endpoint redundante. “Limpiar” tampoco muta el servidor: el frontend deselecciona
-la conversación y abre un borrador local; la nueva conversación se persiste solo
-con el primer prompt, como exige FR-019.
+El cursor de turnos es Base64URL opaco de `{ordinal,id}`. Sin `before`, el
+repositorio ejecuta orden descendente con `LIMIT 3`, invierte el resultado para
+devolver orden cronológico y emite `olderCursor`. Con cursor aplica
+`(ordinal,id) < (...)`. El límite default es 3 y máximo 20; nunca pagina mensajes
+sueltos.
 
-Todas las escrituras validan Zod, devuelven errores con `{code, message,
-requestId}`, y usan `clientRequestId` para hacer idempotente el envío. Un segundo
-turno mientras el anterior siga activo devuelve `409 TURN_IN_PROGRESS`.
+“Limpiar” es estado local: deselecciona la conversación y abre un borrador. No hay
+endpoint ni conversación vacía persistida.
 
 ## Frontend Design
 
-`App.tsx` será un orquestador ligero que monta `AppShell` y
-`ConversationWorkspace`; no contendrá layout ni lógica de negocio.
+`App.tsx` monta `QueryProvider`, `AppShell` y `ConversationWorkspace`; no contiene
+layout ni reglas de datos.
 
-### Application-owned components
+### Components
 
-- `AppShell`: layout de sidebar y área principal.
-- `ConversationWorkspace`: selección activa, borrador nuevo y coordinación de
-  lista/detalle.
-- `ConversationSidebar` y `ConversationListItem`: historial paginado y selección.
-- `ConversationMenu`: menú de tres puntos con renombrar/eliminar.
-- `RenameConversationDialog`: input controlado, máximo 80, confirmación/cancelar.
-- `DeleteConversationDialog`: confirmación destructiva y foco accesible.
-- `ConversationView`, `TurnList` y `PromptComposer`: recorrido de chat.
-- `ResponseTabs` y `ResponsePanel`: cuatro tabs con etiqueta textual, estado,
-  contenido y retry.
+- `ConversationSidebar`, `ConversationListItem`, `ConversationMenu`.
+- `RenameConversationDialog` y `DeleteConversationDialog`.
+- `ConversationView`, `TurnList`, `HistoryTopSentinel`, `PromptComposer`.
+- `ResponseTabs` y `ResponsePanel` para tres bases y consolidador.
 
-### Shared primitives
+`Tabs`, `Dialog`, `DropdownMenu`, `ScrollArea` y `Skeleton` faltantes se añaden a
+`packages/ui` con `pnpm dlx shadcn@latest add <component> -c apps/frontend`.
+Componentes que conocen conversaciones permanecen en frontend.
 
-`Button`, `Input`, `Textarea`, `Label`, `Separator` y `Sonner` ya existen en
-`packages/ui`. Si faltan, `Tabs`, `Dialog`, `DropdownMenu`, `ScrollArea` y
-`Skeleton` se añaden mediante
-`pnpm dlx shadcn@latest add <component> -c apps/frontend`; solo esos primitives
-viven en `packages/ui`. Ninguno conoce conversaciones, rutas ni APIs.
+### Server state vs local state
 
-### State and data flow
+| TanStack Query | React local state |
+|---|---|
+| Lista de conversaciones | `activeConversationId` |
+| Metadatos de conversación | Borrador no persistido |
+| Páginas de turnos | Tab seleccionado por turno |
+| Estado del turno activo | Estado abierto/cerrado de dialogs |
+| Resultados de create/retry/rename/delete | Texto del composer antes de submit |
 
-- React state guarda `activeConversationId`, el borrador y estados visuales.
-- Axios llama a la API; Zod valida cada respuesta antes de entrar a la UI.
-- Hooks pequeños (`useConversationList`, `useConversation`,
-  `useSubmitTurn`) encapsulan carga, polling y `AbortController`.
-- No se añade TanStack Query: polling de un único turno y revalidación explícita
-  caben en hooks existentes.
-- Al cambiar de conversación se cancela el polling visible; el backend continúa
-  y la conversación se recarga desde PostgreSQL al volver.
-- El composer se deshabilita mientras exista un turno activo. Cada tab muestra
-  `pending`, `running`, `completed` o `failed` sin depender solo del color.
+No se copia server state a `useState`.
+
+### Query keys
+
+```ts
+conversationKeys.all
+conversationKeys.lists()
+conversationKeys.list({ limit })
+conversationKeys.detail(conversationId)
+conversationKeys.turns(conversationId)
+conversationKeys.turn(conversationId, turnId)
+```
+
+Las keys son arrays estables y centralizados; objetos de filtros solo contienen
+valores serializables.
+
+### Query mapping
+
+- `useInfiniteQuery(list)`: sidebar con cursor por `updatedAt,id`.
+- `useQuery(detail)`: título/timestamps; no incluye turnos.
+- `useInfiniteQuery(turns)`: `initialPageParam: null`,
+  `getPreviousPageParam: firstPage.olderCursor`; cada página contiene hasta tres
+  turnos completos.
+- `useQuery(turn)`: polling con `refetchInterval` de 1000 ms mientras el estado no
+  sea terminal y `false` después.
+- `useMutation`: create conversation, create turn, retry, rename y delete.
+
+### Upward infinite history
+
+`IntersectionObserver` observa un sentinel superior y llama
+`fetchPreviousPage()` cuando `hasPreviousPage`. Antes de fetch se captura
+`scrollHeight`; después de anteponer se suma la diferencia a `scrollTop`, evitando
+saltos. Las páginas se aplanan en orden cronológico. No hay botones ni números.
+
+No se usa `maxPages` en v1 porque al cargar hacia atrás puede expulsar el tramo
+reciente y romper la continuidad. Solo una conversación mantiene historial
+caliente: `gcTime` corto para historiales inactivos y `removeQueries` al cambiar de
+conversación liberan páginas anteriores. Si un perfil real muestra presión dentro
+de una única conversación, se añadirá virtualización y paginación bidireccional.
+
+### Cache updates and invalidation
+
+| Mutation/event | Cache action |
+|---|---|
+| Create conversation | Seed detail/turn/history con respuesta; invalidate lists |
+| Create turn | Append al bloque reciente; seed active turn; invalidate lists |
+| Poll response | `setQueryData(turn)` y reemplazar el mismo turno en infinite data |
+| Terminal turn | Stop polling; invalidate list y detail |
+| Retry slot | Patch turn/history con respuesta `pending`; polling resumes |
+| Rename | Patch detail y list pages; invalidate lists in background |
+| Delete | `cancelQueries`, remove detail/turns/turn keys, invalidate lists |
+
+Las mutaciones esperan respuesta del servidor antes de escribir cache; no se añade
+optimistic rollback complejo. Axios recibe `AbortSignal` desde los query functions
+y Zod valida todas las respuestas.
 
 ## Backend Design
 
-- `index.ts`: arranque, recuperación de ejecuciones interrumpidas, `listen` y
-  graceful shutdown. `gracefulShutdown` se mueve fuera de `app.ts`.
-- `app.ts`: crea Express, registra middleware global, monta `apiRouter` antes de
-  rutas inválidas y error global; no abre puertos.
-- `routes/conversations`: paths y middleware de validación.
-- `controllers/conversations`: adaptación `req/res`, códigos HTTP y delegación.
-- `services/conversations/ConversationService`: crear, listar, cargar, renombrar y
-  eliminar agregados.
-- `services/llm/TurnOrchestrator`: secuencia base → consolidación, estados, retries
-  y cancelación best-effort al eliminar.
-- `services/llm/ContextBuilder`: única política de ventana y aislamiento.
-- `infrastructure/llm/providers`: adapters concretos y registro por slot.
-- `infrastructure/postgres/repositories`: funciones SQL concretas y transacciones;
-  no se crea una interfaz de repositorio con una sola implementación.
-- `infrastructure/config`: Zod valida entorno y mapea los cuatro slots a
-  proveedor/modelo.
-- `types`: contratos REST, conversación y LLM compartidos dentro del backend.
-- `utils`: solo funciones puras transversales; no contiene reglas de negocio.
+- `index.ts`: startup/recovery, `listen` y shutdown; `gracefulShutdown` sale de
+  `app.ts`.
+- `app.ts`: middleware global, `apiRouter`, invalid routes y error handler.
+- `routes/conversations`: rutas y validación.
+- `controllers/conversations`: HTTP únicamente.
+- `ConversationService`: CRUD y cursores de conversaciones/turnos.
+- `TurnOrchestrator`: base → consolidación, retry y estados.
+- `ContextBuilder`: aislamiento y presupuesto.
+- `infrastructure/postgres/repositories`: SQL/transactions concretos.
+- `infrastructure/llm/providers`: adapters y registry por slot.
+- `infrastructure/config`: Zod para ambiente, modelos y credenciales.
+- `types`: contratos REST/LLM; `utils`: funciones puras.
 
-El contrato del adapter está en [contracts/llm-provider.md](./contracts/llm-provider.md).
-Normaliza `content`, `provider`, `model`, timestamps, `usage` y `metadata`. Las
-credenciales se resuelven en infrastructure; nunca viajan al controller ni al
-frontend.
+El contrato de adapter está en
+[contracts/llm-provider.md](./contracts/llm-provider.md). Normaliza `content`,
+`provider`, `model`, timestamps, usage y metadata; nunca expone SDK types.
 
 ## Context Strategy
 
-`ContextBuilder` aplica una ventana por slot, con `LLM_CONTEXT_MAX_TURNS=10` como
-valor inicial configurable y un presupuesto por modelo que reserva tokens de
-salida.
+`ContextBuilder` usa `LLM_CONTEXT_MAX_TURNS=10` y presupuesto por modelo:
 
-1. Incluye system prompt y prompt actual.
-2. Recorre pares históricos desde el más reciente hasta alcanzar el máximo de
-   turnos o el presupuesto estimado.
-3. Devuelve los mensajes seleccionados en orden cronológico.
-4. Para base usa solo respuestas anteriores del mismo slot.
-5. Para consolidación usa solo prompts/respuestas consolidadas previas y añade las
-   respuestas base del turno actual.
+1. system prompt y prompt actual;
+2. pares recientes hasta límite de turnos/tokens;
+3. orden cronológico;
+4. para base, solo respuestas del mismo slot;
+5. para consolidador, solo historial consolidado más bases del turno actual.
 
-La estimación inicial usa conteo reportado por el adapter cuando esté disponible y
-una aproximación conservadora por caracteres en los demás casos; no se añade una
-librería de tokenización por proveedor. Se registran `includedTurns`,
-`estimatedInputTokens` y `contextTruncated`, nunca el contenido.
-
-La ventana acotada satisface la primera versión. Si la tasa de truncamiento o las
-pruebas de calidad lo justifican, se añadirá un `ContextSummaryService` en
-`services/llm`, llamado por `ContextBuilder`, y un resumen persistido por slot. No
-se crea ese servicio ni su tabla de forma especulativa.
+Se registran `includedTurns`, estimación de tokens y `contextTruncated`, nunca
+contenido. Una futura compresión viviría en `services/llm/ContextSummaryService`
+y se persistiría por slot solo si calidad/truncamiento justifican el costo.
 
 ## Database and Liquibase
 
-El modelo normalizado se detalla en [data-model.md](./data-model.md):
+Modelo: [data-model.md](./data-model.md).
 
-- `conversations`: identidad, título y timestamps;
-- `turns`: prompt único, ordinal, idempotencia y estado;
-- `model_responses`: cuatro filas por turno, slot, proveedor/modelo, contenido,
-  error, timestamps y `usage/metadata` JSONB.
-
-Migraciones:
+- `conversations`: id, título, timestamps; cursor `(updated_at,id)`.
+- `turns`: prompt, ordinal, idempotencia, estado; cursor `(ordinal,id)`.
+- `model_responses`: cuatro slots, proveedor/modelo, contenido/error, usage y
+  metadata JSONB.
 
 ```text
 db/changelogs/
@@ -306,57 +308,50 @@ db/changelogs/
 └── db.changelog-master.xml
 ```
 
-Los dos XML de módulo se incluyen explícitamente desde el master con
-`relativeToChangelogFile="true"`. Cada SQL empieza con
-`--liquibase formatted sql`, usa changesets únicos e incluye rollback cuando sea
-seguro. No se crea todavía un módulo `metrics`: `usage` y `metadata` cubren el
-contrato actual; un futuro esquema analítico tendrá
-`metrics/db.changelog-metrics.xml` cuando una feature lo necesite.
+Los XML se incluyen explícitamente desde master. Todo SQL es Liquibase formatted
+con changeset único y rollback seguro. No se crea módulo `metrics`: usage JSONB
+cubre v1; el módulo aparece cuando una feature analítica lo requiera.
 
 ## Testing and Quality
 
-| Level | Scope | Tool and location |
-|---|---|---|
-| Unit | ContextBuilder, estados, mappers, validación, hooks y dialogs | Vitest; `__tests__` adyacentes |
-| Backend integration | REST, transacciones, cascada, idempotencia, retry | Supertest + PostgreSQL de prueba en `apps/backend/src/**/__tests__` |
-| Frontend integration | tabs, polling, sidebar y modales con API simulada | Testing Library + Vitest |
-| Migration | `validate`, `update` limpio y rollback verificable | Contenedor Liquibase/PostgreSQL |
-| E2E | crear/enviar/consolidar; reabrir/continuar; renombrar/eliminar | Playwright en `apps/frontend/e2e` |
+| Level | Minimum coverage |
+|---|---|
+| Backend unit | Cursor encode/decode, ContextBuilder, estados y mappers |
+| Backend integration | bloques 3/3, límites/cursor inválido, CRUD, retry, polling resource |
+| Frontend unit/integration | query keys, infinite flatten/prepend, scroll anchor, polling stop, cache patch/invalidation |
+| Migration | validate, fresh update, constraints/cascades e índices |
+| E2E | conversación/consolidación; reapertura 3 turnos + scroll; rename/delete/retry |
 
-Los adapters LLM de tests son deterministas y no hacen red. El
-`unit-test-runner` escribe solo unitarias; backend-builder y frontend-builder
-implementan integración/E2E de su dominio, revisadas por los auditors
-correspondientes. Cada test verifica intención observable, no clases CSS ni
-detalles privados.
+Vitest/Testing Library usan un `QueryClient` nuevo por test con retries
+desactivados. Supertest prueba `createApp()` y adapters fake deterministas.
+Playwright usa backend/test DB reales sin proveedores pagados.
 
 ## Specialized Agent Assignment
 
-| Domain | Primary executor | Reviewer | Typical work |
-|---|---|---|---|
-| Frontend | `frontend-builder` | `frontend-auditor` | workspace, hooks, tabs, sidebar, dialogs, polling |
-| Shared UI | `frontend-builder` | `frontend-auditor` | añadir/exportar primitives agnósticos |
-| Backend/API | `backend-builder` | `backend-auditor` | routes, controllers, services, adapters, config |
-| PostgreSQL/Liquibase | `backend-builder` | `backend-auditor` | repositories, SQL y changelog wiring |
-| Unit tests | `unit-test-runner` | auditor del dominio | pruebas aisladas y deterministas |
-| Integration/E2E | builder del dominio | auditor del dominio | fronteras reales y journeys |
+| Domain | Executor | Reviewer |
+|---|---|---|
+| Frontend, TanStack Query y UI | `frontend-builder` | `frontend-auditor` |
+| Shared primitives | `frontend-builder` | `frontend-auditor` |
+| API, orchestration y adapters | `backend-builder` | `backend-auditor` |
+| PostgreSQL/Liquibase | `backend-builder` | `backend-auditor` |
+| Unit tests | `unit-test-runner` | auditor del dominio |
+| Integration/E2E | builder del dominio | auditor del dominio |
 
-Las tareas futuras deben tener un solo tag de dominio. Un recorrido full-stack se
-divide en FE, BE, DB/TEST y una tarea final de integración; los auditors permanecen
-read-only.
+Las tareas full-stack se dividen por dominio y terminan con una tarea explícita de
+integración. Auditors permanecen read-only.
 
 ## Observability and Future Extension
 
-Pino emitirá logs estructurados con `requestId`, `conversationId`, `turnId`,
-`slot`, proveedor/modelo, duración, estado, error code y usage conocido. Prompts,
-respuestas, claves y cadenas de conexión quedan excluidos.
+Pino registra `requestId`, conversación, turno, slot, proveedor/modelo, duración,
+estado, cursor page size y usage conocido; excluye contenido, claves y cadenas de
+conexión. TanStack Query puede observarse con Devtools solo en desarrollo si se
+necesita depuración, no como dependencia de producción.
 
-Los mismos identificadores se propagan en respuestas HTTP y llamadas internas.
-No se añade OpenTelemetry en v1; esos campos permiten incorporarlo si aparecen
-múltiples procesos o servicios. `usage`/`metadata` admiten tokens, costo y
-latencias; ranking o scoring puede consumir las respuestas normalizadas sin
-cambiar tablas centrales ni adapters. Nuevos modelos se añaden mediante adapter y
-configuración de slot, sin reescribir la conversación.
+Los IDs permiten añadir OpenTelemetry si aparece distribución real. Usage/metadata
+admiten tokens/costo y ranking. Nuevos modelos usan adapters. Streaming puede
+reemplazar únicamente el query de polling por SSE/WebSocket sin alterar
+persistencia, keys de historial ni contratos de conversación.
 
 ## Complexity Tracking
 
-No hay violaciones constitucionales ni complejidad que requiera excepción.
+No hay violaciones constitucionales.

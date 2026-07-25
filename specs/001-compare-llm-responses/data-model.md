@@ -86,6 +86,8 @@ Constraints:
 
 - `UNIQUE (conversation_id, ordinal)`
 - `UNIQUE (conversation_id, client_request_id)`
+- Index `(conversation_id, ordinal DESC, id DESC)` para bloques de historial
+  anteriores.
 
 State transitions:
 
@@ -161,12 +163,25 @@ previos.
 La API devuelve:
 
 - `ConversationSummary`: id, title, createdAt, updatedAt.
-- `ConversationDetail`: summary + turnos ordenados.
+- `ConversationDetail`: metadatos sin historial embebido.
+- `TurnPage`: hasta tres turnos completos en orden cronológico, `olderCursor` y
+  `hasOlder`.
 - `Turn`: id, ordinal, prompt, status, timestamps y `responses[]`.
 - `ModelResponse`: slot, role, provider, model, status, content/error, timestamps,
   usage y metadata.
 
 La proyección omite claves, configuración interna y errores crudos.
+
+## History Cursors
+
+- La primera consulta no envía cursor y selecciona los tres ordinales más altos.
+- El cursor es Base64URL opaco de `{ordinal,id}` correspondiente al turno más
+  antiguo del bloque devuelto.
+- La siguiente consulta filtra `(ordinal,id) < (cursor.ordinal,cursor.id)`, toma
+  hasta tres filas descendentes y las devuelve en orden cronológico.
+- Un cursor inválido o perteneciente a otra conversación produce error de
+  validación; no se reutiliza silenciosamente.
+- El cursor no requiere columna nueva ni estado de sesión en servidor.
 
 ## Liquibase Modules
 

@@ -13,6 +13,9 @@
 pnpm install
 ```
 
+The implemented frontend manifest includes `@tanstack/react-query`; setup must not
+install it ad hoc outside pnpm.
+
 ## 2. Configure
 
 Copy `apps/backend/.env.sample` to `apps/backend/.env`. Implementation will add
@@ -60,9 +63,14 @@ pnpm dev
 2. Verify four labeled tabs appear and transition independently.
 3. Send a follow-up; verify each base uses its own prior response and the
    consolidator uses only its consolidated history plus current base outputs.
-4. Reload, reopen the conversation, and continue it.
-5. Rename it with a value up to 80 characters.
-6. Cancel a delete once, then confirm it and verify it remains absent after reload.
+4. Cree al menos siete turnos, recargue y verifique que solo aparecen los tres
+   más recientes.
+5. Haga scroll hacia arriba y verifique que se antepone el bloque anterior sin
+   botones ni salto de posición.
+6. Continúe la conversación y confirme que el nuevo turno entra al cache reciente.
+7. Renombre con un valor de hasta 80 caracteres.
+8. Cancele un delete una vez; luego confírmelo y verifique que el cache y el
+   servidor ya no contienen la conversación.
 
 ## 6. Validation
 
@@ -82,6 +90,9 @@ pnpm --filter frontend test:e2e
 
 Tests use deterministic fake LLM adapters and a disposable PostgreSQL database;
 they must not call paid providers.
+
+Frontend tests create a fresh `QueryClient` per test, disable retries and cover
+infinite pages, polling termination, cache replacement and invalidation.
 
 ## Troubleshooting
 

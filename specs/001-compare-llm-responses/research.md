@@ -75,20 +75,38 @@ ni otra tabla. Se registra cuándo hubo truncamiento.
 resumen en cada turno, descartado por latencia/costo. Un resumen persistido se
 añadirá solo si las métricas de truncamiento y calidad lo justifican.
 
-## Decision 7: React state local y hooks, sin nueva dependencia
+## Decision 7: TanStack Query v5 para todo el server state
 
-**Decision**: Elevar selección y estado del workspace al container común; aislar
-API/polling en hooks con cancelación.
+**Decision**: Añadir `@tanstack/react-query` v5. Listas e historial usan
+`useInfiniteQuery`; metadatos y polling usan `useQuery`; todas las escrituras usan
+`useMutation`. Solo selección, dialogs, tabs y drafts permanecen en estado React.
 
-**Rationale**: React recomienda elevar el estado compartido al ancestro común. La
-primera versión tiene un solo workspace y una operación activa, cubierta por
-estado local.
+**Rationale**: El spec ahora exige cache por conversación, historial incremental,
+polling, invalidación y múltiples mutaciones. TanStack Query resuelve esas
+responsabilidades con una única fuente de server state y permite detener polling
+mediante `refetchInterval` cuando el turno es terminal.
 
-**Alternatives considered**: Store global o librería de server-state, diferidos
-hasta existir caché, mutaciones concurrentes o múltiples pantallas.
+**Alternatives considered**: Hooks manuales, descartados porque duplicarían cache,
+cancelación e invalidación; store global, descartado porque no sincroniza server
+state por sí mismo.
 
-**Source**: Documentación oficial de React sobre
-[sharing state](https://github.com/reactjs/react.dev/blob/main/src/content/learn/sharing-state-between-components.md).
+**Source**: Documentación oficial de TanStack Query sobre
+[infinite queries](https://github.com/tanstack/query/blob/v5.90.3/docs/framework/react/reference/useInfiniteQuery.md),
+[query keys](https://github.com/tanstack/query/blob/v5.90.3/docs/framework/react/guides/query-keys.md)
+y `refetchInterval`.
+
+## Decision 7.1: Cursor anterior y cache de una conversación activa
+
+**Decision**: El endpoint devuelve bloques cronológicos de tres turnos y un cursor
+opaco hacia turnos anteriores. `useInfiniteQuery` usa
+`getPreviousPageParam`/`fetchPreviousPage`.
+
+**Rationale**: La unidad permanece como turno completo y el usuario navega con
+scroll ascendente. No se usa `maxPages` inicialmente: podría expulsar el tramo
+reciente; en su lugar, `gcTime` y `removeQueries` limpian historiales inactivos.
+
+**Alternatives considered**: Offset, vulnerable a inserciones; botones de página,
+prohibidos por el spec; cache ilimitado entre conversaciones, innecesario.
 
 ## Decision 8: Primitives Shadcn centralizados
 
@@ -132,5 +150,5 @@ existan múltiples procesos o necesidad demostrada de trazas distribuidas.
 
 ## Resolved Unknowns
 
-No quedan decisiones abiertas. Las versiones y herramientas se tomaron de los
-manifiestos existentes; las decisiones nuevas no requieren cambiar el stack.
+No quedan decisiones abiertas. Las versiones base se tomaron de los manifiestos;
+TanStack Query v5 es la única dependencia nueva requerida por esta revisión.
