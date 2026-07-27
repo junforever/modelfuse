@@ -3,15 +3,16 @@
 ## Overview
 
 Una conversación contiene turnos ordenados. Cada turno guarda el prompt una vez y
-exactamente cuatro slots: `openai`, `google`, `minimax` y `qwen`. Los contextos se
-derivan por slot desde PostgreSQL; no se duplican conversaciones.
+exactamente cuatro slots: `openai`, `google`, `minimax` y `qwen`. PostgreSQL
+conserva historial, idempotencia y exclusión de trabajo por conversación.
 
 ```mermaid
 erDiagram
     conversations ||--o{ turns : contains
-    turns ||--|{ model_responses : has_four
+    turns ||--|{ model_responses : has
     conversations {
         uuid id PK
+        uuid create_client_request_id UK
         varchar title
         timestamptz created_at
         timestamptz updated_at
@@ -37,9 +38,10 @@ erDiagram
         text content
         varchar error_code
         text error_message
+        boolean error_recoverable
         timestamptz continued_without_at
         boolean is_stale
-        jsonb usage
+        integer attempt_no
         jsonb metadata
         timestamptz started_at
         timestamptz completed_at
@@ -48,28 +50,36 @@ erDiagram
     }
 ```
 
-Los UUID se generan en Node con `crypto.randomUUID()`; no se añade una extensión
-PostgreSQL.
+UUIDs se generan en frontend para `clientRequestId` y en backend para IDs de
+entidad usando `crypto.randomUUID()`; no se requiere extensión PostgreSQL.
 
 ## conversations
 
 | Field | Type | Rules |
 |---|---|---|
 | `id` | `uuid` | PK |
+| `create_client_request_id` | `uuid` | Requerido, único global |
 | `title` | `varchar(80)` | Trim, 1–80 caracteres |
 | `created_at` | `timestamptz` | Requerido, default `now()` |
 | `updated_at` | `timestamptz` | Requerido |
 
 Indexes:
 
-- `(updated_at DESC, id DESC)` para el cursor del sidebar.
+- `UNIQUE (create_client_request_id)` para replay de `POST /conversations`.
+- `(updated_at DESC, id DESC)` para el sidebar.
 
 Lifecycle:
 
-- Se crea únicamente junto con el primer turno.
-- El título inicial es `prompt.trim().slice(0, 80)`.
-- Rename aplica trim, acepta cualquier texto y actualiza `updated_at`.
-- Delete es físico y hace cascade a turnos/respuestas.
+- Se crea únicamente junto con un primer turno válido.
+- El título inicial es `prompt.trim().slice(0,80)`.
+- Repetir `create_client_request_id` devuelve esta conversación y su primer turno.
+- Reutilizarlo con un prompt distinto produce `CLIENT_REQUEST_ID_CONFLICT`.
+- Rename aplica trim y actualiza `updated_at`.
+- Delete hace cascade a turnos/respuestas.
+- Una conversación vacía nueva es estado frontend; no inserta fila.
+
+`has_work_in_progress` no se persiste: se deriva consultando turnos y slots
+`pending`/`running`.
 
 ## turns
 
@@ -77,22 +87,40 @@ Lifecycle:
 |---|---|---|
 | `id` | `uuid` | PK |
 | `conversation_id` | `uuid` | FK → conversations, `ON DELETE CASCADE` |
-| `client_request_id` | `uuid` | Requerido; idempotencia |
+| `client_request_id` | `uuid` | Requerido |
 | `ordinal` | `integer` | Mayor que 0 |
 | `user_content` | `text` | Trim, al menos un carácter |
 | `status` | `varchar(16)` | `pending`, `running`, `partial`, `completed`, `failed` |
 | `created_at` | `timestamptz` | Requerido |
 | `updated_at` | `timestamptz` | Requerido |
 
-Constraints:
+Constraints/indexes:
 
-- `UNIQUE (conversation_id, ordinal)`
-- `UNIQUE (client_request_id)` para idempotencia global de requests creados por el
-  cliente.
+- `UNIQUE (conversation_id, client_request_id)` para replay idempotente.
+- `UNIQUE (conversation_id, ordinal)` para orden.
+- `UNIQUE (conversation_id) WHERE status IN ('pending','running')` para un único
+  turno con trabajo en curso.
 - Check de status.
-- Index `(conversation_id, ordinal DESC, id DESC)` para historial.
+- `(conversation_id, ordinal DESC, id DESC)` para historial.
 
-State transitions:
+El primer turno usa el mismo UUID que
+`conversations.create_client_request_id`. En replay, backend consulta el ID antes
+del busy check y devuelve la fila existente.
+
+### Creation transaction
+
+Para un turno posterior:
+
+1. bloquear brevemente la conversación;
+2. consultar `(conversation_id, client_request_id)`;
+3. si existe, devolverlo sin insertar ni ejecutar providers;
+   si el prompt es distinto, devolver `CLIENT_REQUEST_ID_CONFLICT`;
+4. consultar cualquier turno o slot `pending`/`running`;
+5. si existe, terminar con `CONVERSATION_BUSY`;
+6. calcular ordinal, insertar turno y cuatro slots;
+7. confirmar y liberar el lock antes de orquestar.
+
+### State transitions
 
 ```text
 pending -> running -> completed
@@ -103,17 +131,16 @@ partial -> running -> completed
                    -> partial
 ```
 
-Un retry puede devolver un turno terminal a `running`. El estado se recalcula
-después de cada cambio:
+Un retry puede llevar el mismo turno terminal a `running`. El estado se recalcula
+en la misma transacción que el slot:
 
-- `completed`: cuatro slots completados y Qwen no está stale.
-- `partial`: existe contenido útil, pero falta/está fallido algún slot o Qwen está
-  stale.
-- `failed`: no existe contenido útil.
+- `running`: cualquier slot `pending`/`running`;
+- `completed`: cuatro slots completados vigentes;
+- `partial`: ningún slot activo, existe contenido útil y falta/falló algún slot;
+- `failed`: ningún slot activo y no existe contenido útil.
 
-Solo se crea un nuevo turno cuando el anterior no está ejecutándose. La exclusión
-se implementa con row lock de conversación dentro de la transacción del service,
-no mediante memoria del proceso.
+Así, todo slot activo implica un turno `running`, y el índice parcial sigue
+representando la política de un turno activo.
 
 ## model_responses
 
@@ -126,28 +153,30 @@ no mediante memoria del proceso.
 | `provider` | `varchar(64)` | Identificador normalizado |
 | `model` | `varchar(128)` | Modelo configurado |
 | `status` | `varchar(16)` | `pending`, `running`, `completed`, `failed` |
-| `content` | `text` | Contenido exitoso o último contenido Qwen conservado |
-| `error_code` | `varchar(64)` | Código seguro y estable |
-| `error_message` | `text` | Mensaje seguro para usuario |
+| `content` | `text` | Contenido normalizado; requerido para `completed` |
+| `error_code` | `varchar(64)` | Código seguro |
+| `error_message` | `text` | Mensaje seguro |
+| `error_recoverable` | `boolean` | Habilita acción manual |
 | `continued_without_at` | `timestamptz` | Decisión persistida; solo base fallido |
-| `is_stale` | `boolean` | Default `false`; solo Qwen con contenido previo |
-| `usage` | `jsonb` | Default `{}`; solo datos informados por proveedor |
-| `metadata` | `jsonb` | Default `{}`; sin contenido ni secretos |
+| `is_stale` | `boolean` | Consolidación Qwen obsoleta durante reemplazo |
+| `attempt_no` | `integer` | Default 0; incrementa al aceptar cada ejecución |
+| `metadata` | `jsonb` | Duración/evidencia contextual segura |
 | `started_at` | `timestamptz` | Nullable |
 | `completed_at` | `timestamptz` | Nullable |
 | `created_at` | `timestamptz` | Requerido |
 | `updated_at` | `timestamptz` | Requerido |
 
-Constraints:
+Constraints/indexes:
 
 - `UNIQUE (turn_id, slot)`.
+- Checks de slot, rol y estado.
 - `completed` exige contenido no vacío.
 - `failed` exige `error_code`.
-- `continued_without_at` solo puede existir en slots base con status `failed`.
-- `is_stale=true` solo puede existir en `qwen` con contenido no vacío.
-- Index parcial por `status IN ('pending','running')` para recovery.
+- `continued_without_at` solo existe en base `failed`.
+- `is_stale=true` solo existe en Qwen con contenido previo.
+- índice parcial por `status IN ('pending','running')` para busy/recovery.
 
-Base state transitions:
+### Base transitions
 
 ```text
 pending -> running -> completed
@@ -156,90 +185,153 @@ failed  -> pending -> running -> completed
                              -> failed
 ```
 
-Continue-without no cambia `failed`; establece `continued_without_at`. Un retry
-exitoso limpia esa marca.
+Una falla no transiciona automáticamente a `pending`. La UI recibe inmediatamente
+el fallo y acciones. Continue-without establece `continued_without_at` sin cambiar
+a estado activo y sin invocar providers.
 
-Qwen refresh:
+### Retry exclusion
+
+Retry usa un update condicional:
+
+```sql
+UPDATE model_responses
+SET status = 'pending',
+    attempt_no = attempt_no + 1,
+    ...
+WHERE id = :response_id
+  AND status = 'failed'
+  AND error_recoverable = true;
+```
+
+Una sola request modifica la fila. Si no modifica ninguna y el slot está
+`pending`/`running`, la API devuelve `RESPONSE_RETRY_IN_PROGRESS`. No se necesita
+tabla de retries ni mutex en memoria.
+
+Antes de llevar un turno terminal a `running`, la transacción bloquea la
+conversación y comprueba que no exista otro turno activo. Si existe uno distinto,
+devuelve `CONVERSATION_BUSY`. Trabajo ya activo dentro del mismo turno no viola el
+límite de un turno, aunque la UI igualmente deshabilita todos los retries mientras
+busy sea true.
+
+El orquestador conserva el `attempt_no` aceptado y persiste completion/error con
+`WHERE id=:response_id AND attempt_no=:attempt_no`. Un resultado tardío de una
+ejecución anterior no sobrescribe un retry o reconsolidación posterior.
+
+### Qwen refresh
 
 ```text
 completed/is_stale=false
-    -> completed/is_stale=true
     -> running/is_stale=true
-    -> completed/is_stale=false  (reemplaza contenido)
-    -> failed/is_stale=true      (conserva contenido previo)
+    -> completed/is_stale=false
+    -> failed/is_stale=true
 ```
 
-Si un retry base vuelve a fallar, Qwen no cambia de estado.
+Retry base fallido no cambia Qwen. Retry base exitoso marca stale y ejecuta una
+nueva consolidación. Si Qwen falla, se aplica FR-011 y stale no se proyecta como
+consolidación vigente.
 
-## Context Queries
+## Work-in-progress Projection
 
-### Base slot
+La consulta canónica es equivalente a:
 
-Selecciona hasta `CONVERSATION_CONTEXT_MAX_TURNS` turnos recientes y une
-únicamente la respuesta completada del mismo slot:
+```sql
+EXISTS (
+  SELECT 1 FROM turns
+  WHERE conversation_id = :id
+    AND status IN ('pending','running')
+)
+OR EXISTS (
+  SELECT 1
+  FROM model_responses mr
+  JOIN turns t ON t.id = mr.turn_id
+  WHERE t.conversation_id = :id
+    AND mr.status IN ('pending','running')
+)
+```
+
+`ConversationSummary` y `ConversationDetail` proyectan el booleano
+`hasWorkInProgress`. Un slot/turno `failed`, `partial` o `completed` no cuenta como
+trabajo.
+
+## Context Evidence
+
+`metadata.contextWindow` persiste únicamente:
+
+```json
+{
+  "truncated": true,
+  "firstIncludedOrdinal": 8,
+  "lastIncludedOrdinal": 15
+}
+```
+
+No persiste el prompt compuesto, mensajes seleccionados ni otra copia de contenido.
+La API proyecta la evidencia y la UI comunica el truncamiento. Los campos no
+representan presupuesto, estimación ni límite de tokens por modelo.
+
+### Base query
+
+Selecciona una ventana de turnos recientes y une solo respuestas completadas del
+mismo slot:
 
 ```text
 user(prompt 1) -> assistant(base response 1) -> ... -> user(current prompt)
 ```
 
-Una respuesta ausente no introduce contenido assistant inventado.
+### Qwen query
 
-### Qwen
-
-Selecciona prompts y respuestas Qwen previas, añade el prompt actual y las
-respuestas base completadas del turno actual. Añade etiquetas de ausencia para
-slots fallidos. Nunca une respuestas base de turnos previos.
-
-La consulta devuelve los ordinales incluidos. `ContextBuilder` registra esos
-ordinales y `contextTruncated` en metadata de la respuesta, sin persistir otra
-copia del contexto.
+Selecciona prompts/consolidaciones Qwen previas vigentes, añade prompt actual y
+respuestas base completadas del turno actual, más etiquetas de ausencia actuales.
+Nunca une respuestas base de turnos anteriores.
 
 ## Recovery
 
-Al iniciar sobre la misma base:
+Al iniciar sobre la misma DB:
 
-1. Seleccionar respuestas `pending` o `running`.
-2. Cambiarlas a `failed`, `error_code='interrupted'` y mensaje seguro.
-3. Recalcular el turno según el contenido útil restante.
-4. Mantener todos los slots consultables y reintentables.
+1. seleccionar slots `pending`/`running`;
+2. cambiarlos a `failed/interrupted`, mensaje seguro y recuperable;
+3. recalcular turnos afectados;
+4. recalcular busy derivado;
+5. mantener orden, atribución, contenido y consulta/retry.
 
-Recovery no crea turnos ni relanza proveedores.
+Recovery no crea turnos ni relanza providers. Su aceptación exige los invariantes
+en el 100% de casos del conjunto versionado de recuperación.
 
 ## API Projections
 
-- `ConversationSummary`: id, title, createdAt, updatedAt.
-- `ConversationDetail`: los mismos metadatos, sin turnos.
+- `ConversationSummary`: id, title, timestamps, hasWorkInProgress.
+- `ConversationDetail`: mismos metadatos, sin cargar turnos.
 - `ConversationPage`: items, nextCursor.
 - `TurnPage`: hasta tres turnos completos, olderCursor, hasOlder.
-- `Turn`: id, ordinal, prompt, status, responses, timestamps.
-- `ModelResponse`: slot, role, provider, model, status, content/error,
-  continuedWithout, isStale, timestamps, usage y metadata.
+- `Turn`: id, clientRequestId, ordinal, prompt, status, cuatro responses,
+  timestamps.
+- `ModelResponse`: slot, role, provider/model, status, content/error,
+  recoverable, continuedWithout, stale, contextWindow, timestamps y metadata.
 
-La proyección omite claves, configuración y errores externos crudos.
+No se proyectan credenciales, bodies externos, contexto compuesto ni errores
+crudos.
 
 ## Cursors
 
 ### Sidebar
 
-- Cursor Base64URL de `{updatedAt,id}`.
+- Cursor opaco `{updatedAt,id}`.
 - Orden `(updated_at,id) DESC`.
-- Tamaño definido por `CONVERSATION_SIDEBAR_PAGE_SIZE`.
-- Cursor inválido produce `INVALID_CURSOR`.
+- Tamaño `CONVERSATION_SIDEBAR_PAGE_SIZE`.
 
 ### Turn history
 
-- Primera consulta selecciona los tres ordinales más altos.
-- Cursor Base64URL de `{ordinal,id}` del turno más antiguo devuelto.
-- Consulta siguiente aplica `(ordinal,id) < (...)`.
-- Resultados se devuelven en orden cronológico.
-- Prompt y cuatro slots nunca se separan.
+- Primera consulta: tres ordinales más altos.
+- Cursor opaco `{ordinal,id}` del más antiguo devuelto.
+- Bloques previos de hasta tres turnos completos.
+- Items en orden cronológico; prompt y slots nunca se separan.
 
 ## Liquibase Modules
 
-`conversations` crea `conversations` y `turns`. `messages` crea
-`model_responses`, checks e índices. Cada SQL es formateado, tiene changeset único
-y rollback seguro. Los XML de módulo se incluyen desde
-`db/changelogs/db.changelog-master.xml`.
+`conversations` crea `conversations`/`turns`, incluidos constraints de
+idempotencia y turno activo. `messages` crea `model_responses`, checks e índices.
+Los XML se incluyen desde `db/changelogs/db.changelog-master.xml`.
 
-No se crean tablas de contexto, evaluación, ranking, métricas ni versiones de
-respuesta.
+No se crean tablas de idempotencia, locks, contexto, evaluación, ranking,
+métricas, retries ni versiones de respuesta. `attempt_no` protege la fila vigente;
+no almacena un historial de intentos.

@@ -19,6 +19,21 @@ type ApiError = {
 };
 ```
 
+## ConversationSummary
+
+```json
+{
+  "id": "uuid",
+  "title": "Título",
+  "hasWorkInProgress": true,
+  "createdAt": "2026-07-26T20:00:00.000Z",
+  "updatedAt": "2026-07-26T20:00:01.000Z"
+}
+```
+
+`hasWorkInProgress=true` si existe cualquier turno o slot de esa conversación en
+`pending` o `running`. `failed`, `partial` y `completed` no cuentan como trabajo.
+
 ## ModelResponse
 
 ```json
@@ -30,103 +45,114 @@ type ApiError = {
   "status": "completed",
   "content": "respuesta completa",
   "error": null,
+  "recoverable": false,
   "continuedWithout": false,
   "isStale": false,
-  "usage": {
-    "inputTokens": 0,
-    "outputTokens": 0,
-    "totalTokens": 0,
-    "cost": null
-  },
   "metadata": {
-    "durationMs": 0,
-    "contextTruncated": false,
-    "includedTurnOrdinals": [1, 2]
+    "durationMs": 820,
+    "contextWindow": {
+      "truncated": true,
+      "firstIncludedOrdinal": 4,
+      "lastIncludedOrdinal": 9
+    }
   },
-  "startedAt": "2026-07-25T20:00:00.000Z",
-  "completedAt": "2026-07-25T20:00:01.000Z"
+  "startedAt": "2026-07-26T20:00:00.000Z",
+  "completedAt": "2026-07-26T20:00:01.000Z"
 }
 ```
 
 Rules:
 
-- `content` is required when status is `completed`.
-- Qwen may retain previous `content` with `isStale=true` while refreshing or
-  after a refresh error.
-- `continuedWithout=true` only applies to a failed base slot.
-- Usage contains only values returned by the provider; absent values are omitted.
+- `content` es requerido cuando `status=completed`.
+- `error` solo contiene código/mensaje seguro.
+- `recoverable=true` habilita una acción manual; nunca dispara retry automático.
+- `continuedWithout=true` solo aplica a un slot base fallido.
+- `isStale=true` identifica una consolidación Qwen obsoleta y nunca vigente.
+- Si `contextWindow.truncated=true`, UI comunica que se usó una ventana acotada.
+  No representa presupuesto, estimación ni límite de tokens por modelo.
 
 ## Turn
 
 ```json
 {
   "id": "uuid",
+  "clientRequestId": "uuid",
   "ordinal": 1,
   "prompt": "mensaje",
-  "status": "partial",
+  "status": "running",
   "responses": [],
-  "createdAt": "2026-07-25T20:00:00.000Z",
-  "updatedAt": "2026-07-25T20:00:00.000Z"
+  "createdAt": "2026-07-26T20:00:00.000Z",
+  "updatedAt": "2026-07-26T20:00:00.000Z"
 }
 ```
 
-`responses` always projects the four slots so the UI can render four stable tabs.
+`responses` siempre contiene los cuatro slots para mantener tabs estables.
+
+## Idempotency Rules
+
+- `clientRequestId` es UUID requerido en ambos endpoints de creación.
+- El cliente genera un ID una vez por submit lógico y lo reutiliza para cualquier
+  repetición HTTP de ese submit.
+- Repetir el mismo ID y prompt devuelve el recurso original sin crear filas ni
+  invocar providers.
+- Si el mismo ID se reutiliza con otro prompt, backend devuelve
+  `409 CLIENT_REQUEST_ID_CONFLICT`; no crea ni modifica datos.
+- Replay se resuelve antes de validar busy.
 
 ## Endpoints
 
 ### POST /conversations
 
-Creates conversation, deterministic title, first turn and four pending slots
-atomically.
+Crea conversación, título, primer turno y cuatro slots atómicamente.
 
 Request:
 
 ```json
-{"clientRequestId": "uuid", "prompt": "texto no vacío"}
+{
+  "clientRequestId": "uuid",
+  "prompt": "texto no vacío"
+}
 ```
 
-Response: `202 Accepted`
+Response inicial o replay: `202 Accepted`
 
 ```json
-{"conversation": {}, "turn": {}}
+{
+  "conversation": {},
+  "turn": {}
+}
 ```
 
-Repeating the same `clientRequestId` returns the original conversation and turn
-without creating duplicates. The controlled acceptance test requires this
-endpoint to respond in less than one second without waiting for providers.
+Dos requests simultáneos con el mismo ID reciben el mismo recurso; solo uno inicia
+orquestación.
+
+SC-010 exige `202` en menos de un segundo en al menos el 95% de ejecuciones del
+conjunto local controlado con providers fake.
 
 ### GET /conversations
 
 Query:
 
-- `cursor`: optional opaque cursor.
+- `cursor`: cursor opaco opcional.
 
-The page size is fixed by `CONVERSATION_SIDEBAR_PAGE_SIZE`; clients cannot
-override it.
+El tamaño lo define `CONVERSATION_SIDEBAR_PAGE_SIZE`.
 
 Response `200`:
 
 ```json
 {
-  "items": [
-    {
-      "id": "uuid",
-      "title": "Título",
-      "createdAt": "2026-07-25T20:00:00.000Z",
-      "updatedAt": "2026-07-25T20:00:00.000Z"
-    }
-  ],
+  "items": [],
   "nextCursor": "opaque-or-null"
 }
 ```
 
-Ordering is `updatedAt DESC, id DESC`.
+Items son `ConversationSummary`, ordenados por `updatedAt DESC, id DESC`.
 
 ### GET /conversations/:conversationId
 
-Returns `ConversationDetail` without turns.
+Devuelve `ConversationSummary`/detalle sin cargar turnos.
 
-Missing conversation: `404 CONVERSATION_NOT_FOUND`.
+Missing: `404 CONVERSATION_NOT_FOUND`.
 
 ### PATCH /conversations/:conversationId
 
@@ -136,26 +162,21 @@ Request:
 {"title": "texto libre de 1 a 80 caracteres después de trim"}
 ```
 
-Backend trims, validates and persists the value with a parameterized query.
-
 Response: `200 ConversationSummary`.
 
-Invalid title: `422 VALIDATION_ERROR`.
+Título inválido: `422 VALIDATION_ERROR`.
 
 ### DELETE /conversations/:conversationId
 
 Response: `204 No Content`.
 
-Deletion cascades to turns and responses. Active calls are cancelled best-effort;
-late results are discarded if the target response no longer exists.
+Delete hace cascade. La UI confirma antes de llamar este endpoint.
 
 ### GET /conversations/:conversationId/turns
 
 Query:
 
-- `before`: optional opaque cursor. Omit for newest block.
-
-The page size is always three complete turns.
+- `before`: cursor opaco opcional; se omite para el bloque reciente.
 
 Response `200`:
 
@@ -167,80 +188,136 @@ Response `200`:
 }
 ```
 
-Items are chronological. A page never separates a prompt from its four response
-slots. The controlled acceptance test requires the first block to respond in less
-than one second.
+Cada página contiene hasta tres turnos completos en orden cronológico. SC-010
+exige que el primer bloque responda en menos de un segundo en al menos el 95% de
+ejecuciones del conjunto controlado.
 
 ### POST /conversations/:conversationId/turns
 
 Request:
 
 ```json
-{"clientRequestId": "uuid", "prompt": "texto no vacío"}
+{
+  "clientRequestId": "uuid",
+  "prompt": "texto no vacío"
+}
 ```
 
-Response: `202`, `{ "turn": Turn }`.
+Response inicial o replay: `202 Accepted`
 
-Repeating `clientRequestId` returns the existing turn. A different request while
-the previous turn is running returns `409 TURN_IN_PROGRESS`.
+```json
+{
+  "conversation": {},
+  "turn": {}
+}
+```
+
+Order:
+
+1. buscar replay por `(conversationId, clientRequestId)`;
+2. si existe con el mismo prompt, devolverlo;
+3. si es un ID nuevo y existe cualquier turno/slot `pending`/`running`, devolver
+   `409 CONVERSATION_BUSY`;
+4. si no hay busy, crear el siguiente turno/cuatro slots.
+
+La exclusión es por conversación; no afecta navegación ni procesamiento de otras.
 
 ### GET /conversations/:conversationId/turns/:turnId
 
-Response: `200 Turn`.
+Response `200`:
 
-While any slot is executing, includes `Retry-After: 1`.
+```json
+{
+  "conversation": {
+    "id": "uuid",
+    "hasWorkInProgress": true
+  },
+  "turn": {}
+}
+```
+
+Frontend consulta mientras `hasWorkInProgress=true`. La cadencia no es regla de
+producto.
 
 ### POST /conversations/:conversationId/turns/:turnId/responses/:slot/retry
 
-Allowed only when the selected slot is `failed`.
+Solo para un slot `failed` y recuperable.
 
-Response: `202`, updated `Turn`.
+Response aceptado: `202 Accepted`, conversación/turno actualizados.
 
 Rules:
 
-- retries only the selected slot;
-- retrying Qwen never invokes base providers;
-- a failed base retry leaves Qwen unchanged;
-- a successful base retry marks Qwen stale and starts one new consolidation;
-- a successful Qwen result replaces its previous content and clears stale;
-- invalid state returns `409 RESPONSE_NOT_RETRYABLE`.
+- es manual y ejecuta una vez solo el slot solicitado;
+- no hay retries automáticos adicionales;
+- transición atómica `failed → pending`;
+- si existe trabajo activo en otro turno de la conversación, responde
+  `409 CONVERSATION_BUSY`;
+- si el mismo slot ya está `pending`/`running`, responde
+  `409 RESPONSE_RETRY_IN_PROGRESS`;
+- retry Qwen nunca ejecuta bases;
+- retry base fallido no invoca Qwen ni invalida consolidación vigente;
+- retry base exitoso marca Qwen stale e inicia una nueva consolidación;
+- Qwen exitoso reemplaza contenido stale.
+
+La UI no llama este endpoint mientras cualquier turno/slot de la conversación
+esté `pending`/`running`.
 
 ### POST /conversations/:conversationId/turns/:turnId/responses/:slot/continue-without
 
-Allowed only for a failed base slot.
+Solo para slot base `failed`.
 
-Request body: none.
+Request body: ninguno.
 
-Response: `200`, updated `Turn` with `continuedWithout=true` for that slot.
+Response: `200`, conversación/turno actualizados con `continuedWithout=true`.
 
-This endpoint persists the user's decision and does not invoke any provider. It is
-idempotent. Qwen is not a valid slot for this action.
+Persiste la decisión, no invoca providers ni crea trabajo `pending`/`running`.
+Qwen no admite esta acción.
+
+## First Recoverable Failure UI Contract
+
+Cuando un slot base falla por primera vez:
+
+1. el polling proyecta inmediatamente `failed`, `recoverable=true`;
+2. UI muestra Retry y Continue-without sin esperar otro intento;
+3. si la conversación sigue busy por otros slots, Retry queda visible disabled;
+4. Continue-without puede ejecutarse porque no emite trabajo;
+5. cuando busy queda false, Retry se habilita si el slot sigue siendo elegible.
+
+## Busy UI Contract
+
+Mientras `hasWorkInProgress=true` para la conversación seleccionada:
+
+- Enviar está disabled;
+- todos sus botones Retry están disabled;
+- aparece un indicador textual de procesamiento;
+- navegación a otras conversaciones sigue disponible.
+
+Cuando queda false, Enviar y retries elegibles se habilitan aunque el turno
+terminal sea `failed` o `partial`. Los estados locales de mutación también
+previenen doble click antes de recibir el busy del servidor.
 
 ## Startup Behavior
 
-Missing required environment configuration prevents the HTTP server from
-listening. No HTTP error contract applies because startup fails before routes are
-available.
-
-After configuration succeeds, recovery marks persisted `pending`/`running`
-responses as `failed/interrupted` and recalculates affected turns before the
-server accepts requests.
+Configuración requerida ausente impide escuchar y solo identifica la variable.
+Después de validar entorno, recovery termina slots `pending`/`running`, recalcula
+turnos/busy y no relanza providers.
 
 ## Error Codes
 
 | HTTP | Code | Meaning |
 |---|---|---|
-| 400 | `INVALID_JSON` | Invalid JSON body |
-| 400 | `INVALID_CURSOR` | Cursor cannot be decoded or validated |
-| 404 | `CONVERSATION_NOT_FOUND` | Conversation missing |
-| 404 | `TURN_NOT_FOUND` | Turn missing or belongs to another conversation |
-| 404 | `RESPONSE_NOT_FOUND` | Slot missing from turn |
-| 409 | `TURN_IN_PROGRESS` | Previous turn still executing |
-| 409 | `RESPONSE_NOT_RETRYABLE` | Slot is not failed |
-| 409 | `CONTINUE_WITHOUT_NOT_ALLOWED` | Slot is not a failed base |
-| 422 | `VALIDATION_ERROR` | Zod boundary validation failed |
-| 500 | `INTERNAL_ERROR` | Sanitized unexpected failure |
+| 400 | `INVALID_JSON` | JSON inválido |
+| 400 | `INVALID_CURSOR` | Cursor inválido |
+| 404 | `CONVERSATION_NOT_FOUND` | Conversación inexistente |
+| 404 | `TURN_NOT_FOUND` | Turno inexistente o ajeno |
+| 404 | `RESPONSE_NOT_FOUND` | Slot inexistente |
+| 409 | `CLIENT_REQUEST_ID_CONFLICT` | ID repetido con prompt distinto |
+| 409 | `CONVERSATION_BUSY` | ID nuevo mientras hay trabajo en la conversación |
+| 409 | `RESPONSE_NOT_RETRYABLE` | Slot no es fallido recuperable |
+| 409 | `RESPONSE_RETRY_IN_PROGRESS` | Mismo slot ya pending/running |
+| 409 | `CONTINUE_WITHOUT_NOT_ALLOWED` | Slot no es base fallido |
+| 422 | `VALIDATION_ERROR` | Validación Zod fallida |
+| 500 | `INTERNAL_ERROR` | Falla inesperada saneada |
 
-Provider authentication, connectivity, rate-limit and timeout failures normally
-appear inside the affected `ModelResponse`, not as failures of the polling
-endpoint.
+Errores de provider se persisten dentro del slot afectado; no eliminan respuestas
+exitosas ni convierten polling en error HTTP.

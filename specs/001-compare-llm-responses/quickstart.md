@@ -4,8 +4,8 @@
 
 - Node.js 22+
 - pnpm 11
-- Docker with Compose
-- Credentials for OpenAI, Google, MiniMax and a Qwen deployment
+- Docker con Compose
+- Credenciales para OpenAI, Google, MiniMax y Qwen
 
 ## 1. Install
 
@@ -13,16 +13,15 @@
 pnpm install
 ```
 
-Implementation adds `@tanstack/react-query` to frontend and Playwright as a
-frontend development dependency. Provider SDKs are not required; backend uses the
-existing Axios dependency.
+La implementación añade TanStack Query al frontend y Playwright para E2E.
+Backend reutiliza Axios, `pg`, Zod, Pino, Vitest y Supertest. No añade librería de
+retry ni infraestructura genérica de idempotencia.
 
 ## 2. Configure backend
 
-Copy `apps/backend/.env.sample` to `apps/backend/.env` and configure:
+Copiar `apps/backend/.env.sample` a `apps/backend/.env`:
 
 ```dotenv
-# Existing server/PostgreSQL values
 PORT=3001
 NODE_ENV=development
 FRONTEND_URL_LOCALHOST=http://localhost:5173
@@ -30,49 +29,48 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=db_dev
 
-# Providers
 OPENAI_API_KEY=
 OPENAI_MODEL=
-GEMINI_API_KEY=
+GOOGLE_API_KEY=
 GOOGLE_MODEL=
 MINIMAX_API_KEY=
 MINIMAX_MODEL=
-DASHSCOPE_API_KEY=
-DASHSCOPE_BASE_URL=
+QWEN_API_KEY=
 QWEN_MODEL=
 
-# Runtime behavior
+# Provider BASE_URL only when the selected deployment requires it.
+
 LLM_PROVIDER_TIMEOUT_MS=
 CONVERSATION_CONTEXT_MAX_TURNS=
 CONVERSATION_SIDEBAR_PAGE_SIZE=
 ```
 
-Real keys never belong in `.env.sample`, logs or conversation data. Omitting any
-required variable prevents backend startup and reports only the variable name.
+Credenciales reales no pertenecen a `.env.sample`, logs ni datos
+conversacionales. Una variable requerida ausente impide startup e identifica solo
+su nombre.
 
-No token-budget or output-token setting is part of ModelFuse.
+`CONVERSATION_CONTEXT_MAX_TURNS` acota turnos relevantes; no define presupuesto,
+estimación ni límite de tokens por modelo.
 
 ## 3. Configure frontend
-
-Copy `apps/frontend/.env.sample` to `apps/frontend/.env`:
 
 ```dotenv
 VITE_API_BASE_URL=http://localhost:3001/api/v1
 VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD=
 ```
 
-The collapse threshold is non-secret and affects only presentation of loaded
-history.
+Frontend genera `clientRequestId` mediante `crypto.randomUUID()`; no requiere
+configuración.
 
-## 4. Start PostgreSQL and apply migrations
+## 4. Start PostgreSQL and migrate
 
 ```bash
 docker compose up -d postgres_template
 docker compose run --rm liquibase_template
 ```
 
-Liquibase must apply the `conversations` and `messages` module changesets. No
-manual schema command is allowed.
+Liquibase aplica módulos `conversations` y `messages`. No se ejecutan cambios
+manuales de esquema.
 
 ## 5. Run
 
@@ -80,45 +78,92 @@ manual schema command is allowed.
 pnpm dev
 ```
 
-- Frontend: URL printed by Vite.
-- Backend: `http://localhost:3001`.
-- API base: `http://localhost:3001/api/v1`.
+- Backend: `http://localhost:3001`
+- API: `http://localhost:3001/api/v1`
+- Frontend: URL impresa por Vite
 
-## 6. Smoke flow
+## 6. Core smoke flow
 
-1. Submit a prompt and verify tabs labeled OpenAI, Google, MiniMax and Qwen.
-2. Verify the three base slots run independently and Qwen appears after available
-   base results.
-3. Send a follow-up and verify each base uses only its own previous answers.
-4. Force one base failure; choose “continuar sin respuesta” and verify the visible
-   persisted indication and that another turn can be sent.
-5. Force another base failure, retry it successfully and verify Qwen replaces its
-   stale consolidation.
-6. Force the retry to fail and verify no new Qwen call occurs.
-7. Create at least seven turns, reload and verify only the newest three appear.
-8. Scroll upward and verify older blocks prepend without visual jump.
-9. Create enough conversations to overflow the sidebar; verify downward infinite
-   scroll and automatic filling without page controls.
-10. Reopen a conversation containing long messages; verify “Mostrar más /
-    Mostrar menos” without network or persistence changes.
-11. Rename with free text, verify the remaining-character counter and disabled
-    Guardar for whitespace.
-12. Cancel delete once, then confirm it and verify cascade.
+1. Enviar un prompt y verificar tabs OpenAI, Google, MiniMax y Qwen.
+2. Confirmar tres bases en paralelo y consolidación con respuestas disponibles.
+3. Durante `pending`/`running`, verificar aviso de procesamiento, Enviar disabled
+   y todos los Retry disabled en esa conversación.
+4. Navegar a otra conversación y comprobar que sus acciones dependen de su propio
+   busy; resultados siguen guardándose en la conversación de origen.
+5. Al terminar todos los slots, verificar que acciones se reactivan incluso si el
+   turno queda `failed` o `partial`.
 
-## 7. Recovery check
+## 7. Idempotency and concurrency smoke flow
 
-1. Persist a turn with slots `pending` and `running`.
-2. Stop backend without deleting PostgreSQL.
-3. Start backend again.
-4. Verify those slots become `failed/interrupted`.
-5. Verify the turn becomes `partial` when useful content exists, otherwise
-   `failed`.
-6. Verify order, provider attribution, retry and history remain available.
+1. Enviar dos veces `POST /conversations` con el mismo `clientRequestId` y prompt:
+   ambas respuestas deben referir a la misma conversación/turno y providers deben
+   ejecutarse una sola vez.
+2. Repetir `POST /conversations/:id/turns` con el mismo ID/prompt mientras el
+   turno está activo: debe devolver el turno original, no `CONVERSATION_BUSY`.
+3. Enviar un ID nuevo a esa conversación mientras cualquier turno/slot está
+   `pending`/`running`: debe responder `409 CONVERSATION_BUSY`.
+4. Terminar el trabajo como `partial` o `failed` sin estados activos y repetir con
+   otro ID nuevo: debe aceptar el turno.
+5. Reutilizar un ID con prompt distinto: debe responder
+   `409 CLIENT_REQUEST_ID_CONFLICT`.
+6. En dos conversaciones distintas, comprobar que busy en una no bloquea a la
+   otra.
 
-The automated integration test recreates the service composition over the same
-test database.
+## 8. Retry and first failure smoke flow
 
-## 8. Validation
+1. Forzar la primera falla recuperable de una base mientras otra sigue running.
+2. Verificar que Retry y Continue-without aparecen inmediatamente, sin otra
+   llamada automática.
+3. Verificar Retry visible pero disabled por busy; Continue-without permanece
+   disponible.
+4. Cuando no quede trabajo, verificar Retry habilitado para el slot fallido.
+5. Enviar dos retries simultáneos del mismo slot: solo uno debe aceptarse; el otro
+   recibe `RESPONSE_RETRY_IN_PROGRESS`.
+6. Forzar retry base fallido: Qwen no debe invocarse ni invalidarse.
+7. Forzar retry base exitoso: Qwen previo queda stale y una nueva consolidación lo
+   reemplaza.
+8. Forzar Qwen fallido: bases permanecen visibles y solo Qwen ofrece retry cuando
+   la conversación deja de estar busy.
+9. Ejecutar Continue-without sobre base fallida: persiste la ausencia sin llamada
+   de provider ni estado activo nuevo.
+
+## 9. Context and history smoke flow
+
+1. Crear follow-up y capturar mensajes fake: cada base ve solo su historial;
+   Qwen ve su historial y respuestas base actuales.
+2. Reducir la ventana, crear suficientes turnos y verificar
+   `contextWindow.truncated=true` con ordinales.
+3. Confirmar aviso textual de truncamiento y ausencia de prompt compuesto/contexto
+   duplicado en PostgreSQL.
+4. Crear siete turnos, recargar y verificar solo los tres recientes.
+5. Hacer scroll arriba y comprobar bloques anteriores de hasta tres sin salto.
+6. Desbordar sidebar y comprobar scroll descendente/autofill.
+7. Comprobar “Mostrar más / Mostrar menos” sin red ni escrituras.
+8. Verificar rename, cancelación y delete confirmado.
+
+## 10. Recovery acceptance
+
+1. Preparar cada caso versionado con slots `pending`, `running` y completados.
+2. Recrear aplicación/servicios sobre la misma PostgreSQL.
+3. Verificar reconciliación terminal, recálculo de turno y busy=false cuando no
+   queden estados activos.
+4. Verificar orden, atribución, estados coherentes y consulta posterior.
+5. Exigir éxito en el 100% de casos del conjunto de recuperación, sin extrapolar
+   a todos los casos posibles.
+
+## 11. Controlled latency acceptance
+
+Con PostgreSQL local y providers fake:
+
+1. medir cada `POST /api/v1/conversations`;
+2. medir cada primera consulta de historial;
+3. verificar `202` para create;
+4. exigir menos de un segundo para ambos endpoints en al menos el 95% de
+   ejecuciones del conjunto controlado.
+
+No es garantía global de producción ni de providers reales.
+
+## 12. Validation
 
 ```bash
 pnpm typecheck
@@ -128,27 +173,25 @@ pnpm build
 docker compose run --rm liquibase_template validate
 ```
 
-After implementation:
+Después de implementación:
 
 ```bash
 pnpm --filter frontend test:e2e
-pnpm --filter backend test:performance
+pnpm --filter backend test:acceptance-latency
 pnpm --filter backend test:consolidation-eval
 ```
 
-- `test:performance` uses fake providers and local PostgreSQL; it checks p95 under
-  one second for create and first history block.
-- `test:consolidation-eval` performs at most five real Qwen calls and exits nonzero
-  below 90% of fixture checks.
-- Default tests never call paid providers.
+- aceptación de latencia reporta total/éxitos por endpoint y exige 95%;
+- evaluación procesa máximo cinco casos y falla debajo del 90% de checks;
+- tests predeterminados usan fakes y no providers pagados.
 
 ## Troubleshooting
 
-- Missing configuration: fix the named variable; no secret value is printed.
-- Rejected credential: only its slot fails with a safe authentication error.
-- Provider timeout: successful slots remain visible and the failed slot can retry
-  or continue-without.
-- Stale Qwen response: a base retry succeeded and reconsolidation is still
-  running or failed; the previous content remains visibly stale.
-- Liquibase failure: fix the changeset and rerun Liquibase; never edit PostgreSQL
-  manually.
+- `CONVERSATION_BUSY`: esperar que no queden turnos/slots pending/running en esa
+  conversación; otras siguen disponibles.
+- Replay idempotente: reutilizar el mismo ID solo para el mismo submit/prompt.
+- `RESPONSE_RETRY_IN_PROGRESS`: el mismo slot ya tiene un retry activo.
+- Credencial rechazada/timeout: solo falla su slot; no hay retry automático.
+- Contexto acotado: UI muestra el tramo; DB conserva historial completo.
+- Recovery: slots interrumpidos quedan terminales y manualmente recuperables.
+- Liquibase: corregir changeset; no editar PostgreSQL manualmente.

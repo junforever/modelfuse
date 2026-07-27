@@ -2,10 +2,11 @@
 
 ## Scope
 
-SC-005 uses one versioned JSON fixture with at most five cases. It is an
-acceptance check for Qwen consolidation, not a ranking or scoring framework.
+SC-005 se valida con un único fixture JSON versionado de máximo cinco casos. Es
+un check de aceptación acotado para Qwen, no un ranking, grader general,
+benchmark histórico ni framework de evaluación.
 
-Target implementation path:
+Ruta objetivo:
 
 `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json`
 
@@ -36,25 +37,30 @@ Target implementation path:
 
 Rules:
 
-- `cases.length` must be between 1 and 5.
-- Each case has at least one check.
-- `includes` and `excludes` use case-insensitive regular expressions declared in
-  the fixture.
-- `no_duplicate_paragraphs` normalizes whitespace/case and fails when an identical
-  non-empty paragraph appears more than once.
-- Checks inspect only the Qwen response string.
-- The fixture contains no credentials or production conversation data.
+- `cases.length` está entre 1 y 5.
+- Cada caso tiene al menos un check simple y observable.
+- `includes`/`excludes` comparan texto sin distinguir mayúsculas.
+- `no_duplicate_paragraphs` normaliza espacios/case y falla ante un párrafo no
+  vacío idéntico repetido.
+- Los checks inspeccionan únicamente la respuesta consolidada.
+- El fixture no contiene credenciales ni conversaciones reales.
+
+Estos tres checks son la implementación mínima propuesta para conservación de
+aportes, cobertura de información faltante y ausencia de bloques repetidos. No
+producen puntuación por modelo.
 
 ## Execution
 
-An explicit acceptance command:
+El comando explícito de aceptación:
 
-1. validates fixture shape;
-2. invokes the configured Qwen adapter once per case;
-3. executes every declared check;
-4. prints passed/total checks and failing case/check ids;
-5. exits non-zero when the overall pass rate is below 90%.
+1. valida el fixture;
+2. construye para Qwen el prompt, respuestas base y ausencias declaradas;
+3. obtiene una consolidación por caso mediante un único intento del adapter Qwen
+   configurado, sin retry automático;
+4. ejecuta todos los checks;
+5. imprime checks aprobados/total e IDs fallidos;
+6. termina con error si el porcentaje global es menor a 90%.
 
-This command is separate from default unit/integration tests because it makes up
-to five real provider calls. No historical results, rankings or dashboards are
-persisted.
+El comando está separado de unit/integration tests porque puede usar el deployment
+Qwen configurado. No persiste respuestas, resultados históricos, rankings ni
+métricas.

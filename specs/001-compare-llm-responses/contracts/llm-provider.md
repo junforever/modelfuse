@@ -1,7 +1,7 @@
 # LLM Provider Contract
 
-This backend-owned contract is the only provider variation point consumed by
-conversation orchestration.
+Este contrato backend es el único límite consumido por orquestación. No supone un
+protocolo externo común.
 
 ```ts
 type ResponseSlot = 'openai' | 'google' | 'minimax' | 'qwen';
@@ -12,13 +12,13 @@ type LlmMessage = {
 };
 
 type LlmRequest = {
-  requestId: string;
+  operationId: string;
   slot: ResponseSlot;
   messages: LlmMessage[];
   signal: AbortSignal;
 };
 
-type LlmUsage = {
+type LlmMetrics = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
@@ -32,8 +32,8 @@ type LlmResult = {
   model: string;
   startedAt: string;
   completedAt: string;
-  usage: LlmUsage;
-  metadata: Record<string, string | number | boolean | number[] | null>;
+  metrics?: LlmMetrics;
+  metadata?: Record<string, string | number | boolean | null>;
 };
 
 interface LlmProvider {
@@ -44,61 +44,50 @@ interface LlmProvider {
 }
 ```
 
-No output-token or per-model token-budget field belongs to `LlmRequest`.
+`operationId` correlaciona una ejecución interna; no es `clientRequestId` ni
+implementa idempotencia HTTP.
+
+`metrics` reserva el punto de extensión exigido por la constitución. V1 no estima
+valores ausentes, no aplica presupuestos por modelo y no persiste tokens/costo.
 
 ## Provider Adapters
 
-### OpenAiProvider
+Existen adapters concretos separados:
 
-- Uses OpenAI Responses API.
-- Translates `LlmMessage[]` to the provider input.
-- Reads text output and provider usage when present.
-- Uses `OPENAI_API_KEY` and `OPENAI_MODEL`.
+- `OpenAiProvider`
+- `GoogleProvider`
+- `MiniMaxProvider`
+- `QwenProvider`
 
-### GoogleProvider
+Cada adapter:
 
-- Uses Gemini `generateContent`.
-- Translates roles to `contents`/`parts` and system instruction.
-- Handles empty candidates and prompt feedback as normalized errors.
-- Reads usage metadata when present.
-- Uses `GEMINI_API_KEY` and `GOOGLE_MODEL`.
+1. lee credencial, modelo y endpoint desde configuración backend validada;
+2. traduce `LlmMessage[]` al protocolo del deployment;
+3. realiza una llamada Axios con timeout/`AbortSignal`;
+4. normaliza contenido, identidad, timestamps, métricas informadas y error;
+5. mantiene payloads/headers externos dentro del módulo.
 
-### MiniMaxProvider
-
-- Uses MiniMax `POST /v1/text/chatcompletion_v2`.
-- Translates messages and reads assistant content from choices.
-- Reads usage when present.
-- Uses `MINIMAX_API_KEY` and `MINIMAX_MODEL`.
-
-### QwenProvider
-
-- Uses native DashScope text generation.
-- Translates messages into DashScope input and reads output choices.
-- Reads DashScope usage when present.
-- Uses `DASHSCOPE_API_KEY`, `DASHSCOPE_BASE_URL` and `QWEN_MODEL`.
-
-The fact that a provider may also expose a compatibility endpoint does not change
-these separate adapters or permit sharing provider payloads.
+Endpoint y versión exactos son configuración del deployment. No se comparten
+payloads ni se presupone compatibilidad OpenAI.
 
 ## Normalization Rules
 
-- Successful content, provider, model and timestamps are required.
-- Whitespace-only content is a provider error.
-- Usage fields are optional and never inferred by ModelFuse.
-- Metadata is JSON-safe and excludes prompts, responses, headers and credentials.
-- Every adapter honors `AbortSignal`.
-- Provider response types remain inside the adapter.
-- Orchestration never checks provider names to alter behavior.
+- Contenido exitoso no vacío, provider, model y timestamps son requeridos.
+- Métricas son opcionales y nunca se infieren.
+- Metadata excluye prompts, respuestas, headers y credenciales.
+- Cada adapter honra cancelación.
+- Orquestación no ramifica por nombre de provider.
+- Una llamada `generate()` representa exactamente un intento externo.
+- Adapter/orquestador no ejecuta retry automático después de una falla.
 
 ## Error Contract
-
-Adapters throw a normalized error:
 
 ```ts
 type LlmErrorCode =
   | 'authentication'
   | 'rate_limited'
   | 'timeout'
+  | 'connectivity'
   | 'content_blocked'
   | 'invalid_response'
   | 'provider_error';
@@ -108,59 +97,77 @@ type LlmProviderError = {
   safeMessage: string;
   provider: string;
   model: string;
-  retryable: boolean;
+  recoverable: boolean;
 };
 ```
 
-Rules:
-
-- Raw bodies, headers and credentials never leave the adapter.
-- A present but rejected credential maps to `authentication`.
-- Timeout uses the shared configured request timeout and cancels Axios.
-- Rate-limit and transient connectivity errors may be retryable.
-- Content filtering maps to `content_blocked` when the provider exposes that
-  distinction.
+- Bodies, headers, stacks y credenciales no salen del adapter.
+- Credencial rechazada se normaliza como `authentication`.
+- Timeout cancela Axios y afecta solo su slot.
+- Rate limit, timeout y conectividad pueden ser recuperables.
+- `recoverable` habilita elección manual; no programa un retry.
 
 ## Registry
 
-The registry is a literal map:
+El registro es:
 
 ```ts
 Record<ResponseSlot, LlmProvider>
 ```
 
-It contains one instance for each of `openai`, `google`, `minimax` and `qwen`.
-There is no factory hierarchy or common external protocol.
+Una instancia por slot, sin factory hierarchy ni protocolo común.
 
 ## Context Input
 
+`ContextBuilder` produce mensajes; adapters no consultan PostgreSQL.
+
 ### Base slots
 
-Each base adapter receives:
+Cada base recibe:
 
-1. its system instruction;
-2. selected prior user prompts and responses from that same slot;
-3. the current user message.
+1. instrucción de sistema;
+2. ventana de prompts/respuestas del mismo slot;
+3. prompt actual.
 
 ### Qwen
 
-Qwen receives:
+Qwen recibe:
 
-1. its consolidation system instruction;
-2. selected prior user prompts and Qwen responses;
-3. the current user message;
-4. current completed base responses labeled by slot/model;
-5. labels for current base slots that are absent or failed.
+1. instrucción de consolidación;
+2. ventana de prompts/consolidaciones Qwen previas;
+3. prompt actual;
+4. respuestas base completadas del turno actual;
+5. indicaciones de ausencias actuales.
 
-It never receives prior OpenAI, Google or MiniMax responses.
+Nunca recibe respuestas base históricas.
+
+La evidencia de truncamiento se persiste fuera del provider como ordinales y
+booleano; no se guarda `messages`, prompt compuesto ni contenido duplicado. La
+ventana no implica presupuesto, estimación o límite de tokens por modelo.
+
+## Retry Contract
+
+- Primera falla recuperable: devolver error al orquestador; cero intentos
+  adicionales.
+- Retry manual aceptado: una nueva llamada solo al adapter del slot.
+- Dos retries del mismo slot no alcanzan simultáneamente al adapter; backend gana
+  la transición atómica `failed → pending`.
+- Retry base fallido: no llamar Qwen.
+- Retry base exitoso: marcar Qwen stale y ejecutar una llamada Qwen.
+- Retry Qwen: no llamar bases.
+- Continue-without: no llamar ningún provider.
+
+El bloqueo UI de todos los retries durante busy pertenece a frontend; este
+contrato solo garantiza exclusión de la misma ejecución de slot.
 
 ## Contract Tests
 
-Each adapter must prove:
+Cada adapter demuestra:
 
-- request mapping for system/user/assistant history;
-- successful content and usage normalization;
-- authentication rejection mapping;
-- timeout/cancellation;
-- invalid or empty response handling;
-- absence of secrets/content in error and metadata objects.
+- mapping de system/user/assistant;
+- normalización de contenido/métricas informadas;
+- credencial rechazada;
+- timeout/cancelación;
+- respuesta vacía/inválida;
+- un solo request externo por `generate()`, incluso ante error recuperable;
+- ausencia de secretos/contenido en errores y metadata.
