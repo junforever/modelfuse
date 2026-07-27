@@ -5,7 +5,7 @@
 - Node.js 22+
 - pnpm 11
 - Docker with Compose
-- Credentials for the configured LLM providers
+- Credentials for OpenAI, Google, MiniMax and a Qwen deployment
 
 ## 1. Install
 
@@ -13,66 +13,112 @@
 pnpm install
 ```
 
-The implemented frontend manifest includes `@tanstack/react-query`; setup must not
-install it ad hoc outside pnpm.
+Implementation adds `@tanstack/react-query` to frontend and Playwright as a
+frontend development dependency. Provider SDKs are not required; backend uses the
+existing Axios dependency.
 
-## 2. Configure
+## 2. Configure backend
 
-Copy `apps/backend/.env.sample` to `apps/backend/.env`. Implementation will add
-and validate these non-secret names:
+Copy `apps/backend/.env.sample` to `apps/backend/.env` and configure:
 
 ```dotenv
-MODEL_BASE_1_PROVIDER=
-MODEL_BASE_1_NAME=
-MODEL_BASE_2_PROVIDER=
-MODEL_BASE_2_NAME=
-MODEL_BASE_3_PROVIDER=
-MODEL_BASE_3_NAME=
-MODEL_CONSOLIDATOR_PROVIDER=
-MODEL_CONSOLIDATOR_NAME=
-LLM_CONTEXT_MAX_TURNS=10
-LLM_PROVIDER_TIMEOUT_MS=55000
+# Existing server/PostgreSQL values
+PORT=3001
+NODE_ENV=development
+FRONTEND_URL_LOCALHOST=http://localhost:5173
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=db_dev
+
+# Providers
+OPENAI_API_KEY=
+OPENAI_MODEL=
+GEMINI_API_KEY=
+GOOGLE_MODEL=
+MINIMAX_API_KEY=
+MINIMAX_MODEL=
+DASHSCOPE_API_KEY=
+DASHSCOPE_BASE_URL=
+QWEN_MODEL=
+
+# Runtime behavior
+LLM_PROVIDER_TIMEOUT_MS=
+CONVERSATION_CONTEXT_MAX_TURNS=
+CONVERSATION_SIDEBAR_PAGE_SIZE=
 ```
 
-Provider credentials use provider-specific environment variables such as
-`<PROVIDER>_API_KEY`; real values never belong in `.env.sample`.
+Real keys never belong in `.env.sample`, logs or conversation data. Omitting any
+required variable prevents backend startup and reports only the variable name.
 
-## 3. Start PostgreSQL and apply migrations
+No token-budget or output-token setting is part of ModelFuse.
+
+## 3. Configure frontend
+
+Copy `apps/frontend/.env.sample` to `apps/frontend/.env`:
+
+```dotenv
+VITE_API_BASE_URL=http://localhost:3001/api/v1
+VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD=
+```
+
+The collapse threshold is non-secret and affects only presentation of loaded
+history.
+
+## 4. Start PostgreSQL and apply migrations
 
 ```bash
 docker compose up -d postgres_template
 docker compose run --rm liquibase_template
 ```
 
-Liquibase must report both `conversations` and `messages` module changesets as
-applied. No manual schema command is part of setup.
+Liquibase must apply the `conversations` and `messages` module changesets. No
+manual schema command is allowed.
 
-## 4. Run the app
+## 5. Run
 
 ```bash
 pnpm dev
 ```
 
-- Frontend: Vite URL printed by the command.
+- Frontend: URL printed by Vite.
 - Backend: `http://localhost:3001`.
 - API base: `http://localhost:3001/api/v1`.
 
-## 5. Smoke flow
+## 6. Smoke flow
 
-1. Open a new draft and submit a non-empty prompt.
-2. Verify four labeled tabs appear and transition independently.
-3. Send a follow-up; verify each base uses its own prior response and the
-   consolidator uses only its consolidated history plus current base outputs.
-4. Cree al menos siete turnos, recargue y verifique que solo aparecen los tres
-   más recientes.
-5. Haga scroll hacia arriba y verifique que se antepone el bloque anterior sin
-   botones ni salto de posición.
-6. Continúe la conversación y confirme que el nuevo turno entra al cache reciente.
-7. Renombre con un valor de hasta 80 caracteres.
-8. Cancele un delete una vez; luego confírmelo y verifique que el cache y el
-   servidor ya no contienen la conversación.
+1. Submit a prompt and verify tabs labeled OpenAI, Google, MiniMax and Qwen.
+2. Verify the three base slots run independently and Qwen appears after available
+   base results.
+3. Send a follow-up and verify each base uses only its own previous answers.
+4. Force one base failure; choose “continuar sin respuesta” and verify the visible
+   persisted indication and that another turn can be sent.
+5. Force another base failure, retry it successfully and verify Qwen replaces its
+   stale consolidation.
+6. Force the retry to fail and verify no new Qwen call occurs.
+7. Create at least seven turns, reload and verify only the newest three appear.
+8. Scroll upward and verify older blocks prepend without visual jump.
+9. Create enough conversations to overflow the sidebar; verify downward infinite
+   scroll and automatic filling without page controls.
+10. Reopen a conversation containing long messages; verify “Mostrar más /
+    Mostrar menos” without network or persistence changes.
+11. Rename with free text, verify the remaining-character counter and disabled
+    Guardar for whitespace.
+12. Cancel delete once, then confirm it and verify cascade.
 
-## 6. Validation
+## 7. Recovery check
+
+1. Persist a turn with slots `pending` and `running`.
+2. Stop backend without deleting PostgreSQL.
+3. Start backend again.
+4. Verify those slots become `failed/interrupted`.
+5. Verify the turn becomes `partial` when useful content exists, otherwise
+   `failed`.
+6. Verify order, provider attribution, retry and history remain available.
+
+The automated integration test recreates the service composition over the same
+test database.
+
+## 8. Validation
 
 ```bash
 pnpm typecheck
@@ -82,23 +128,27 @@ pnpm build
 docker compose run --rm liquibase_template validate
 ```
 
-After Playwright is added during implementation:
+After implementation:
 
 ```bash
 pnpm --filter frontend test:e2e
+pnpm --filter backend test:performance
+pnpm --filter backend test:consolidation-eval
 ```
 
-Tests use deterministic fake LLM adapters and a disposable PostgreSQL database;
-they must not call paid providers.
-
-Frontend tests create a fresh `QueryClient` per test, disable retries and cover
-infinite pages, polling termination, cache replacement and invalidation.
+- `test:performance` uses fake providers and local PostgreSQL; it checks p95 under
+  one second for create and first history block.
+- `test:consolidation-eval` performs at most five real Qwen calls and exits nonzero
+  below 90% of fixture checks.
+- Default tests never call paid providers.
 
 ## Troubleshooting
 
-- Missing configuration: backend must fail at startup with variable names, never
-  values.
-- A slot times out: its tab shows a safe error and retry; successful slots remain.
-- Server restarts mid-turn: stale `running` slots become
-  `failed/interrupted` and can be retried.
-- Liquibase fails: fix the changeset; do not modify PostgreSQL manually.
+- Missing configuration: fix the named variable; no secret value is printed.
+- Rejected credential: only its slot fails with a safe authentication error.
+- Provider timeout: successful slots remain visible and the failed slot can retry
+  or continue-without.
+- Stale Qwen response: a base retry succeeded and reconsolidation is still
+  running or failed; the previous content remains visibly stale.
+- Liquibase failure: fix the changeset and rerun Liquibase; never edit PostgreSQL
+  manually.

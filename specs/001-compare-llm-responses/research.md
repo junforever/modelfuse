@@ -1,154 +1,199 @@
 # Phase 0 Research: ModelFuse
 
-## Decision 1: Monolito modular dentro del monorepo actual
+## Decision 1: Monolito modular en el monorepo actual
 
 **Decision**: Mantener `apps/frontend`, `apps/backend`, `packages/ui` y `db` como
-únicos límites principales.
+límites principales.
 
-**Rationale**: El producto es una sola aplicación privada y sus módulos comparten
-un ciclo de despliegue. Los límites existentes ya separan presentación,
-orquestación, UI reutilizable y esquema.
+**Rationale**: ModelFuse es una aplicación privada para un usuario y comparte un
+ciclo de despliegue. La separación existente ya asigna presentación, API,
+orquestación, UI reutilizable y esquema sin necesitar servicios independientes.
 
-**Alternatives considered**: Microservicios por proveedor o un workspace de
-contratos. Ambos agregan despliegues y coordinación sin un segundo consumidor o
-escala que los justifique.
+**Alternatives considered**: Microservicios por proveedor y un workspace nuevo
+para contratos. Ambos añaden coordinación sin un consumidor o escala adicional.
 
 ## Decision 2: REST asíncrono con polling
 
-**Decision**: Las escrituras de turno devuelven `202`; el frontend consulta el
-estado del turno hasta que sus cuatro slots sean terminales.
+**Decision**: Crear y persistir el turno antes de responder `202`; el frontend
+consulta el recurso del turno cada segundo hasta alcanzar un estado terminal.
 
-**Rationale**: Evita mantener una solicitud durante llamadas LLM lentas, permite
-mostrar estados independientes y usa Express/Axios ya instalados.
+**Rationale**: No se requiere streaming. Polling permite representar cuatro
+estados independientes y reutiliza Express, Axios y TanStack Query.
 
-**Alternatives considered**: SSE y WebSockets, descartados porque no se exige
-streaming; una cola externa, diferida hasta requerir multiinstancia o ejecución
-durable.
+**Alternatives considered**: SSE, WebSockets y colas externas. Se descartan en v1
+porque el spec no exige streaming, multiinstancia ni ejecución durable fuera del
+proceso Node.
 
-## Decision 3: Routers Express por módulo y error global
+## Decision 3: Cuatro adapters reales y un contrato interno normalizado
 
-**Decision**: Montar un router de conversaciones desde `app.ts`, mantener
-controllers delgados y finalizar con middleware de ruta inválida y error global.
+**Decision**: Implementar adapters separados para OpenAI, Google, MiniMax y Qwen.
+Todos usan Axios, pero cada adapter construye y interpreta el protocolo propio de
+su proveedor. `TurnOrchestrator` solo recibe `LlmProvider` y `LlmResult`.
 
-**Rationale**: Express 5 soporta routers como stacks aislados y propaga rechazos de
-handlers async al error handler. `createApp()` permanece testeable sin `listen`.
+**Rationale**: El spec prohíbe asumir un protocolo común. Axios ya está instalado,
+por lo que añadir cuatro SDKs no aporta valor al contrato interno.
 
-**Alternatives considered**: Un archivo de rutas único o lógica de negocio dentro
-de handlers; ambos rompen límites y dificultan pruebas.
+**Provider paths**:
 
-**Source**: Documentación oficial de
-[Express routing and middleware](https://github.com/expressjs/express/blob/master/_autodocs/07-middleware-and-routing.md).
+- OpenAI: Responses API con mensajes explícitos y sin depender de estado remoto.
+- Google: `generateContent` stateless con el historial permitido enviado en cada
+  llamada.
+- MiniMax: endpoint nativo `POST /v1/text/chatcompletion_v2`.
+- Qwen: interfaz nativa DashScope de Alibaba Cloud Model Studio.
 
-## Decision 4: Un agregado con cuatro slots normalizados
+**Alternatives considered**: Un adapter OpenAI-compatible compartido, descartado
+por contradecir FR-036; SDKs oficiales por proveedor, diferidos mientras Axios
+cubra los cuatro contratos con menos dependencias.
 
-**Decision**: Guardar un prompt por turno y cuatro filas `model_responses`
-identificadas por slot.
+**Sources**:
 
-**Rationale**: Evita duplicar prompts, permite estados/retries independientes y
-reconstruye cada historial por slot con consultas simples.
+- [OpenAI text generation and Responses API](https://developers.openai.com/api/docs/guides/text)
+- [Google Gemini `generateContent`](https://ai.google.dev/api/generate-content)
+- [MiniMax text generation API](https://platform.minimax.io/docs/api-reference/text-post)
+- [Qwen native text generation on Model Studio](https://www.alibabacloud.com/help/en/model-studio/text-generation)
 
-**Alternatives considered**: Cuatro conversaciones físicas, que duplicarían
-identidad y complicarían rename/delete; columnas de respuesta en `turns`, que
-harían rígidos estados y métricas.
+## Decision 4: Contexto reconstruido desde PostgreSQL y acotado por turnos
 
-## Decision 5: Adapter LLM mínimo y real
+**Decision**: `ContextBuilder` selecciona una cantidad configurable de turnos
+recientes y registra qué ordinales incluyó y si truncó historial. No define
+presupuestos de tokens, límites de salida ni estimaciones por modelo.
 
-**Decision**: Un único contrato `LlmProvider.generate()` con registry por slot y
-respuesta normalizada.
+**Rationale**: Cumple la ventana explícita exigida por la constitución sin añadir
+una política que el spec descartó. PostgreSQL conserva el historial completo y
+explica qué parte se envió.
 
-**Rationale**: Existen varios proveedores reales, por lo que la abstracción no es
-especulativa. Orquestación y UI quedan libres de payloads concretos.
+**Composition**:
 
-**Alternatives considered**: Condicionales por proveedor dentro del orchestrator,
-descartados por acoplamiento; una jerarquía de factories, descartada por
-innecesaria.
+- OpenAI, Google y MiniMax reciben el nuevo mensaje y solo sus propios pares
+  históricos usuario/respuesta.
+- Qwen recibe su historial consolidado, el nuevo mensaje y las respuestas base
+  disponibles del turno actual.
+- Qwen nunca recibe respuestas históricas de los modelos base.
 
-## Decision 6: Ventana acotada antes que resúmenes automáticos
+**Alternatives considered**: Historial completo, descartado porque puede exceder
+los límites externos; resumen automático y presupuesto por tokens, descartados
+porque no son requisitos de esta versión.
 
-**Decision**: Incluir como máximo los últimos 10 turnos que quepan en el
-presupuesto configurado por modelo.
+## Decision 5: Retry y “continuar sin respuesta” se modelan por slot
 
-**Rationale**: Controla costo desde el primer día sin agregar llamadas de resumen
-ni otra tabla. Se registra cuándo hubo truncamiento.
+**Decision**: Una respuesta base fallida puede reintentarse o marcarse como
+“continuar sin respuesta”. La marca se persiste en la misma fila del slot.
 
-**Alternatives considered**: Historial completo, incompatible con límites y costo;
-resumen en cada turno, descartado por latencia/costo. Un resumen persistido se
-añadirá solo si las métricas de truncamiento y calidad lo justifican.
+**Rationale**: Mantiene una sola unidad de retry y evita duplicar turnos.
 
-## Decision 7: TanStack Query v5 para todo el server state
+**Retry rules**:
 
-**Decision**: Añadir `@tanstack/react-query` v5. Listas e historial usan
-`useInfiniteQuery`; metadatos y polling usan `useQuery`; todas las escrituras usan
-`useMutation`. Solo selección, dialogs, tabs y drafts permanecen en estado React.
+1. Un retry base fallido no modifica ni relanza Qwen.
+2. Un retry base exitoso marca la consolidación existente como obsoleta y ejecuta
+   Qwen otra vez.
+3. La nueva consolidación reemplaza el contenido anterior al completar.
+4. Mientras se actualiza o si la actualización falla, el contenido anterior puede
+   conservarse marcado como obsoleto.
+5. Un retry directo de Qwen no ejecuta modelos base.
 
-**Rationale**: El spec ahora exige cache por conversación, historial incremental,
-polling, invalidación y múltiples mutaciones. TanStack Query resuelve esas
-responsabilidades con una única fuente de server state y permite detener polling
-mediante `refetchInterval` cuando el turno es terminal.
+**Alternatives considered**: Retry del turno completo, descartado por FR-040;
+tabla de versiones de respuesta, descartada porque `is_stale` y el contenido
+existente cubren la única revisión requerida.
 
-**Alternatives considered**: Hooks manuales, descartados porque duplicarían cache,
-cancelación e invalidación; store global, descartado porque no sincroniza server
-state por sí mismo.
+## Decision 6: Recovery dedicado fuera de `index.ts`
 
-**Source**: Documentación oficial de TanStack Query sobre
-[infinite queries](https://github.com/tanstack/query/blob/v5.90.3/docs/framework/react/reference/useInfiniteQuery.md),
-[query keys](https://github.com/tanstack/query/blob/v5.90.3/docs/framework/react/guides/query-keys.md)
-y `refetchInterval`.
+**Decision**: `server.ts` compone dependencias, ejecuta
+`recoverInterruptedTurns()`, inicia Express y gestiona shutdown. `index.ts` solo
+invoca start/stop.
 
-## Decision 7.1: Cursor anterior y cache de una conversación activa
+**Rationale**: Cumple la constitución y mantiene recovery testeable sin abrir un
+puerto.
 
-**Decision**: El endpoint devuelve bloques cronológicos de tres turnos y un cursor
-opaco hacia turnos anteriores. `useInfiniteQuery` usa
-`getPreviousPageParam`/`fetchPreviousPage`.
+**Recovery algorithm**:
 
-**Rationale**: La unidad permanece como turno completo y el usuario navega con
-scroll ascendente. No se usa `maxPages` inicialmente: podría expulsar el tramo
-reciente; en su lugar, `gcTime` y `removeQueries` limpian historiales inactivos.
+1. Marcar slots `pending` o `running` como `failed/interrupted`.
+2. Recalcular cada turno afectado.
+3. Si conserva algún contenido útil, el turno queda `partial`; si no, `failed`.
+4. La conversación y sus respuestas siguen consultables y los slots fallidos
+   siguen siendo reintentables.
 
-**Alternatives considered**: Offset, vulnerable a inserciones; botones de página,
-prohibidos por el spec; cache ilimitado entre conversaciones, innecesario.
+**Alternatives considered**: Recovery en `index.ts`, prohibido; reanudar llamadas
+externas automáticamente, descartado porque no existe cola durable.
 
-## Decision 8: Primitives Shadcn centralizados
+## Decision 7: Dos cursores y dos direcciones de scroll
 
-**Decision**: Añadir únicamente primitives faltantes a `packages/ui` y componer
-features en `apps/frontend`.
+**Decision**:
 
-**Rationale**: La guía oficial de monorepo usa un paquete UI con exports por
-componentes y aliases desde la aplicación; coincide con la configuración actual.
+- Sidebar: cursor `(updated_at,id)`, páginas de tamaño fijo configurado en backend
+  y `fetchNextPage()` al llegar al sentinel inferior.
+- Chat: cursor `(ordinal,id)`, páginas fijas de tres turnos completos y
+  `fetchPreviousPage()` al llegar al sentinel superior.
 
-**Alternatives considered**: Copiar dialogs/tabs a frontend o mover componentes
-de conversación al paquete UI; ambos rompen reutilización o agnosticismo.
+**Rationale**: Los cursores permanecen estables ante nuevas inserciones y las dos
+listas cumplen experiencias distintas sin controles de página.
 
-**Source**: Guía oficial de
-[Shadcn UI monorepo](https://github.com/shadcn-ui/ui/blob/main/apps/v4/content/docs/(root)/monorepo.mdx).
+`useInfiniteQuery` v5 requiere `initialPageParam` y funciones explícitas para
+obtener la página siguiente o anterior.
 
-## Decision 9: SQL formateado y XML de módulo
+**Source**: [TanStack Query v5 infinite-query behavior](https://tanstack.com/query/v5/docs/framework/react/guides/migrating-to-v5).
 
-**Decision**: Crear módulos `conversations` y `messages`, incluidos explícitamente
-desde el changelog master.
+## Decision 8: El sentinel inferior también llena el sidebar inicialmente
 
-**Rationale**: Liquibase identifica cada cambio por changeset y permite rollback
-de SQL formateado; la división refleja ownership real.
+**Decision**: El mismo `IntersectionObserver` que carga páginas al descender sigue
+visible mientras el contenido no llena el contenedor, provocando cargas
+adicionales hasta llenarlo o hasta que `nextCursor` sea nulo.
 
-**Alternatives considered**: Un SQL monolítico o cambios manuales, prohibidos por
-la constitución; un módulo vacío de métricas, descartado hasta que exista esquema
-analítico.
+**Rationale**: Cumple FR-043 sin un bucle adicional, cálculos manuales ni botones.
 
-**Source**: Documentación oficial de
-[Liquibase formatted SQL](https://github.com/liquibase/liquibase-docs/blob/master/Content/concepts/changelogs/sql-format.html).
+## Decision 9: Colapso histórico es estado visual local
 
-## Decision 10: Observabilidad por correlación, sin tracing distribuido
+**Decision**: `CollapsibleHistoryMessage` recibe `isHistorical` y el umbral
+`VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD`. Solo los turnos recuperados desde páginas
+de historial se colapsan; expandir no modifica cache ni servidor.
 
-**Decision**: Logs Pino estructurados y usage persistido, correlacionados por
-request/conversation/turn/slot.
+**Rationale**: La procedencia del mensaje es una preocupación de presentación, no
+un campo persistente.
 
-**Rationale**: Es suficiente para un monolito de una instancia y deja datos para
-diagnosticar proveedores y costo.
+**Alternatives considered**: Truncar contenido en la API o persistir estado
+expandido, descartados por FR-039.
 
-**Alternatives considered**: OpenTelemetry desde el inicio, diferido hasta que
-existan múltiples procesos o necesidad demostrada de trazas distribuidas.
+## Decision 10: Título inicial determinista en backend
+
+**Decision**: Al crear conversación, backend aplica
+`prompt.trim().slice(0, 80)` y persiste el resultado en la misma transacción que
+el primer turno.
+
+**Rationale**: Una única implementación impide diferencias entre frontend y
+persistencia. React escapa texto y PostgreSQL usa queries parametrizadas; rename
+no necesita bloquear caracteres especiales.
+
+## Decision 11: Fixture de consolidación pequeño, no framework de ranking
+
+**Decision**: Un fixture JSON versionado contiene como máximo cinco casos. Cada
+caso declara prompt, tres respuestas base y checks simples de inclusión o
+no-repetición. Una suite de aceptación invoca Qwen de forma explícita y calcula el
+porcentaje de checks aprobados.
+
+**Rationale**: Hace SC-005 verificable automáticamente sin crear scoring,
+dashboard ni evaluación general. La suite no forma parte del test unitario
+predeterminado porque realiza llamadas reales.
+
+## Decision 12: Liquibase SQL formateado con módulos existentes
+
+**Decision**: `conversations` crea conversaciones y turnos; `messages` crea
+respuestas y sus índices. Los XML de módulo se incluyen desde el master.
+
+**Rationale**: Refleja ownership real y cumple la constitución. No se crea módulo
+de métricas ni de evaluación.
+
+**Source**: [Liquibase SQL changelogs](https://docs.liquibase.com/community/user-guide-5-0-2/sql-changelog-example).
+
+## Decision 13: Observabilidad mínima y sin contenido
+
+**Decision**: Pino registra request, conversación, turno, slot, proveedor/modelo,
+duración, estado, recovery y tamaño de página. Nunca registra prompts,
+respuestas, credenciales ni headers de autorización.
+
+**Rationale**: Permite depurar latencia, polling, retries y recovery en un
+monolito. OpenTelemetry se difiere hasta que exista distribución real.
 
 ## Resolved Unknowns
 
-No quedan decisiones abiertas. Las versiones base se tomaron de los manifiestos;
-TanStack Query v5 es la única dependencia nueva requerida por esta revisión.
+No quedan decisiones sin resolver. Las cuatro integraciones, los dos cursores,
+recovery, retry y validación de SC-005 están definidos sin introducir políticas
+de tokens ni protocolos compartidos.
