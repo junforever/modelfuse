@@ -1,264 +1,374 @@
 # Tasks: Comparación y consolidación de respuestas LLM
 
-**Input**: `spec.md`, `plan.md`, `research.md`, `data-model.md`,
-`contracts/rest-api.md`, `contracts/llm-provider.md`, `quickstart.md`
-**Tests**: obligatorios para comportamiento no trivial y contratos persistentes.
-**Organization**: tareas agrupadas por historia y ordenadas por dependencia.
+**Input**: artefactos cerrados en `specs/001-compare-llm-responses/`
+**Prerequisites**: `spec.md`, `plan.md`, `research.md`, `data-model.md`,
+`contracts/rest-api.md`, `contracts/llm-provider.md`, `quickstart.md`,
+`consolidation-evaluation.md`
 
-`[P]` indica archivos independientes que pueden trabajarse en paralelo. Las
-etiquetas `[US1]`–`[US4]` corresponden a las historias del spec.
+**Tests**: obligatorios para todo comportamiento no trivial. Las pruebas de cada
+historia se escriben primero y deben fallar antes de implementar.
+
+**Organization**: tareas agrupadas por historia y dominio. `[P]` solo identifica
+trabajo en archivos distintos sin dependencia pendiente.
+
+## Format: `[ID] [P?] [Story?] [Domain] Description`
+
+- **[Story]**: `US1`, `US2`, `US3` o `US4`.
+- **[Domain]**: `FE`, `BE`, `UI`, `DB`, `TEST`, `DOC` o `SHARED`.
+- Cada tarea referencia un path concreto.
+- Los contratos de Phase 1 son autoritativos; ninguna tarea puede añadir reglas
+  no documentadas.
+
+---
 
 ## Phase 1: Setup
 
-**Purpose**: añadir solo dependencias, providers y runners necesarios.
+**Purpose**: instalar únicamente dependencias y runners exigidos por el plan.
 
-- [ ] T001 Añadir `@tanstack/react-query`, `@playwright/test`, scripts frontend y lockfile en `apps/frontend/package.json` y `pnpm-lock.yaml`
-- [ ] T002 Añadir con el comando Shadcn del workspace `tabs`, `dialog`, `dropdown-menu`, `scroll-area`, `skeleton` y `alert` en `packages/ui/src/components/`
-- [ ] T003 [P] Crear `QueryClient` y montar `QueryClientProvider` en `apps/frontend/src/providers/query-provider.tsx` y `apps/frontend/src/main.tsx`
-- [ ] T004 [P] Configurar Testing Library y un QueryClient aislado sin retries de mutación en `apps/frontend/src/test/setup.ts`, `apps/frontend/src/test/query-test-utils.tsx` y `apps/frontend/vitest.config.ts`
-- [ ] T005 [P] Configurar Playwright con backend/frontend de prueba y Chromium en `apps/frontend/playwright.config.ts`
-- [ ] T006 [P] Documentar `VITE_API_BASE_URL` y `VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD` en `apps/frontend/.env.sample`
+- [ ] T001 [FE] Añadir `@tanstack/react-query`, `@playwright/test`, scripts frontend y cambios de lockfile en `apps/frontend/package.json` y `pnpm-lock.yaml`
+- [ ] T002 [UI] Añadir mediante el comando Shadcn del workspace `tabs`, `dialog`, `dropdown-menu`, `scroll-area`, `skeleton` y `alert` en `packages/ui/src/components/`
+- [ ] T003 [P] [FE] Crear el QueryClient de producción y montar `QueryClientProvider` en `apps/frontend/src/providers/query-provider.tsx` y `apps/frontend/src/main.tsx` (depende de T001)
+- [ ] T004 [P] [TEST] Configurar Testing Library y QueryClient aislado por prueba en `apps/frontend/src/test/setup.ts`, `apps/frontend/src/test/query-test-utils.tsx` y `apps/frontend/vitest.config.ts` (depende de T001)
+- [ ] T005 [P] [TEST] Configurar Playwright con frontend/backend de prueba y Chromium en `apps/frontend/playwright.config.ts` (depende de T001)
+- [ ] T006 [P] [DOC] Documentar credenciales/modelos, `CONVERSATION_CONTEXT_MAX_TURNS`, `CONVERSATION_SIDEBAR_PAGE_SIZE`, `VITE_API_BASE_URL` y `VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD` sin secretos en `apps/backend/.env.sample` y `apps/frontend/.env.sample`
 
-**Checkpoint**: dependencias y runners disponibles; ningún workspace nuevo.
+**Checkpoint**: dependencias disponibles sin crear nuevos workspaces, SDKs LLM,
+librerías de retry ni infraestructura de idempotencia.
+
+---
 
 ## Phase 2: Foundational
 
-**Purpose**: esquema, configuración y contratos que bloquean todas las historias.
+**Purpose**: esquema, contratos y composición que bloquean todas las historias.
 
 ### Database
 
-- [ ] T007 Crear `conversations` con título, timestamps, constraints, índice del sidebar y rollback en `db/changelogs/conversations/001-create-conversations.sql`
-- [ ] T008 Crear `turns` con ordinal único por conversación, prompt, estados, cascade e índice de historial, sin idempotencia ni exclusión de turnos activos, en `db/changelogs/conversations/002-create-turns.sql`
-- [ ] T009 Crear `model_responses` con cuatro slots, estados, error recuperable, continue-without, stale, usage, metadata y rollback en `db/changelogs/messages/001-create-model-responses.sql`
-- [ ] T010 Crear índices parciales de recovery y lectura de slots en `db/changelogs/messages/002-add-response-indexes.sql`
-- [ ] T011 Crear XML de módulos e incluirlos desde el master en `db/changelogs/conversations/db.changelog-conversations.xml`, `db/changelogs/messages/db.changelog-messages.xml` y `db/changelogs/db.changelog-master.xml`
-- [ ] T012 Añadir validación SQL de tablas, checks, uniques, índices y cascades en `db/tests/validate-model-fuse-schema.sql`
-
-### Backend contracts and composition
-
-- [ ] T013 [P] Validar credenciales/modelos de cuatro providers, timeout, ventana contextual y página del sidebar con Zod en `apps/backend/src/infrastructure/config/env.ts` y `apps/backend/.env.sample`
-- [ ] T014 [P] Definir slots, estados, conversaciones, turnos, respuestas y páginas REST en `apps/backend/src/types/conversations.ts`
-- [ ] T015 [P] Definir schemas Zod para prompts, rename, IDs, slots y cursores en `apps/backend/src/middleware/validation/conversationSchemas.ts`
-- [ ] T016 Implementar middleware de validación y errores saneados en `apps/backend/src/middleware/validation/validateRequest.ts` y `apps/backend/src/types/apiError.ts`
-- [ ] T017 [P] Definir `LlmProvider`, `LlmResult`, usage y errores normalizados sin retry automático en `apps/backend/src/types/llm.ts` y `apps/backend/src/services/llm/llmErrors.ts`
-- [ ] T018 Crear helpers de transacción y mappers PostgreSQL→REST en `apps/backend/src/infrastructure/postgres/transaction.ts` y `apps/backend/src/infrastructure/postgres/mappers/conversationMapper.ts`
-- [ ] T019 [P] Implementar encode/decode validado de cursores opacos en `apps/backend/src/utils/cursor.ts`
-- [ ] T020 Crear `apiRouter` y `createApp()` testeable en `apps/backend/src/routes/apiRouter.ts` y `apps/backend/src/app.ts`
-- [ ] T021 Crear `startServer()`/shutdown y limitar `index.ts` a invocarlos en `apps/backend/src/server.ts` y `apps/backend/src/index.ts`
-- [ ] T022 [P] Crear providers fake deterministas y fixtures base en `apps/backend/src/test/fakes/fakeLlmProvider.ts` y `apps/backend/src/test/fixtures/conversationFixtures.ts`
-
-### Frontend contracts
-
-- [ ] T023 [P] Definir tipos y schemas Zod de conversación, turno y slot en `apps/frontend/src/features/conversations/types/conversation.ts` y `apps/frontend/src/features/conversations/schemas/conversationSchemas.ts`
-- [ ] T024 [P] Crear cliente Axios cancelable y query keys en `apps/frontend/src/features/conversations/api/client.ts` y `apps/frontend/src/features/conversations/queries/conversation-keys.ts`
-
-**Checkpoint**: Liquibase valida; contratos y composición no contienen
-`clientRequestId`, `TURN_IN_PROGRESS` ni un protocolo común de provider.
-
-## Phase 3: User Story 1 — Comparar y consolidar (P1)
-
-**Goal**: crear el primer turno, ejecutar tres bases en paralelo, consolidar con
-Qwen y mostrar cuatro tabs con fallos/recovery independientes.
-
-**Independent Test**: con providers fake, cada slot alcanza estado terminal, las
-respuestas se mantienen separadas y la primera falla recuperable ofrece
-inmediatamente retry o continuar sin otro intento automático.
-
-### Tests
-
-- [ ] T025 [P] [US1] Probar ejecución paralela, consolidación con respuestas disponibles y persistencia independiente en `apps/backend/src/services/conversations/__tests__/TurnOrchestrator.test.ts`
-- [ ] T026 [P] [US1] Probar que la primera falla recuperable ejecuta un solo intento y habilita retry/continue-without en `apps/backend/src/services/conversations/__tests__/slotFailurePolicy.test.ts`
-- [ ] T027 [P] [US1] Probar mapping, normalización, timeout, credencial rechazada y no-auto-retry de OpenAI en `apps/backend/src/infrastructure/llm/providers/__tests__/OpenAiProvider.test.ts`
-- [ ] T028 [P] [US1] Probar mapping, normalización, timeout, credencial rechazada y no-auto-retry de Google en `apps/backend/src/infrastructure/llm/providers/__tests__/GoogleProvider.test.ts`
-- [ ] T029 [P] [US1] Probar mapping, normalización, timeout, credencial rechazada y no-auto-retry de MiniMax en `apps/backend/src/infrastructure/llm/providers/__tests__/MiniMaxProvider.test.ts`
-- [ ] T030 [P] [US1] Probar mapping, normalización, timeout, credencial rechazada y no-auto-retry de Qwen en `apps/backend/src/infrastructure/llm/providers/__tests__/QwenProvider.test.ts`
-- [ ] T031 [P] [US1] Probar `POST /conversations`, polling, retry por slot y continue-without con Supertest en `apps/backend/src/routes/conversations/__tests__/conversationExecution.integration.test.ts`
-- [ ] T032 [P] [US1] Probar cuatro tabs, etiquetas no cromáticas, estados y acciones inmediatas en `apps/frontend/src/features/conversations/__tests__/ResponseTabs.test.tsx`
-- [ ] T033 [P] [US1] Probar create mutation, polling terminal y cache por conversation/turn ID en `apps/frontend/src/features/conversations/__tests__/turn-execution-queries.test.tsx`
-- [ ] T034 [P] [US1] Escribir E2E de prompt, comparación, consolidación, fallo parcial, retry y continue-without en `apps/frontend/e2e/conversation-comparison.spec.ts`
+- [ ] T007 [DB] Crear `conversations` y `turns` con `create_client_request_id`, `client_request_id`, ordinal, estados, cascades, uniques de idempotencia e índice único parcial de turno activo en `db/changelogs/conversations/001-create-conversations-and-turns.sql`
+- [ ] T008 [DB] Crear `model_responses` con cuatro slots, estados, error recuperable, `continued_without_at`, `is_stale`, `attempt_no`, metadata segura, checks e índices de busy/recovery en `db/changelogs/messages/001-create-model-responses.sql` (depende de T007)
+- [ ] T009 [DB] Crear changelogs de módulo e incluirlos desde el master en `db/changelogs/conversations/db.changelog-conversations.xml`, `db/changelogs/messages/db.changelog-messages.xml` y `db/changelogs/db.changelog-master.xml` (depende de T007, T008)
+- [ ] T010 [TEST] Validar tablas, constraints, índice parcial, ausencia de tablas extra y cascades en `db/tests/validate-model-fuse-schema.sql` (depende de T009)
 
 ### Backend
 
-- [ ] T035 [P] [US1] Implementar creación atómica de conversación, título, primer turno y cuatro slots en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts`
-- [ ] T036 [P] [US1] Implementar lectura y transiciones atómicas por slot en `apps/backend/src/infrastructure/postgres/repositories/turnRepository.ts`
-- [ ] T037 [P] [US1] Implementar adapter concreto OpenAI según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/OpenAiProvider.ts`
-- [ ] T038 [P] [US1] Implementar adapter concreto Google según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/GoogleProvider.ts`
-- [ ] T039 [P] [US1] Implementar adapter concreto MiniMax según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/MiniMaxProvider.ts`
-- [ ] T040 [P] [US1] Implementar adapter concreto Qwen según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/QwenProvider.ts`
-- [ ] T041 [US1] Construir el mapa literal de cuatro slots en `apps/backend/src/infrastructure/llm/providerRegistry.ts`
-- [ ] T042 [US1] Implementar tres bases con `Promise.allSettled`, persistencia inmediata y consolidación Qwen en `apps/backend/src/services/conversations/TurnOrchestrator.ts`
-- [ ] T043 [US1] Implementar retry de un solo slot, reconsolidación solo tras éxito base y continue-without persistido en `apps/backend/src/services/conversations/TurnOrchestrator.ts`
-- [ ] T044 [US1] Implementar creación inicial, polling y acciones de slot en `apps/backend/src/services/conversations/ConversationService.ts`
-- [ ] T045 [US1] Exponer create/poll/retry/continue-without con controllers delgados en `apps/backend/src/controllers/conversations/conversationController.ts` y `apps/backend/src/routes/conversations/conversationRoutes.ts`
-- [ ] T046 [US1] Implementar recovery de `pending`/`running`, recálculo de turno y conexión desde `startServer()` en `apps/backend/src/services/conversations/recoverInterruptedTurns.ts` y `apps/backend/src/server.ts`
+- [ ] T011 [P] [BE] Validar credenciales/modelos de cuatro providers, timeout, ventana de contexto y tamaño del sidebar con Zod en `apps/backend/src/infrastructure/config/env.ts`
+- [ ] T012 [P] [BE] Definir contratos REST de conversación, turno, slot, `hasWorkInProgress`, cursores y errores cerrados en `apps/backend/src/types/conversations.ts`
+- [ ] T013 [P] [BE] Definir schemas Zod para UUID `clientRequestId`, prompt, rename, IDs, slots y cursores en `apps/backend/src/middleware/validation/conversationSchemas.ts`
+- [ ] T014 [BE] Implementar middleware de validación y errores saneados en `apps/backend/src/middleware/validation/validateRequest.ts` y `apps/backend/src/types/apiError.ts` (depende de T013)
+- [ ] T015 [P] [BE] Definir `LlmProvider`, mensajes, resultados, métricas opcionales no persistidas y errores normalizados en `apps/backend/src/types/llm.ts` y `apps/backend/src/services/llm/llmErrors.ts`
+- [ ] T016 [BE] Crear helper de transacción PostgreSQL reutilizable en `apps/backend/src/infrastructure/postgres/transaction.ts` (depende de T009)
+- [ ] T017 [BE] Crear mappers PostgreSQL→REST sin secretos ni contexto compuesto en `apps/backend/src/infrastructure/postgres/mappers/conversationMapper.ts` (depende de T012)
+- [ ] T018 [P] [BE] Implementar encode/decode validado de cursores opacos en `apps/backend/src/utils/cursor.ts`
+- [ ] T019 [P] [BE] Implementar cálculo puro de estado de turno desde sus cuatro slots en `apps/backend/src/services/conversations/turnState.ts`
+- [ ] T020 [BE] Crear `apiRouter` y `createApp()` testeable en `apps/backend/src/routes/apiRouter.ts` y `apps/backend/src/app.ts` (depende de T014)
+- [ ] T021 [BE] Crear `startServer()`/shutdown y limitar `index.ts` a start/stop en `apps/backend/src/server.ts` y `apps/backend/src/index.ts` (depende de T011, T020)
+- [ ] T022 [P] [TEST] Crear providers fake deterministas y fixtures base en `apps/backend/src/test/fakes/fakeLlmProvider.ts` y `apps/backend/src/test/fixtures/conversationFixtures.ts` (depende de T015)
 
 ### Frontend
 
-- [ ] T047 [P] [US1] Implementar API de create, get turn, retry y continue-without en `apps/frontend/src/features/conversations/api/conversationsApi.ts`
-- [ ] T048 [US1] Implementar hooks de create/poll/retry/continue-without con TanStack Query en `apps/frontend/src/features/conversations/hooks/useConversationExecution.ts`
-- [ ] T049 [P] [US1] Crear `AppShell` accesible con sidebar y workspace en `apps/frontend/src/components/layout/AppShell.tsx`
-- [ ] T050 [P] [US1] Crear `ResponseTabs`/`ResponsePanel` con cuatro labels y estados independientes en `apps/frontend/src/features/conversations/components/ResponseTabs.tsx` y `apps/frontend/src/features/conversations/components/ResponsePanel.tsx`
-- [ ] T051 [US1] Crear composer, turno y workspace y conectarlos sin duplicar server state en `apps/frontend/src/features/conversations/components/PromptComposer.tsx`, `TurnCard.tsx`, `ConversationWorkspace.tsx` y `apps/frontend/src/App.tsx`
+- [ ] T023 [P] [FE] Definir tipos y schemas Zod alineados con REST en `apps/frontend/src/features/conversations/types/conversation.ts` y `apps/frontend/src/features/conversations/schemas/conversationSchemas.ts`
+- [ ] T024 [P] [FE] Crear cliente Axios cancelable y query keys por conversación/turno en `apps/frontend/src/features/conversations/api/client.ts` y `apps/frontend/src/features/conversations/queries/conversation-keys.ts`
 
-**Checkpoint**: US1 pasa con un turno y demuestra FR-040 sin retry automático.
+**Checkpoint**: Liquibase valida; no existen tablas de idempotencia, locks,
+contexto, retries, métricas, ranking ni evaluación.
 
-## Phase 4: User Story 2 — Continuar una conversación (P2)
+---
 
-**Goal**: añadir turnos con contexto aislado por base y contexto propio de Qwen,
-aplicando una ventana acotada comunicada al usuario.
+## Phase 3: User Story 1 — Comparar y consolidar respuestas (P1) 🎯 MVP
 
-**Independent Test**: capturar mensajes de cada fake provider en un segundo turno;
-ninguna base ve otra base y Qwen no recibe historiales base.
+**Goal**: crear idempotentemente la primera conversación, ejecutar tres bases en
+paralelo, consolidar con Qwen y ofrecer recuperación manual por slot.
+
+**Independent Test**: con providers fake, un prompt produce cuatro tabs separados;
+un fallo base muestra Retry/Continue-without inmediatamente, no se reintenta solo
+y un replay HTTP no duplica recursos ni providers.
 
 ### Tests
 
-- [ ] T052 [P] [US2] Probar contexto aislado, orden, ventana por turnos y evidencia de truncamiento en `apps/backend/src/services/conversations/__tests__/ContextBuilder.test.ts`
-- [ ] T053 [P] [US2] Probar segundo turno y asociación correcta sin idempotencia ni conflicto de turno activo en `apps/backend/src/routes/conversations/__tests__/conversationContinuation.integration.test.ts`
-- [ ] T054 [P] [US2] Probar retry base exitoso→Qwen y retry base fallido→sin Qwen en `apps/backend/src/services/conversations/__tests__/retryReconsolidation.test.ts`
-- [ ] T055 [P] [US2] Probar createTurn, append y polling por ID en `apps/frontend/src/features/conversations/__tests__/conversation-continuation-queries.test.tsx`
-- [ ] T056 [P] [US2] Probar aviso textual cuando `contextWindow.truncated=true` en `apps/frontend/src/features/conversations/__tests__/ContextWindowNotice.test.tsx`
-- [ ] T057 [P] [US2] Escribir E2E multi-turno de continuidad, aislamiento y ausencia persistida en `apps/frontend/e2e/conversation-continuation.spec.ts`
+- [ ] T025 [P] [US1] [TEST] Probar bases paralelas, persistencia independiente y consolidación con respuestas disponibles en `apps/backend/src/services/conversations/__tests__/TurnOrchestrator.test.ts`
+- [ ] T026 [P] [US1] [TEST] Probar primera falla, un solo intento, Retry manual y Continue-without sin provider en `apps/backend/src/services/conversations/__tests__/slotFailurePolicy.test.ts`
+- [ ] T027 [P] [US1] [TEST] Probar mapping, normalización, cancelación, credencial rechazada y ausencia de retry automático de OpenAI en `apps/backend/src/infrastructure/llm/providers/__tests__/OpenAiProvider.test.ts`
+- [ ] T028 [P] [US1] [TEST] Probar mapping, normalización, cancelación, credencial rechazada y ausencia de retry automático de Google en `apps/backend/src/infrastructure/llm/providers/__tests__/GoogleProvider.test.ts`
+- [ ] T029 [P] [US1] [TEST] Probar mapping, normalización, cancelación, credencial rechazada y ausencia de retry automático de MiniMax en `apps/backend/src/infrastructure/llm/providers/__tests__/MiniMaxProvider.test.ts`
+- [ ] T030 [P] [US1] [TEST] Probar mapping, normalización, cancelación, credencial rechazada y ausencia de retry automático de Qwen en `apps/backend/src/infrastructure/llm/providers/__tests__/QwenProvider.test.ts`
+- [ ] T031 [P] [US1] [TEST] Probar create `202`, replay concurrente, conflicto de ID/prompt y título determinista con Supertest en `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts`
+- [ ] T032 [P] [US1] [TEST] Probar retry atómico del mismo slot, `RESPONSE_RETRY_IN_PROGRESS`, `attempt_no`, resultado tardío y Continue-without con Supertest en `apps/backend/src/routes/conversations/__tests__/responseRecovery.integration.test.ts`
+- [ ] T033 [P] [US1] [TEST] Probar cuatro tabs, etiquetas no cromáticas, estados, Retry visible/disabled y Continue-without accesible en `apps/frontend/src/features/conversations/__tests__/ResponseTabs.test.tsx`
+- [ ] T034 [P] [US1] [TEST] Probar UUID estable por submit, prevención de doble click, polling y cache por IDs de origen en `apps/frontend/src/features/conversations/__tests__/conversation-execution-queries.test.tsx`
+- [ ] T035 [P] [US1] [TEST] Escribir E2E de prompt inicial, cuatro respuestas, replay, fallo parcial, Retry y Continue-without en `apps/frontend/e2e/conversation-comparison.spec.ts`
 
-### Implementation
+### Backend implementation
 
-- [ ] T058 [US2] Implementar queries de historial por slot base y Qwen en `apps/backend/src/infrastructure/postgres/repositories/contextRepository.ts`
-- [ ] T059 [US2] Implementar ventana configurable, aislamiento y evidencia persistible en `apps/backend/src/services/conversations/ContextBuilder.ts`
-- [ ] T060 [US2] Integrar ContextBuilder en bases/Qwen sin presupuestos por modelo en `apps/backend/src/services/conversations/TurnOrchestrator.ts`
-- [ ] T061 [US2] Implementar asignación transaccional de ordinal y creación de turno posterior sin bloquear turnos activos en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts`
-- [ ] T062 [US2] Exponer `POST /conversations/:id/turns` en `apps/backend/src/services/conversations/ConversationService.ts`, `apps/backend/src/controllers/conversations/conversationController.ts` y `apps/backend/src/routes/conversations/conversationRoutes.ts`
-- [ ] T063 [P] [US2] Añadir createTurn a API/hook y actualizar el bloque reciente por ID en `apps/frontend/src/features/conversations/api/conversationsApi.ts` y `apps/frontend/src/features/conversations/hooks/useConversationExecution.ts`
-- [ ] T064 [P] [US2] Crear indicador de contexto acotado en `apps/frontend/src/features/conversations/components/ContextWindowNotice.tsx`
-- [ ] T065 [US2] Renderizar múltiples turnos y conectar follow-ups en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` y `TurnList.tsx`
+- [ ] T036 [P] [US1] [BE] Implementar creación/replay atómicos de conversación, título determinista, primer turno y cuatro slots en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts`
+- [ ] T037 [P] [US1] [BE] Implementar lecturas, transiciones CAS por `attempt_no`, recálculo de turno y busy derivado por EXISTS de turnos/slots en `apps/backend/src/infrastructure/postgres/repositories/turnRepository.ts`
+- [ ] T038 [P] [US1] [BE] Implementar adapter OpenAI según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/OpenAiProvider.ts`
+- [ ] T039 [P] [US1] [BE] Implementar adapter Google según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/GoogleProvider.ts`
+- [ ] T040 [P] [US1] [BE] Implementar adapter MiniMax según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/MiniMaxProvider.ts`
+- [ ] T041 [P] [US1] [BE] Implementar adapter Qwen según su deployment configurado en `apps/backend/src/infrastructure/llm/providers/QwenProvider.ts`
+- [ ] T042 [US1] [BE] Construir el mapa literal de cuatro adapters en `apps/backend/src/infrastructure/llm/providerRegistry.ts` (depende de T038–T041)
+- [ ] T043 [US1] [BE] Implementar tres bases con `Promise.allSettled`, persistencia por intento y consolidación Qwen en `apps/backend/src/services/conversations/TurnOrchestrator.ts` (depende de T037, T042)
+- [ ] T044 [US1] [BE] Implementar retry manual, exclusión del mismo slot, stale/reconsolidación y Continue-without en `apps/backend/src/services/conversations/TurnOrchestrator.ts` (depende de T043)
+- [ ] T045 [US1] [BE] Implementar create/replay, polling y acciones de slot en `apps/backend/src/services/conversations/ConversationService.ts` (depende de T036, T037, T044)
+- [ ] T046 [US1] [BE] Implementar recovery de `pending`/`running`, recálculo de turnos/busy, cero relanzamientos y conexión previa a HTTP en `apps/backend/src/services/conversations/recoverInterruptedTurns.ts` y `apps/backend/src/server.ts` (depende de T037, T045)
+- [ ] T047 [US1] [BE] Exponer create, get turn, retry y continue-without mediante controller/router delgados en `apps/backend/src/controllers/conversations/conversationController.ts` y `apps/backend/src/routes/conversations/conversationRoutes.ts` (depende de T045, T046)
 
-**Checkpoint**: US1+US2 pasan sin mezclar historiales ni imponer concurrencia.
+### Frontend implementation
+
+- [ ] T048 [P] [US1] [FE] Implementar API validada de create, get turn, retry y continue-without en `apps/frontend/src/features/conversations/api/conversationsApi.ts`
+- [ ] T049 [US1] [FE] Implementar create/poll/retry/continue hooks con `clientRequestId` estable e invalidación dirigida en `apps/frontend/src/features/conversations/hooks/useConversationExecution.ts` (depende de T048)
+- [ ] T050 [P] [US1] [FE] Crear layout accesible de sidebar/workspace en `apps/frontend/src/components/layout/AppShell.tsx`
+- [ ] T051 [P] [US1] [FE] Crear indicador textual de procesamiento en `apps/frontend/src/features/conversations/components/ConversationProcessingNotice.tsx`
+- [ ] T052 [P] [US1] [FE] Crear cuatro tabs con labels persistentes en `apps/frontend/src/features/conversations/components/ResponseTabs.tsx`
+- [ ] T053 [P] [US1] [FE] Crear panel de respuesta con estados, Retry, Continue-without y stale en `apps/frontend/src/features/conversations/components/ResponsePanel.tsx`
+- [ ] T054 [P] [US1] [FE] Crear composer con trim, disabled local y UUID por submit lógico en `apps/frontend/src/features/conversations/components/PromptComposer.tsx`
+- [ ] T055 [US1] [FE] Crear `TurnCard` y workspace de un turno en `apps/frontend/src/features/conversations/components/TurnCard.tsx` y `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T049, T051–T054)
+- [ ] T056 [US1] [SHARED] Integrar AppShell, workspace y queries en `apps/frontend/src/App.tsx` (owner: frontend-builder; depende de T050, T055)
+
+**Checkpoint**: US1 pasa y entrega el MVP sin retry automático, adapter compartido
+ni duplicación idempotente.
+
+---
+
+## Phase 4: User Story 2 — Continuar una conversación (P2)
+
+**Goal**: crear turnos posteriores con busy/idempotencia por conversación y
+contexto acotado estrictamente aislado.
+
+**Independent Test**: un segundo prompt usa historiales separados; un ID nuevo
+durante busy recibe 409, un replay devuelve el turno original y la UI comunica
+`metadata.contextWindow.truncated`.
+
+### Tests
+
+- [ ] T057 [P] [US2] [TEST] Probar contexto base/Qwen, orden, ventana por turnos y evidencia sin contenido duplicado en `apps/backend/src/services/conversations/__tests__/ContextBuilder.test.ts`
+- [ ] T058 [P] [US2] [TEST] Probar replay previo a busy, IDs distintos concurrentes, conflicto ID/prompt y busy liberado en terminales en `apps/backend/src/routes/conversations/__tests__/conversationContinuation.integration.test.ts`
+- [ ] T059 [P] [US2] [TEST] Probar retry de turno antiguo contra otro activo, retry base fallido sin Qwen y éxito con reconsolidación en `apps/backend/src/services/conversations/__tests__/retryReconsolidation.integration.test.ts`
+- [ ] T060 [P] [US2] [TEST] Probar createTurn, UUID estable, `CONVERSATION_BUSY`, polling y cache del nuevo turno en `apps/frontend/src/features/conversations/__tests__/conversation-continuation-queries.test.tsx`
+- [ ] T061 [P] [US2] [TEST] Probar aviso textual de `contextWindow.truncated` sin revelar contexto en `apps/frontend/src/features/conversations/__tests__/ContextWindowNotice.test.tsx`
+- [ ] T062 [P] [US2] [TEST] Escribir E2E multi-turno de busy por conversación, navegación, aislamiento y contexto acotado en `apps/frontend/e2e/conversation-continuation.spec.ts`
+
+### Backend implementation
+
+- [ ] T063 [US2] [BE] Implementar consultas de historial aislado por slot y Qwen en `apps/backend/src/infrastructure/postgres/repositories/contextRepository.ts`
+- [ ] T064 [US2] [BE] Implementar ventana por turnos y `metadata.contextWindow` segura en `apps/backend/src/services/conversations/ContextBuilder.ts` (depende de T063)
+- [ ] T065 [US2] [BE] Integrar ContextBuilder en bases/Qwen sin historial cruzado ni presupuesto, estimación o límite de tokens por modelo en `apps/backend/src/services/conversations/TurnOrchestrator.ts` (depende de T064)
+- [ ] T066 [US2] [BE] Implementar lock breve, replay, conflicto, predicado busy y ordinal del turno posterior en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts` (depende de T036, T037)
+- [ ] T067 [US2] [BE] Exponer `POST /conversations/:id/turns` y `CONVERSATION_BUSY` en `apps/backend/src/services/conversations/ConversationService.ts`, `apps/backend/src/controllers/conversations/conversationController.ts` y `apps/backend/src/routes/conversations/conversationRoutes.ts` (depende de T065, T066)
+
+### Frontend implementation
+
+- [ ] T068 [P] [US2] [FE] Añadir createTurn a API/hook con UUID estable y replay seguro en `apps/frontend/src/features/conversations/api/conversationsApi.ts` y `apps/frontend/src/features/conversations/hooks/useConversationExecution.ts`
+- [ ] T069 [P] [US2] [FE] Crear aviso de contexto acotado desde metadata en `apps/frontend/src/features/conversations/components/ContextWindowNotice.tsx`
+- [ ] T070 [US2] [FE] Renderizar múltiples turnos cronológicos y follow-ups en `apps/frontend/src/features/conversations/components/TurnList.tsx` y `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T068, T069)
+- [ ] T071 [US2] [FE] Aplicar busy: deshabilitar Enviar/todos los Retry, mantener Continue-without y reactivar en `failed`/`partial` terminales en `apps/frontend/src/features/conversations/components/PromptComposer.tsx` y `apps/frontend/src/features/conversations/components/ResponsePanel.tsx`
+- [ ] T072 [US2] [FE] Mantener busy/cache por conversación al navegar en `apps/frontend/src/components/layout/AppShell.tsx` y `apps/frontend/src/features/conversations/queries/conversation-keys.ts` (depende de T068, T071)
+
+**Checkpoint**: US1+US2 pasan con un único turno activo por conversación y sin
+bloqueo global.
+
+---
 
 ## Phase 5: User Story 3 — Recuperar y gestionar conversaciones (P3)
 
 **Goal**: sidebar infinito, reapertura con tres turnos, historial ascendente,
-mensajes largos, rename y delete confirmados.
+rename/delete y colapso histórico local.
 
-**Independent Test**: reabrir siete turnos, observar 3 iniciales y bloques 3+1,
-conservar scroll, renombrar y eliminar solo tras confirmación.
+**Independent Test**: reabrir siete turnos muestra 3, luego 3+1 al subir sin salto;
+sidebar se llena hacia abajo; rename persiste y delete exige confirmación.
 
 ### Tests
 
-- [ ] T066 [P] [US3] Probar cursores opacos válidos/inválidos en `apps/backend/src/utils/__tests__/cursor.test.ts`
-- [ ] T067 [P] [US3] Probar sidebar ordenado, bloques 3/3/1, turnos completos y cascade en `apps/backend/src/infrastructure/postgres/repositories/__tests__/conversationHistoryRepository.integration.test.ts`
-- [ ] T068 [P] [US3] Probar list/detail/history/rename/delete con Supertest en `apps/backend/src/routes/conversations/__tests__/conversationHistory.integration.test.ts`
-- [ ] T069 [P] [US3] Probar `useInfiniteQuery` de sidebar e historial en `apps/frontend/src/features/conversations/__tests__/conversation-history-queries.test.tsx`
-- [ ] T070 [P] [US3] Probar sentinel superior y conservación de posición visual en `apps/frontend/src/features/conversations/__tests__/HistoryTopSentinel.test.tsx`
-- [ ] T071 [P] [US3] Probar autofill y sentinel inferior del sidebar en `apps/frontend/src/features/conversations/__tests__/ConversationSidebar.test.tsx`
-- [ ] T072 [P] [US3] Probar diálogos accesibles, contador, trim, cancelación y confirmación en `apps/frontend/src/features/conversations/__tests__/ConversationMenuDialogs.test.tsx`
-- [ ] T073 [P] [US3] Probar colapso histórico sin request ni escritura en `apps/frontend/src/features/conversations/__tests__/CollapsibleHistoryMessage.test.tsx`
-- [ ] T074 [P] [US3] Escribir E2E de reapertura, carga de tres turnos y scroll ascendente en `apps/frontend/e2e/conversation-history.spec.ts`
-- [ ] T075 [P] [US3] Escribir E2E de sidebar, rename persistente y delete confirmado en `apps/frontend/e2e/conversation-management.spec.ts`
+- [ ] T073 [P] [US3] [TEST] Probar encode/decode y rechazo de cursores opacos en `apps/backend/src/utils/__tests__/cursor.test.ts`
+- [ ] T074 [P] [US3] [TEST] Probar sidebar ordenado, páginas estables, bloques 3/3/1, turnos completos y cascades en `apps/backend/src/infrastructure/postgres/repositories/__tests__/conversationHistoryRepository.integration.test.ts`
+- [ ] T075 [P] [US3] [TEST] Probar list/detail/history/rename/delete y errores de cursor con Supertest en `apps/backend/src/routes/conversations/__tests__/conversationHistory.integration.test.ts`
+- [ ] T076 [P] [US3] [TEST] Probar `useInfiniteQuery` de sidebar/historial y flatten cronológico en `apps/frontend/src/features/conversations/__tests__/conversation-history-queries.test.tsx`
+- [ ] T077 [P] [US3] [TEST] Probar sentinel superior y conservación de `scrollTop` al anteponer en `apps/frontend/src/features/conversations/__tests__/HistoryTopSentinel.test.tsx`
+- [ ] T078 [P] [US3] [TEST] Probar sentinel inferior y autofill del sidebar hasta llenar/agotar en `apps/frontend/src/features/conversations/__tests__/ConversationSidebar.test.tsx`
+- [ ] T079 [P] [US3] [TEST] Probar teclado, foco, contador, trim, cancelación y confirmación de dialogs en `apps/frontend/src/features/conversations/__tests__/ConversationMenuDialogs.test.tsx`
+- [ ] T080 [P] [US3] [TEST] Probar colapso histórico local sin request ni escritura en `apps/frontend/src/features/conversations/__tests__/CollapsibleHistoryMessage.test.tsx`
+- [ ] T081 [P] [US3] [TEST] Escribir E2E de reapertura, tres turnos iniciales y scroll ascendente en `apps/frontend/e2e/conversation-history.spec.ts`
+- [ ] T082 [P] [US3] [TEST] Escribir E2E de sidebar, rename persistente, delete confirmado y draft vacío al eliminar la conversación activa en `apps/frontend/e2e/conversation-management.spec.ts`
 
-### Backend
+### Backend implementation
 
-- [ ] T076 [US3] Implementar página del sidebar por `(updated_at,id)` en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts`
-- [ ] T077 [US3] Implementar primer bloque y bloques anteriores de hasta tres turnos completos en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts`
-- [ ] T078 [US3] Implementar detail, rename trim 1–80 y delete cascade en `apps/backend/src/services/conversations/ConversationService.ts`
-- [ ] T079 [US3] Exponer list/detail/history/rename/delete en `apps/backend/src/controllers/conversations/conversationController.ts` y `apps/backend/src/routes/conversations/conversationRoutes.ts`
+- [ ] T083 [US3] [BE] Implementar página del sidebar por cursor `(updated_at,id)`, tamaño configurado y `hasWorkInProgress` en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts`
+- [ ] T084 [US3] [BE] Implementar bloque reciente y bloques anteriores de hasta tres turnos completos en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts`
+- [ ] T085 [US3] [BE] Implementar persistencia/servicio de detail, rename trim 1–80 y delete cascade en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts` y `apps/backend/src/services/conversations/ConversationService.ts`
+- [ ] T086 [US3] [BE] Exponer list/detail/history/rename/delete en `apps/backend/src/controllers/conversations/conversationController.ts` y `apps/backend/src/routes/conversations/conversationRoutes.ts` (depende de T083–T085)
 
-### Frontend
+### Frontend implementation
 
-- [ ] T080 [P] [US3] Implementar API de list/detail/history/rename/delete en `apps/frontend/src/features/conversations/api/conversationsApi.ts`
-- [ ] T081 [US3] Implementar queries infinitas de sidebar e historial con TanStack Query en `apps/frontend/src/features/conversations/hooks/useConversationQueries.ts`
-- [ ] T082 [P] [US3] Implementar helpers de cache para flatten/prepend/reemplazo en `apps/frontend/src/features/conversations/queries/conversation-cache.ts`
-- [ ] T083 [US3] Crear sidebar, item, menú y sentinel inferior con autofill en `apps/frontend/src/features/conversations/components/ConversationSidebar.tsx`, `ConversationListItem.tsx` y `ConversationMenu.tsx`
-- [ ] T084 [P] [US3] Crear diálogos accesibles de rename/delete en `apps/frontend/src/features/conversations/components/RenameConversationDialog.tsx` y `DeleteConversationDialog.tsx`
-- [ ] T085 [US3] Implementar mutaciones y cache de rename/delete en `apps/frontend/src/features/conversations/hooks/useConversationMutations.ts`
-- [ ] T086 [US3] Implementar sentinel superior y compensación de `scrollHeight` en `apps/frontend/src/features/conversations/components/HistoryTopSentinel.tsx` y `TurnList.tsx`
-- [ ] T087 [P] [US3] Implementar “Mostrar más / Mostrar menos” local en `apps/frontend/src/features/conversations/components/CollapsibleHistoryMessage.tsx`
-- [ ] T088 [US3] Integrar selección, historial, dialogs y mensajes largos en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationWorkspace.tsx`
+- [ ] T087 [P] [US3] [FE] Implementar API de list/detail/history/rename/delete con `AbortSignal` en `apps/frontend/src/features/conversations/api/conversationsApi.ts`
+- [ ] T088 [US3] [FE] Implementar queries infinitas de sidebar e historial en `apps/frontend/src/features/conversations/hooks/useConversationQueries.ts` (depende de T087)
+- [ ] T089 [P] [US3] [FE] Implementar helpers de cache para flatten, prepend y reemplazo en `apps/frontend/src/features/conversations/queries/conversation-cache.ts`
+- [ ] T090 [US3] [FE] Crear sidebar, item con título/fecha, menú y sentinel inferior con autofill en `apps/frontend/src/features/conversations/components/ConversationSidebar.tsx`, `ConversationListItem.tsx` y `ConversationMenu.tsx` (depende de T088)
+- [ ] T091 [P] [US3] [FE] Crear dialogs accesibles de rename/delete en `apps/frontend/src/features/conversations/components/RenameConversationDialog.tsx` y `DeleteConversationDialog.tsx`
+- [ ] T092 [US3] [FE] Implementar mutations de rename/delete e invalidación dirigida en `apps/frontend/src/features/conversations/hooks/useConversationMutations.ts` (depende de T087, T089, T091)
+- [ ] T093 [US3] [FE] Implementar sentinel superior y compensación por `scrollHeight` en `apps/frontend/src/features/conversations/components/HistoryTopSentinel.tsx` y `TurnList.tsx` (depende de T077, T088, T089)
+- [ ] T094 [P] [US3] [FE] Implementar “Mostrar más / Mostrar menos” local en `apps/frontend/src/features/conversations/components/CollapsibleHistoryMessage.tsx`
+- [ ] T095 [US3] [FE] Integrar selección, historial, dialogs y colapso en `apps/frontend/src/components/layout/AppShell.tsx` y `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T090–T094)
 
-**Checkpoint**: US3 pasa sin botones de página ni mensajes divididos.
+**Checkpoint**: US3 pasa sin botones de página, mensajes divididos ni estado de
+expansión persistido.
+
+---
 
 ## Phase 6: User Story 4 — Iniciar un contexto nuevo (P4)
 
-**Goal**: crear un único borrador local vacío sin borrar ni persistir historial.
+**Goal**: abrir un único draft local vacío sin borrar ni persistir historial.
 
-**Independent Test**: iniciar nueva desde una conversación guardada y persistir
-solo al enviar el primer prompt sin contexto previo.
+**Independent Test**: Nueva conversación vacía no inserta datos; el primer prompt
+crea la conversación sin contexto anterior y conserva las previas.
 
-- [ ] T089 [P] [US4] Probar borrador nuevo repetido y conservación del historial en `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx`
-- [ ] T090 [P] [US4] Escribir E2E de nuevo contexto persistido solo tras primer prompt en `apps/frontend/e2e/new-conversation.spec.ts`
-- [ ] T091 [US4] Añadir estado local de selección/borrador y acción Nueva conversación en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationSidebar.tsx`
-- [ ] T092 [US4] Enviar el primer prompt del draft por `POST /conversations` y seleccionar el ID creado en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx`
+- [ ] T096 [P] [US4] [TEST] Probar draft nuevo repetido y conservación del historial en `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx`
+- [ ] T097 [P] [US4] [TEST] Escribir E2E de nuevo contexto persistido solo tras primer prompt en `apps/frontend/e2e/new-conversation.spec.ts`
+- [ ] T098 [US4] [FE] Añadir estado local de selección/draft y acción Nueva conversación en `apps/frontend/src/components/layout/AppShell.tsx` y `apps/frontend/src/features/conversations/components/ConversationSidebar.tsx`
+- [ ] T099 [US4] [FE] Enviar el primer prompt del draft con `POST /conversations`, seleccionar el ID y preservar la lista en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T098)
 
-**Checkpoint**: US4 pasa y no existe endpoint `clear` ni conversación vacía
-persistida.
+**Checkpoint**: no existe endpoint clear ni conversación vacía persistida.
 
-## Phase 7: Cross-cutting acceptance and polish
+---
 
-- [ ] T093 [P] Añadir logs Pino seguros por request/conversation/turn/slot y duración en `apps/backend/src/services/conversations/TurnOrchestrator.ts` y `apps/backend/src/middleware/logger/requestContext.ts`
-- [ ] T094 [P] Completar loading/empty/error, foco visible y announcements accesibles en `apps/frontend/src/features/conversations/components/`
-- [ ] T095 Crear conjunto versionado de recovery y prueba que recrea servicios sobre la misma DB en `apps/backend/src/services/conversations/__tests__/recovery.integration.test.ts`
-- [ ] T096 Hacer que T095 exija orden, atribución, estados y consulta en el 100% de casos del conjunto de recuperación en `apps/backend/src/services/conversations/__tests__/recovery.integration.test.ts`
-- [ ] T097 Crear providers fake y runner de SC-010 que mida cada ejecución en `apps/backend/src/acceptance/latency.acceptance.test.ts`
-- [ ] T098 Exigir en T097 `202` y menos de un segundo para create/primer historial en al menos el 95% de ejecuciones controladas en `apps/backend/src/acceptance/latency.acceptance.test.ts`
-- [ ] T099 Crear fixture de máximo cinco casos y checks simples en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json` y `apps/backend/src/acceptance/consolidationEvaluation.ts`
-- [ ] T100 Añadir script que falla debajo del 90% de checks SC-005 en `apps/backend/package.json`
-- [ ] T101 Validar migrate/validate/rollback desde cero con `db/tests/validate-model-fuse-schema.sql`
-- [ ] T102 Ejecutar Vitest backend/frontend y Playwright con fakes; corregir solo comportamiento o expectativas desalineadas
-- [ ] T103 Ejecutar `pnpm typecheck`, `pnpm lint`, `pnpm test` y `pnpm build`
-- [ ] T104 Recorrer y ajustar únicamente comandos/variables implementados en `specs/001-compare-llm-responses/quickstart.md`
+## Phase 7: Acceptance, observability and documentation
+
+- [ ] T100 [P] [BE] Añadir logs Pino por request/conversation/turn/slot, busy, replay, duración y estado sin prompts, respuestas, credenciales ni payloads en `apps/backend/src/services/conversations/TurnOrchestrator.ts` y `apps/backend/src/middleware/logger/requestContext.ts`
+- [ ] T101 [P] [TEST] Probar que logs/errores/metadata no contienen prompts, respuestas, headers ni secretos en `apps/backend/src/services/conversations/__tests__/observabilitySafety.test.ts`
+- [ ] T102 [P] [TEST] Crear fixture y prueba SC-002 que recrea servicios sobre la misma DB y exige orden, atribución, estados y consulta en el 100% del conjunto en `apps/backend/src/services/conversations/__tests__/recovery.integration.test.ts` y `apps/backend/src/services/conversations/__tests__/fixtures/recoveryCases.ts`
+- [ ] T103 [P] [TEST] Crear fixture SC-005 de máximo cinco casos conforme al contrato en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json`
+- [ ] T104 [TEST] Implementar runner SC-005 de un intento Qwen por caso y fallo debajo del 90% en `apps/backend/src/acceptance/consolidationEvaluation.ts` y `apps/backend/package.json` (depende de T103)
+- [ ] T105 [P] [TEST] Implementar SC-010 con providers fake, `202` y ambos endpoints bajo un segundo en al menos el 95% de ejecuciones en `apps/backend/src/acceptance/latency.acceptance.test.ts`
+- [ ] T106 [P] [TEST] Implementar SC-001 de estados terminales dentro de 60 segundos en al menos el 95% de consultas fake en `apps/backend/src/acceptance/terminalStates.acceptance.test.ts`
+- [ ] T107 [P] [FE] Completar estados loading/empty/error/disabled, foco visible y announcements accesibles en `apps/frontend/src/features/conversations/components/`
+- [ ] T108 [TEST] Ejecutar migrate/validate/rollback desde cero y ajustar solo migraciones o checks contractuales en `db/changelogs/` y `db/tests/validate-model-fuse-schema.sql`
+- [ ] T109 [TEST] Ejecutar todas las pruebas E2E con providers fake y estabilizar únicamente fixtures en `apps/frontend/e2e/`
+- [ ] T110 [TEST] Ejecutar Vitest backend/frontend y corregir únicamente comportamiento o expectativas desalineadas en `apps/backend/src/**/__tests__/` y `apps/frontend/src/**/__tests__/`
+- [ ] T111 [SHARED] Ejecutar `pnpm typecheck`, `pnpm lint`, `pnpm test` y `pnpm build` desde `package.json` (owner: integration-owner)
+- [ ] T112 [DOC] Recorrer el smoke flow y corregir solo comandos/variables realmente implementados en `specs/001-compare-llm-responses/quickstart.md`
+
+---
 
 ## Dependencies and execution order
 
+### Phase dependencies
+
+- Phase 1 no tiene dependencias.
+- Phase 2 depende de Phase 1 y bloquea todas las historias.
+- US1 depende de Phase 2 y constituye el MVP.
+- US2 amplía orquestación, repositorios y workspace de US1.
+- US3 puede iniciar su lane backend/frontend después de Phase 2, pero su
+  integración final T095 usa el workspace multiturno de US2.
+- US4 depende del sidebar/selección de US3.
+- Phase 7 depende de las historias incluidas en la entrega.
+
+### Graph
+
 ```text
-Setup → Foundational → US1 → US2
-                         └→ US3 → US4
+Setup → Foundational → US1 (MVP) → US2
+                         └────────→ US3 → US4
 US1 + US2 + US3 + US4 → Acceptance
 ```
 
-- T001 bloquea T003–T005.
-- DB: T007 → T008 → T009 → T010 → T011 → T012.
-- Backend foundation: T013–T17 → T18/T20 → T21.
-- US1 repositories/adapters: T035–T040 → T041/T042 → T043/T044 → T045/T046.
-- US1 frontend: T047 → T048; T049/T050 → T051.
-- Context: T058 → T059 → T060 → T061/T062.
-- History backend: T076 → T077/T078 → T079.
-- History frontend: T080 → T081; T082 + T081 → T083/T085/T086 → T088.
-- New context: T091 → T092.
-- Acceptance T095–T100 depende de las implementaciones correspondientes.
+### Critical chains
+
+- DB: `T007 → T008 → T009 → T010`.
+- Composition: `T011/T014/T020 → T021`.
+- Providers: `T038–T041 → T042 → T043 → T044`.
+- Initial API: `T036/T037/T044 → T045 → T046 → T047`.
+- Initial UI: `T048 → T049`; `T050–T054 → T055 → T056`.
+- Context: `T063 → T064 → T065 → T067`.
+- Existing turn: `T066 → T067 → T068 → T070/T072`.
+- History backend: `T083/T084/T085 → T086`.
+- History frontend: `T087 → T088`; `T089/T091 → T092/T093 → T095`.
+- New context: `T098 → T099`.
+- Acceptance: `T103 → T104`; las demás tareas T100–T112 usan sus implementaciones
+  correspondientes.
 
 ## Parallel opportunities
 
-- Foundation: DB, backend contracts y frontend contracts avanzan en tres lanes.
-- US1: cuatro adapter tests y cuatro adapters se asignan por archivo/provider; los
-  tests frontend avanzan en paralelo.
-- US2: context tests, REST tests y frontend tests avanzan en paralelo.
-- US3: backend history, frontend query y dialogs pueden avanzar en paralelo antes
-  de T088.
-- Acceptance: recovery, latencia y consolidación usan archivos/fixtures distintos.
+- Setup: T003–T006 después de instalar dependencias.
+- Foundational: lane DB, contratos backend y contratos frontend avanzan en
+  paralelo.
+- US1: cuatro adapter tests y cuatro adapters avanzan por provider; frontend puede
+  implementar contra REST contract mientras backend trabaja.
+- US2: ContextBuilder, integración REST y pruebas frontend usan archivos
+  separados antes de integrar.
+- US3: cursores/backend, infinite queries, dialogs y colapso avanzan en paralelo.
+- Final: observabilidad, SC-002, SC-005, SC-010 y accesibilidad usan archivos
+  independientes.
 
-## Suggested agent allocation
+## Parallel examples
 
-| Scope | Primary agent | Files |
+### US1
+
+```text
+TEST providers: T027 + T028 + T029 + T030
+BE providers:   T038 + T039 + T040 + T041
+FE components:  T051 + T052 + T053 + T054
+```
+
+### US2
+
+```text
+TEST: T057 + T058 + T059 + T060 + T061 + T062
+BE:   T063 → T064 → T065, en paralelo con T066
+FE:   T068 + T069, luego T070/T071/T072
+```
+
+### US3
+
+```text
+TEST backend:  T073 + T074 + T075
+TEST frontend: T076 + T077 + T078 + T079 + T080
+FE:            T087 + T089 + T091 + T094
+```
+
+## Domain ownership
+
+| Domain | Primary owner | Scope |
 |---|---|---|
-| Frontend | `frontend-builder` | `apps/frontend` |
-| Shared primitives | `frontend-builder` | `packages/ui` |
-| Backend/API/LLM | `backend-builder` | `apps/backend` |
-| Liquibase | `backend-builder` | `db` |
-| Unit tests | `unit-test-runner` | `**/__tests__` |
-| Review | matching auditor | read-only |
+| FE | `frontend-builder` | `apps/frontend` |
+| UI | `frontend-builder` | `packages/ui` primitives only |
+| BE | `backend-builder` | `apps/backend` |
+| DB | `backend-builder` | `db/changelogs` |
+| TEST | `unit-test-runner` or domain builder | test/acceptance files |
+| DOC | integration owner | env samples and quickstart |
 
-Cada handoff debe incluir IDs, documentos de entrada, paths permitidos y comando
-de validación. La integración final pertenece al owner principal.
+Auditors remain read-only. Cross-domain changes require the explicit SHARED
+integration tasks T056/T111.
 
 ## Independent test criteria
 
-- **US1**: cuatro slots separados; Qwen consolida disponibles; primera falla
-  ofrece retry/continue sin retry automático.
-- **US2**: cada base ve solo su historial; Qwen ve su historial y respuestas base
-  actuales; ventana acotada se comunica.
-- **US3**: sidebar infinito, tres turnos iniciales, prepend completo, posición
-  estable, rename/delete y colapso local.
-- **US4**: nuevo contexto vacío local; la persistencia empieza con el primer
-  prompt.
+- **US1**: four slots, partial consolidation, immediate recovery actions, no
+  automatic retry and idempotent initial creation.
+- **US2**: one active turn per conversation, safe replay, isolated bounded context
+  and visible truncation evidence.
+- **US3**: three-turn initial window, cursor scrolling, stable position, sidebar
+  autofill, rename/delete and local collapse.
+- **US4**: local empty draft and persistence only on first valid prompt.
 
-## MVP
+## Implementation strategy
 
-Completar Setup, Foundational y US1 (T001–T051). Es el menor incremento que
-entrega comparación, consolidación y recuperación manual de slots.
+### MVP first
+
+1. Complete T001–T024.
+2. Write T025–T035 and confirm they fail.
+3. Implement T036–T056.
+4. Validate US1 independently.
+
+### Incremental delivery
+
+1. US1: compare, consolidate and recover one turn.
+2. US2: continue with busy/idempotency/context isolation.
+3. US3: recover and manage history.
+4. US4: start a clean local context.
+5. Phase 7: acceptance and quality gates.
+
+## Notes
+
+- TanStack Query owns server state; React local state is limited to draft,
+  selection, tabs, dialogs and expansion.
+- PostgreSQL constraints and transactions implement idempotency/busy/retry
+  exclusion; no auxiliary tables or in-memory mutexes.
+- Each adapter executes one external call per accepted invocation.
+- Metrics remain optional in the LLM contract and are not persisted in v1.
+- No task may add token budgets, summaries, ranking, streaming, queues, provider
+  payload sharing or automatic retries.
