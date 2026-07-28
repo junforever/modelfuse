@@ -53,7 +53,8 @@ type ApiError = {
     "contextWindow": {
       "truncated": true,
       "firstIncludedOrdinal": 4,
-      "lastIncludedOrdinal": 9
+      "lastIncludedOrdinal": 9,
+      "protectionApplied": "turn-window-and-truncate"
     }
   },
   "startedAt": "2026-07-26T20:00:00.000Z",
@@ -66,10 +67,12 @@ Rules:
 - `content` es requerido cuando `status=completed`.
 - `error` solo contiene código/mensaje seguro.
 - `recoverable=true` habilita una acción manual; nunca dispara retry automático.
-- `continuedWithout=true` solo aplica a un slot base fallido.
+- `continuedWithout=true` solo aplica a un slot base fallido y lo excluye
+  permanentemente de retry en ese turno.
 - `isStale=true` identifica una consolidación Qwen obsoleta y nunca vigente.
 - Si `contextWindow.truncated=true`, UI comunica que se usó una ventana acotada.
-  No representa presupuesto, estimación ni límite de tokens por modelo.
+  `protectionApplied` solo expone el tipo de protección técnica; no proyecta
+  mensajes, estimaciones, límites, presupuesto ni contabilidad de tokens.
 
 ## Turn
 
@@ -168,9 +171,14 @@ Título inválido: `422 VALIDATION_ERROR`.
 
 ### DELETE /conversations/:conversationId
 
-Response: `204 No Content`.
+El backend evalúa busy dentro de la transacción:
 
-Delete hace cascade. La UI confirma antes de llamar este endpoint.
+- con cualquier turno/slot `pending`/`running`: `409 CONVERSATION_BUSY`, sin
+  eliminar datos;
+- sin busy: `204 No Content`.
+
+Delete hace cascade cuando es aceptado. La UI confirma antes de llamar, deshabilita
+Delete mientras `hasWorkInProgress=true` y mantiene Rename habilitado.
 
 ### GET /conversations/:conversationId/turns
 
@@ -237,11 +245,15 @@ Response `200`:
 ```
 
 Frontend consulta mientras `hasWorkInProgress=true`. La cadencia no es regla de
-producto.
+producto. El ciclo usa configuración frontend
+`VITE_POLL_INTERVAL_MS` (default 750 ms) y `VITE_POLL_TIMEOUT_MS` (default
+60000 ms), y se detiene cuando busy pasa a false o vence el timeout técnico.
 
 ### POST /conversations/:conversationId/turns/:turnId/responses/:slot/retry
 
-Solo para un slot `failed` y recuperable.
+Para slots base, solo acepta `failed`, recuperable y
+`continuedWithout=false`. Qwen conserva el retry individual definido por FR-011
+y nunca ejecuta bases.
 
 Response aceptado: `202 Accepted`, conversación/turno actualizados.
 
@@ -254,6 +266,8 @@ Rules:
   `409 CONVERSATION_BUSY`;
 - si el mismo slot ya está `pending`/`running`, responde
   `409 RESPONSE_RETRY_IN_PROGRESS`;
+- si el slot no es elegible o tiene Continue-without, responde
+  `409 RESPONSE_NOT_RETRYABLE`;
 - retry Qwen nunca ejecuta bases;
 - retry base fallido no invoca Qwen ni invalida consolidación vigente;
 - retry base exitoso marca Qwen stale e inicia una nueva consolidación;
@@ -271,7 +285,8 @@ Request body: ninguno.
 Response: `200`, conversación/turno actualizados con `continuedWithout=true`.
 
 Persiste la decisión, no invoca providers ni crea trabajo `pending`/`running`.
-Qwen no admite esta acción.
+Es irreversible en v1: el slot deja de ser elegible para retry y Qwen lo omite
+permanentemente en cualquier consolidación del turno. Qwen no admite esta acción.
 
 ## First Recoverable Failure UI Contract
 
@@ -281,7 +296,9 @@ Cuando un slot base falla por primera vez:
 2. UI muestra Retry y Continue-without sin esperar otro intento;
 3. si la conversación sigue busy por otros slots, Retry queda visible disabled;
 4. Continue-without puede ejecutarse porque no emite trabajo;
-5. cuando busy queda false, Retry se habilita si el slot sigue siendo elegible.
+5. cuando busy queda false, Retry se habilita si el slot sigue siendo elegible;
+6. antes de Continue-without, UI confirma que la decisión es permanente y que el
+   slot no podrá reintentarse.
 
 ## Busy UI Contract
 
@@ -289,6 +306,8 @@ Mientras `hasWorkInProgress=true` para la conversación seleccionada:
 
 - Enviar está disabled;
 - todos sus botones Retry están disabled;
+- Delete está disabled con explicación contextual;
+- Rename permanece enabled;
 - aparece un indicador textual de procesamiento;
 - navegación a otras conversaciones sigue disponible.
 
@@ -312,8 +331,8 @@ turnos/busy y no relanza providers.
 | 404 | `TURN_NOT_FOUND` | Turno inexistente o ajeno |
 | 404 | `RESPONSE_NOT_FOUND` | Slot inexistente |
 | 409 | `CLIENT_REQUEST_ID_CONFLICT` | ID repetido con prompt distinto |
-| 409 | `CONVERSATION_BUSY` | ID nuevo mientras hay trabajo en la conversación |
-| 409 | `RESPONSE_NOT_RETRYABLE` | Slot no es fallido recuperable |
+| 409 | `CONVERSATION_BUSY` | Crear trabajo o eliminar mientras la conversación está busy |
+| 409 | `RESPONSE_NOT_RETRYABLE` | Slot no es fallido recuperable o tiene Continue-without |
 | 409 | `RESPONSE_RETRY_IN_PROGRESS` | Mismo slot ya pending/running |
 | 409 | `CONTINUE_WITHOUT_NOT_ALLOWED` | Slot no es base fallido |
 | 422 | `VALIDATION_ERROR` | Validación Zod fallida |
@@ -321,3 +340,5 @@ turnos/busy y no relanza providers.
 
 Errores de provider se persisten dentro del slot afectado; no eliminan respuestas
 exitosas ni convierten polling en error HTTP.
+`INVALID_PROMPT_SIZE` es un código seguro de error de slot, no un error HTTP del
+endpoint de polling.

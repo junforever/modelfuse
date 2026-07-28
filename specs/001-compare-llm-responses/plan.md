@@ -1,33 +1,31 @@
 # Implementation Plan: Comparación y consolidación de respuestas LLM
 
-**Branch**: `001-compare-llm-responses` | **Date**: 2026-07-26 | **Spec**: [spec.md](./spec.md)
-**Input**: `specs/001-compare-llm-responses/spec.md` más las decisiones cerradas
-de v1 proporcionadas para concurrencia, idempotencia, retry y UI.
+**Branch**: `001-compare-llm-responses` | **Date**: 2026-07-27 | **Spec**: [spec.md](./spec.md)
+**Input**: `specs/001-compare-llm-responses/spec.md`, incluidos FR-044–FR-052.
 
 ## Summary
 
-ModelFuse se implementará como monolito modular dentro del monorepo pnpm:
-React/Vite en `apps/frontend`, Express/TypeScript en `apps/backend`, primitivas
-Shadcn reutilizables en `packages/ui` y PostgreSQL administrado exclusivamente
-por Liquibase.
+ModelFuse se implementará como monolito modular en el monorepo pnpm: React/Vite
+en `apps/frontend`, Express/TypeScript en `apps/backend`, primitivas Shadcn en
+`packages/ui` y PostgreSQL administrado exclusivamente mediante Liquibase.
 
-Un prompt crea idempotentemente una conversación y un turno persistidos, inicia
-en paralelo OpenAI, Google y MiniMax y usa Qwen para consolidar las respuestas
-base disponibles. El frontend recibe `202 Accepted`, consulta el turno mediante
+Cada submit crea o recupera idempotentemente una conversación/turno, inicia en
+paralelo OpenAI, Google y MiniMax y usa Qwen para consolidar las respuestas base
+disponibles. La API responde `202 Accepted`; TanStack Query consulta el turno por
 polling y muestra cuatro tabs independientes.
 
-Cada conversación admite un único turno con trabajo en curso. Existe trabajo en
-curso si cualquier turno o slot de esa conversación está `pending` o `running`.
-Mientras exista, backend rechaza nuevos turnos de esa conversación y la UI
-deshabilita Enviar y todos sus retries, muestra un indicador de procesamiento y
-permite navegar a otras conversaciones. Al quedar todos los turnos/slots en
-estado terminal, Enviar y los retries válidos se reactivan incluso si el resultado
-es `failed` o `partial`.
+Solo existe un turno con trabajo `pending`/`running` por conversación. Busy no es
+global: bloquea Enviar, Retry y Delete únicamente en esa conversación, mantiene
+Rename y la navegación disponibles y se libera cuando ningún turno ni slot sigue
+activo. Replay por `clientRequestId` siempre se resuelve antes de evaluar busy.
 
-Ante la primera falla recuperable se muestran inmediatamente Retry y
-Continue-without, sin retry automático. Si todavía hay otro trabajo activo, Retry
-se muestra deshabilitado por la regla anterior; Continue-without permanece
-disponible porque persiste una decisión y no invoca proveedores.
+`ContextBuilder` construye en backend una ventana aislada de turnos por slot. Antes
+de cada adapter estima el tamaño contra el límite técnico del deployment y aplica
+una protección con umbral configurable, 80% por defecto. La protección elimina
+primero contexto histórico antiguo y recorta solo contenido contextual auxiliar
+cuando sea necesario; nunca crea un presupuesto de producto ni contabilidad
+persistente de tokens. Si el payload mínimo válido todavía no cabe, solo ese slot
+falla con `INVALID_PROMPT_SIZE`.
 
 ## Technical Context
 
@@ -39,44 +37,59 @@ Shadcn UI/Tailwind, `pg`, Pino
 **Target Platform**: navegador moderno y servidor Node.js en entorno privado
 monousuario
 **Project Type**: aplicación web en monorepo pnpm, monolito modular
-**Performance Goals**: con providers fake y PostgreSQL local controlado,
-`POST /api/v1/conversations` y el primer bloque de historial responden en menos de
-un segundo en al menos el 95% de las ejecuciones del conjunto de aceptación;
-al menos el 95% de las consultas alcanza estados terminales en 60 segundos
-**Constraints**: REST con polling; un turno activo por conversación; creación
-idempotente con `clientRequestId`; retry LLM exclusivamente manual; contexto
-acotado por turnos sin presupuesto de tokens por modelo; PostgreSQL como fuente
-de verdad
+**Performance Goals**: con providers fake y PostgreSQL local, create y primera
+página de historial bajo un segundo en al menos 95% del conjunto SC-010; al menos
+95% de consultas fake alcanza estados terminales dentro de 60 segundos
+**Constraints**: REST con polling; un turno activo por conversación; idempotencia
+con `clientRequestId`; retry manual sin backoff; Continue-without irreversible;
+cuatro slots fijos; contexto acotado por turnos con protección técnica de límite,
+sin presupuesto de producto; sin WebSockets, SSE ni colas externas
 **Scale/Scope**: un usuario privado, cuatro slots predefinidos, conversación
-multiturno, sidebar e historial de chat con scroll infinito
+multiturno, sidebar e historial con cursores
 
-Todas las decisiones necesarias están cerradas; no hay preguntas pendientes.
+Configuración técnica nueva:
+
+- `CONVERSATION_CONTEXT_MAX_TURNS`: tamaño máximo de la ventana histórica.
+- `LLM_CONTEXT_THRESHOLD_RATIO`: umbral técnico; default `0.8`, rango validado
+  `(0,1]`.
+- `OPENAI_CONTEXT_LIMIT_TOKENS`, `GOOGLE_CONTEXT_LIMIT_TOKENS`,
+  `MINIMAX_CONTEXT_LIMIT_TOKENS`, `QWEN_CONTEXT_LIMIT_TOKENS`: límite técnico del
+  deployment configurado.
+- `VITE_POLL_INTERVAL_MS`: cadencia frontend, default `750`.
+- `VITE_POLL_TIMEOUT_MS`: duración máxima de un ciclo de polling, default `60000`.
+
+Las variables `VITE_*` son el nombre expuesto por Vite de la configuración lógica
+de polling. Backend no usa la cadencia para alterar reglas de negocio.
+
+Todas las decisiones técnicas necesarias están cerradas.
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- [x] `apps/frontend`, `apps/backend`, `packages/ui` y `db` conservan ownership
-      independiente.
-- [x] `index.ts` solo inicia/detiene; `app.ts` compone Express; routes,
-      controllers, middleware, services e infrastructure mantienen una
-      responsabilidad.
-- [x] Los cuatro providers tienen adapters separados y un contrato interno
-      normalizado.
-- [x] PostgreSQL es la fuente de verdad; contexto e historial respetan aislamiento
-      y una ventana explícita.
-- [x] Primitivas reutilizables viven en `packages/ui`; reglas de busy,
-      idempotencia, polling y cache viven en las aplicaciones.
-- [x] Esquema, constraints e índices se entregan mediante módulos Liquibase.
-- [x] Credenciales y contenido sensible quedan fuera de frontend, metadata y logs.
-- [x] Concurrencia, replay idempotente, retry y recovery tienen pruebas
-      deterministas de integración.
-- [x] Las tareas futuras pueden dividirse por frontend, backend, DB y testing.
-- [x] No hay excepciones constitucionales.
+- [x] `apps/frontend`, `apps/backend`, `packages/ui` y `db` mantienen ownership
+      independiente y no importan internals de otra aplicación.
+- [x] `index.ts`, `server.ts`, `app.ts`, routes, controllers, middleware,
+      services e infrastructure conservan una responsabilidad.
+- [x] Los cuatro providers usan adapters separados y resultados normalizados.
+- [x] PostgreSQL es la fuente de verdad; `ContextBuilder` aísla historiales,
+      acota turnos, protege límites técnicos y registra evidencia no sensible.
+- [x] La protección técnica satisface el límite/costo constitucional sin crear
+      presupuesto de producto ni persistir contabilidad estimada.
+- [x] Primitivas reutilizables viven en `packages/ui`; busy, polling, cache y
+      confirmaciones de producto viven en `apps/frontend`.
+- [x] Todo esquema, constraint e índice se entrega mediante Liquibase.
+- [x] Credenciales, prompts compuestos y payloads permanecen fuera de frontend,
+      metadata y logs.
+- [x] Idempotencia, busy, retry, Continue-without, delete y recovery tienen
+      pruebas deterministas en su límite más bajo suficiente.
+- [x] Las futuras tareas se pueden asignar a frontend, backend, DB, UI, testing y
+      Product/UX sin tareas genéricas sobre directorios.
+- [x] No existen excepciones constitucionales.
 
-**Post-design re-check**: PASS. Los artefactos de Phase 1 implementan las reglas
-cerradas sin añadir bloqueos globales, retries automáticos ni presupuestos de
-tokens.
+**Post-design re-check**: **PASS**. Research, data model, contratos y quickstart
+proyectan FR-044–FR-052 sin tablas nuevas, retry automático, bloqueo global,
+ranking, métricas persistentes ni política de presupuesto.
 
 ## Architecture
 
@@ -88,6 +101,7 @@ flowchart LR
     CS --> ORCH["TurnOrchestrator"]
     ORCH --> CTX["ContextBuilder"]
     CTX --> DB
+    CTX --> CAP["Deployment context config<br/>limit + threshold + estimator"]
     ORCH --> OA["OpenAI adapter"]
     ORCH --> GG["Google adapter"]
     ORCH --> MM["MiniMax adapter"]
@@ -96,259 +110,259 @@ flowchart LR
     LIQ["db/changelogs<br/>Liquibase"] --> DB
 ```
 
-### New conversation lifecycle
+### Creation and idempotency
 
-1. Frontend genera un UUID con `crypto.randomUUID()` para el submit lógico y lo
-   envía como `clientRequestId`.
-2. `POST /conversations` busca primero una conversación con ese
-   `create_client_request_id`. Si existe, devuelve la conversación y el primer
-   turno originales sin insertar ni invocar providers otra vez; si el prompt no
-   coincide, devuelve `409 CLIENT_REQUEST_ID_CONFLICT`.
-3. Si no existe, una transacción crea conversación, primer turno y cuatro slots.
-   El constraint único resuelve dos requests simultáneos con el mismo ID haciendo
-   que ambos obtengan el mismo recurso.
-4. Backend responde `202` sin esperar proveedores y el orquestador procesa el
-   turno.
+Ambos endpoints de creación siguen el mismo orden:
 
-### Existing conversation lifecycle
+1. buscar replay por `clientRequestId`;
+2. si el ID existe con el mismo prompt, devolver el recurso original sin crear
+   filas ni ejecutar providers; con prompt distinto, responder
+   `409 CLIENT_REQUEST_ID_CONFLICT`;
+3. si es trabajo nuevo sobre una conversación existente, comprobar cualquier
+   turno o slot `pending`/`running`;
+4. responder `409 CONVERSATION_BUSY` si existe busy;
+5. crear conversación/turno/cuatro slots en una transacción y responder `202`;
+6. confirmar antes de iniciar providers.
 
-1. `POST /conversations/:id/turns` bloquea brevemente la fila de conversación
-   dentro de la transacción.
-2. Busca primero `(conversation_id, client_request_id)`. Un replay devuelve el
-   turno original aunque ese turno siga procesándose; reutilizar el ID con otro
-   prompt devuelve `409 CLIENT_REQUEST_ID_CONFLICT`.
-3. Para una solicitud nueva comprueba si existe cualquier turno o slot
-   `pending`/`running`. Si existe, devuelve `409 CONVERSATION_BUSY`.
-4. Si no existe, asigna el siguiente ordinal, crea turno/cuatro slots y responde
-   `202`.
-5. El lock termina al confirmar la creación; nunca se mantiene durante llamadas
-   LLM y no afecta a otras conversaciones.
+`POST /conversations` aplica el mismo replay antes de insertar la conversación y
+su primer turno. Constraints PostgreSQL resuelven submits concurrentes sin tabla
+de idempotencia.
 
 ### Turn execution
 
-1. `TurnOrchestrator` invoca en paralelo los tres slots base con
-   `Promise.allSettled`.
-2. Cada resultado se normaliza y persiste inmediatamente en la conversación y
-   turno de origen.
-3. Cada invocación de adapter es un único intento. Una falla no genera retry
-   automático.
-4. Qwen recibe su historial consolidado acotado, el prompt actual y las respuestas
-   base disponibles del turno actual.
-5. El turno permanece `running` mientras cualquier slot esté `pending`/`running`.
-   Cuando todos son terminales se recalcula como `completed`, `partial` o `failed`
-   y `hasWorkInProgress` pasa a `false`.
+1. `TurnOrchestrator` prepara en paralelo los tres slots base.
+2. `ContextBuilder` consulta PostgreSQL por slot, arma la ventana y ejecuta la
+   protección técnica de contexto antes de cada adapter.
+3. Cada adapter realiza exactamente un intento; cada resultado o error seguro se
+   persiste en su slot y `attempt_no` vigente.
+4. Qwen se invoca con su historial consolidado acotado, prompt actual y respuestas
+   base disponibles del turno actual. Slots con Continue-without se proyectan como
+   ausencias permanentes.
+5. El turno sigue `running` mientras cualquier turno/slot esté
+   `pending`/`running`; después se recalcula `completed`, `partial` o `failed`.
 
-### Retry and continue-without
+### Retry and Continue-without
 
-- Una primera falla recuperable queda `failed` y proyecta de inmediato las
-  acciones Retry y Continue-without.
-- La UI deshabilita Retry mientras cualquier turno/slot de esa conversación esté
-  `pending`/`running`. Cuando no haya trabajo, los retries válidos se habilitan.
-- Backend solo acepta retry de un slot `failed` y recuperable. La transición
-  condicional `failed → pending` garantiza que dos requests de retry sobre el
-  mismo slot no se ejecuten simultáneamente.
-- Si otra unidad de trabajo activa pertenece a un turno distinto de aquel que se
-  reintenta, backend devuelve `409 CONVERSATION_BUSY`; un retry no puede crear un
-  segundo turno activo.
-- Si el slot ya está `pending`/`running`, backend devuelve
-  `409 RESPONSE_RETRY_IN_PROGRESS`.
-- Un retry base fallido no llama Qwen y conserva la mejor consolidación válida.
-- Un retry base exitoso marca la consolidación previa como stale y ejecuta una
-  nueva consolidación Qwen.
-- Un retry Qwen no ejecuta providers base.
-- Continue-without solo aplica a un slot base `failed`, persiste la ausencia y no
-  llama providers. No constituye trabajo en curso.
+- Retry nunca tiene backoff ni intento automático.
+- Retry base solo acepta `failed`, `error_recoverable=true` y
+  `continued_without_at IS NULL`.
+- La transición CAS `failed → pending` excluye dos retries simultáneos.
+- Un turno activo distinto produce `409 CONVERSATION_BUSY`; el mismo slot ya
+  activo produce `409 RESPONSE_RETRY_IN_PROGRESS`; cualquier slot no elegible,
+  incluido Continue-without, produce `409 RESPONSE_NOT_RETRYABLE`.
+- Retry base fallido no llama Qwen ni invalida su mejor consolidación vigente.
+- Retry base exitoso marca Qwen `stale` y ejecuta una reconsolidación.
+- Retry Qwen no invoca bases.
+- Continue-without solo marca un slot base `failed`, no emite trabajo y es
+  irreversible en v1. Qwen lo omite en cualquier consolidación posterior.
 
-### Navigation
+### Delete and navigation
 
-Busy es por conversación, no global. Cambiar la selección no cancela ni reasigna
-trabajo: resultados tardíos se guardan por `conversationId` y `turnId` de origen.
-La UI de otra conversación calcula su propio `hasWorkInProgress`.
+`DELETE` bloquea brevemente la conversación, comprueba turnos y slots
+`pending`/`running` y responde `409 CONVERSATION_BUSY` sin borrar si existe
+trabajo. Sin busy, elimina en cascade. Rename sigue permitido durante busy.
+
+Busy es por conversación. Navegar no cancela ni reasigna trabajo; los resultados
+se guardan por `conversationId` y `turnId` de origen.
 
 ### Startup recovery
 
-`server.ts`, antes de `listen()`, reconcilia slots persistidos `pending`/`running`
-como interrupciones terminales y recalcula sus turnos. Esto libera correctamente
-el busy de la conversación cuando ya no quedan estados activos. Recovery no
-relanza providers. `index.ts` solo invoca start/stop.
+`server.ts` ejecuta `recoverInterruptedTurns()` antes de `listen()`. Recovery
+termina slots persistidos `pending`/`running`, recalcula turnos/busy y no relanza
+providers. `index.ts` solo inicia y detiene.
 
-## Concurrency and Idempotency Invariants
+## Concurrency and Persistence Invariants
 
-1. Una conversación tiene como máximo un turno con status `pending` o `running`.
-2. Si un slot está `pending`/`running`, su turno también está `running`; los
-   cambios de ambos estados ocurren en la misma transacción.
-3. `hasWorkInProgress` es verdadero si existe cualquier turno o slot
-   `pending`/`running`; la consulta revisa ambos para no ocultar un estado
-   inconsistente recuperable.
-4. `conversations.create_client_request_id` es único globalmente.
-5. `turns (conversation_id, client_request_id)` es único por conversación.
-6. Un replay idempotente se resuelve antes del chequeo busy y no reinicia
-   orquestación.
-7. Un `clientRequestId` identifica un único submit lógico; frontend genera uno
-   nuevo solo cuando el usuario inicia un submit nuevo.
-8. Retry no reutiliza `clientRequestId`: su exclusión se garantiza mediante la
-   transición atómica del mismo slot.
-9. Cada slot incrementa `attempt_no` al iniciar una ejecución y solo persiste un
-   resultado si sigue correspondiendo a ese número; una respuesta tardía no puede
-   sobrescribir una ejecución posterior.
+1. Como máximo un turno `pending`/`running` por conversación.
+2. Todo slot activo implica turno `running`; ambos cambian en la misma
+   transacción.
+3. `hasWorkInProgress` consulta turnos y slots para detectar estados
+   inconsistentes recuperables.
+4. `conversations.create_client_request_id` es único global.
+5. `(turns.conversation_id, turns.client_request_id)` es único.
+6. Replay se resuelve antes de busy y nunca reinicia orquestación.
+7. Cada submit lógico mantiene un UUID; un submit nuevo genera otro.
+8. Retry usa CAS y `attempt_no`, no `clientRequestId`.
+9. Completion/error solo actualiza si conserva el `attempt_no`; resultados
+   tardíos no sobrescriben intentos posteriores.
+10. `continued_without_at` solo existe en base `failed` y excluye retry para
+    siempre en ese turno.
+11. Delete solo hace cascade si la proyección busy es falsa dentro de la
+    transacción.
 
-## Context Composition
+## Context Composition and Token Protection
 
-`ContextBuilder`, dentro de `apps/backend/src/services/conversations`, consulta una
-ventana configurable de turnos recientes relevantes.
+### Isolation
 
-- OpenAI, Google y MiniMax: prompts y respuestas completadas del mismo slot,
-  seguidos del prompt actual.
-- Qwen: prompts y consolidaciones Qwen previas vigentes, prompt actual y solo las
+`ContextBuilder` vive en `apps/backend/src/services/conversations` y consulta una
+ventana configurable de turnos recientes, independiente del historial visible:
+
+- OpenAI, Google y MiniMax: prompts y respuestas completadas del mismo slot y
+  prompt actual.
+- Qwen: prompts y consolidaciones Qwen previas vigentes, prompt actual y
   respuestas base disponibles del turno actual.
-- Qwen nunca recibe historiales previos de OpenAI, Google ni MiniMax.
+- Qwen nunca recibe respuestas base históricas.
 - PostgreSQL conserva el historial completo.
-- La ventana se expresa en turnos y no crea presupuesto, estimación ni límite de
-  tokens diferente por modelo.
 
-Cada respuesta persiste únicamente evidencia segura:
+### Technical sizing flow
+
+Para cada slot/deployment:
+
+1. leer límite técnico y `LLM_CONTEXT_THRESHOLD_RATIO`;
+2. calcular `floor(limit * threshold)` y estimar cada mensaje con
+   `ceil(Buffer.byteLength(content, "utf8") / 3) + 4`, más dos tokens de
+   overhead final; el mismo estimador conservador se aplica a los cuatro slots y
+   cada uno usa el límite de su deployment;
+3. si excede el umbral, eliminar primero turnos históricos completos desde el más
+   antiguo;
+4. si todavía excede, recortar únicamente contenido contextual auxiliar con
+   marcadores explícitos, preservando roles, slot y el prompt actual;
+5. volver a estimar tras cada cambio;
+6. si el payload mínimo válido no cabe, no llamar al provider y persistir
+   `INVALID_PROMPT_SIZE` como error seguro de ese slot.
+
+La estimación es una validación previa efímera. No se almacena como métrica,
+facturación, presupuesto o límite de producto. El estimador conservador compartido
+y el margen configurable se prueban contra las capacidades fake; un rechazo real
+por tamaño se normaliza también como `INVALID_PROMPT_SIZE`. Las métricas reales
+informadas por providers siguen siendo opcionales y no persistidas en v1.
+
+Evidencia segura en `metadata.contextWindow`:
 
 ```json
 {
-  "contextWindow": {
-    "truncated": true,
-    "firstIncludedOrdinal": 8,
-    "lastIncludedOrdinal": 15
-  }
+  "truncated": true,
+  "firstIncludedOrdinal": 8,
+  "lastIncludedOrdinal": 15,
+  "protectionApplied": "turn-window-and-truncate"
 }
 ```
 
-No se persiste el prompt compuesto, una copia del contexto ni contenido adicional.
-La API proyecta esta evidencia y la UI muestra un aviso textual cuando
-`truncated=true`.
+No se persisten mensajes compuestos, estimaciones, límites, respuestas duplicadas
+ni contenido recortado.
 
 ## Frontend Design
 
-### Layout and components
+### Layout and ownership
 
 `App` instala `QueryClientProvider` y monta `AppShell`:
 
-- `ConversationSidebar`: listado con `useInfiniteQuery`, sentinel inferior,
-  autofill, fecha y menú de tres puntos.
+- `ConversationSidebar`: listado infinito, fecha y menú de tres puntos.
 - `ConversationWorkspace`: conversación seleccionada o draft vacío.
-- `ConversationProcessingNotice`: aviso textual visible cuando
-  `hasWorkInProgress=true`.
-- `ConversationTimeline`: páginas de turnos completos, sentinel superior y ancla
-  visual estable.
-- `TurnCard` y `ResponseTabs`: prompt y cuatro respuestas/estados identificados.
-- `ResponsePanel`: contenido, error, ausencia, stale, acciones de retry/continue y
-  aviso de contexto acotado.
-- `MessageComposer`: prompt y botón Enviar.
+- `ConversationProcessingNotice`: busy textual.
+- `ConversationTimeline`: turnos completos y sentinel superior.
+- `TurnCard`, `ResponseTabs`, `ResponsePanel`: cuatro slots y estados.
+- `ContextWindowNotice`: evidencia de ventana/protección sin contenido.
+- `MessageComposer`: prompt y Enviar.
+- `ContinueWithoutDialog`: confirmación permanente.
 
-### Busy behavior
+`packages/ui` contiene únicamente `Tabs`, `Dialog`, `DropdownMenu`,
+`ScrollArea`, `Skeleton`, `Alert` y demás primitivas Shadcn. Toda semántica
+ModelFuse queda en `apps/frontend`.
 
-`ConversationDetail.hasWorkInProgress` es la fuente de la UI:
+### Busy, first failure and management
 
-- Enviar está deshabilitado si el prompt es whitespace, la mutación local sigue
-  pendiente o `hasWorkInProgress=true`.
-- Todos los botones Retry de la conversación están deshabilitados si
-  `hasWorkInProgress=true`.
-- El indicador explica que la conversación procesa un turno y no acepta nuevas
-  acciones que emitan trabajo.
-- Continue-without permanece habilitado para un slot base fallido porque no emite
-  trabajo.
-- Al pasar busy a `false`, Enviar y los retries aplicables se recalculan desde el
-  estado terminal, incluidos `failed` y `partial`.
-- La primera falla muestra las dos acciones de inmediato aunque Retry aparezca
-  temporalmente deshabilitado por otro slot activo.
+Con `hasWorkInProgress=true`:
 
-### Idempotent mutations
+- Enviar y todos los Retry de esa conversación están disabled;
+- aparece un aviso textual de procesamiento;
+- Delete está disabled con el texto “No disponible mientras esta conversación
+  está procesando un turno”;
+- Rename y navegación siguen disponibles;
+- Continue-without permanece disponible porque no emite trabajo.
 
-- Frontend genera `clientRequestId` una vez por submit lógico con
-  `crypto.randomUUID()`.
-- El mismo ID permanece en las variables de la mutación hasta obtener respuesta;
-  cualquier repetición HTTP del mismo submit usa ese ID.
-- Los botones también se deshabilitan durante su mutación local para evitar doble
-  click antes de recibir la proyección busy.
-- Un nuevo click autorizado después de terminar genera otro ID.
+La primera falla recuperable muestra inmediatamente Retry y Continue-without.
+Retry puede verse disabled por busy. Antes de Continue-without, el dialog comunica:
+“Continuar sin esta respuesta es permanente para este turno. Este slot no podrá
+reintentarse.” Después de confirmar, la acción desaparece y el slot muestra
+ausencia permanente.
 
-### Server state and history
+Al pasar busy a false, Enviar y retries elegibles se reactivan incluso con turno
+`failed` o `partial`; un slot Continue-without nunca vuelve a ser elegible.
 
-TanStack Query administra listado/detalle, historial infinito, polling, create,
-turn create, rename, delete, retry y continue-without. Resultados y mutaciones
-actualizan claves por IDs de origen.
+### Server state, history and polling
 
-La carga inicial del chat solicita hasta tres turnos completos y antepone bloques
-anteriores mediante sentinel superior. El sidebar carga hacia abajo y sigue
-solicitando mientras no llene su contenedor. Tabs, dialogs y expansión de mensajes
-son estado local.
+TanStack Query administra listado/detalle, historial infinito, create, turn
+create, rename, delete, retry, Continue-without y polling. Estado visual de tabs,
+dialogs y expansión permanece local.
 
-El colapso histórico usa `VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD` y no realiza
-requests ni escrituras.
+El hook de ejecución:
 
-### Shared UI ownership
+- conserva `clientRequestId` durante un submit lógico;
+- usa `refetchInterval` de `VITE_POLL_INTERVAL_MS`, default 750 ms;
+- devuelve `false` cuando `hasWorkInProgress=false`;
+- corta el ciclo al alcanzar `VITE_POLL_TIMEOUT_MS`, default 60 s, sin cambiar el
+  estado persistido; una futura invalidación, navegación o refetch inicia otro
+  ciclo;
+- cancela requests obsoletos con `AbortSignal`;
+- actualiza cache por IDs de origen.
 
-`packages/ui` contiene solo primitivas Shadcn agnósticas (`Tabs`, `Dialog`,
-`DropdownMenu`, `ScrollArea`, `Skeleton`, `Alert`). `apps/frontend` contiene la
-composición de busy, conversación, providers, queries y formularios.
+La carga inicial del chat obtiene hasta tres turnos y antepone bloques anteriores
+con sentinel superior. El sidebar carga hacia abajo hasta llenar el contenedor o
+agotar resultados. El colapso histórico es estado local.
 
 ## Backend Design
 
 ### Layers
 
-- `index.ts`: llama start/stop.
-- `server.ts`: valida configuración, compone dependencias, ejecuta recovery y
-  abre/cierra el servidor.
-- `app.ts`: configura Express y exporta `createApp()`.
-- `routes/conversations`: paths y controllers.
+- `index.ts`: start/stop.
+- `server.ts`: configuración, dependencias, recovery y listen/close.
+- `app.ts`: Express y `createApp()`.
+- `routes/conversations`: rutas.
 - `controllers/conversations`: traducción HTTP.
 - `services/conversations`: `ConversationService`, `TurnOrchestrator`,
-  `ContextBuilder`, busy/idempotencia, retry y recovery.
-- `infrastructure/postgres`: pool, repositories, locks y transacciones.
-- `infrastructure/llm`: contrato, adapters separados y registro literal de slots.
+  `ContextBuilder`, idempotencia, retry y recovery.
+- `infrastructure/postgres`: pool, repositories y transacciones.
+- `infrastructure/llm`: contrato, adapters, capacidades de contexto y registro de
+  slots.
 - `types`: contratos HTTP/LLM.
-- `utils`: cursores y helpers puros de título/estado.
+- `utils`: cursores, título, estado y estimación técnica pura compartida.
 
 ### REST surface
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/v1/conversations` | Crear/reproyectar conversación idempotente; `202` |
-| `GET` | `/api/v1/conversations` | Página del sidebar |
-| `GET` | `/api/v1/conversations/:id` | Detalle con `hasWorkInProgress` |
-| `PATCH` | `/api/v1/conversations/:id` | Renombrar |
-| `DELETE` | `/api/v1/conversations/:id` | Eliminar en cascade |
-| `GET` | `/api/v1/conversations/:id/turns` | Bloque de hasta tres turnos |
-| `POST` | `/api/v1/conversations/:id/turns` | Crear/reproyectar turno idempotente; `202` o busy |
+| `POST` | `/api/v1/conversations` | Create/replay; `202` |
+| `GET` | `/api/v1/conversations` | Página de sidebar |
+| `GET` | `/api/v1/conversations/:id` | Detalle y busy |
+| `PATCH` | `/api/v1/conversations/:id` | Rename, permitido durante busy |
+| `DELETE` | `/api/v1/conversations/:id` | Cascade o `409 CONVERSATION_BUSY` |
+| `GET` | `/api/v1/conversations/:id/turns` | Hasta tres turnos |
+| `POST` | `/api/v1/conversations/:id/turns` | Create/replay; `202` o 409 |
 | `GET` | `/api/v1/conversations/:id/turns/:turnId` | Polling |
-| `POST` | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/retry` | Retry manual atómico |
-| `POST` | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/continue-without` | Persistir ausencia |
+| `POST` | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/retry` | Retry CAS |
+| `POST` | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/continue-without` | Ausencia irreversible |
 
 ### Provider abstraction
 
-Cada adapter acepta mensajes normalizados y devuelve contenido, provider, model,
-timestamps, métricas opcionales y metadata segura. Ejecuta exactamente un request
-externo por `generate()`. Errores de autenticación, rate limit, conectividad,
-timeout, contenido bloqueado o respuesta inválida se normalizan por slot sin
-bodies, headers ni secretos.
+Cada adapter expone identidad, capacidad de contexto y estimación de entrada,
+acepta mensajes normalizados y devuelve contenido, timestamps, métricas opcionales
+informadas y metadata segura. `generate()` ejecuta un único request. Errores
+incluyen `invalid_prompt_size`, autenticación, rate limit, conectividad, timeout,
+contenido bloqueado o respuesta inválida sin bodies, headers ni secretos.
 
 ## Persistence and Liquibase
 
-PostgreSQL contiene:
+Se mantienen exactamente tres tablas:
 
-- `conversations`: ID, `create_client_request_id`, título y timestamps;
-- `turns`: conversation ID, `client_request_id`, ordinal, prompt, estado y
-  timestamps;
+- `conversations`: ID, request ID de creación, título y timestamps;
+- `turns`: conversation ID, request ID, ordinal, prompt, estado y timestamps;
 - `model_responses`: slot, rol, provider/model, estado, contenido/error,
-  recoverability, continue-without, stale, número de intento, metadata y
-  timestamps.
+  recoverability, Continue-without, stale, intento, metadata y timestamps.
 
-Constraints/indices clave:
+Constraints principales:
 
-- `UNIQUE (conversations.create_client_request_id)`;
-- `UNIQUE (turns.conversation_id, turns.client_request_id)`;
-- `UNIQUE (turns.conversation_id, turns.ordinal)`;
-- índice único parcial de un turno activo por conversación:
-  `UNIQUE (conversation_id) WHERE status IN ('pending','running')`;
-- `UNIQUE (model_responses.turn_id, model_responses.slot)`;
-- índice parcial de slots `pending`/`running` para busy/recovery.
+- unique global de `create_client_request_id`;
+- unique `(conversation_id, client_request_id)` y `(conversation_id, ordinal)`;
+- unique parcial de turno activo por conversación;
+- unique `(turn_id, slot)`;
+- check: `continued_without_at` solo en base `failed`;
+- retry CAS exige `continued_without_at IS NULL`;
+- índices parciales de busy/recovery.
 
-Migraciones:
+Delete usa transacción y consulta busy antes del `DELETE`; el cascade existente no
+cambia. `metadata.contextWindow.protectionApplied` usa el JSONB existente. No se
+añaden columnas ni tablas.
 
 ```text
 db/changelogs/
@@ -361,72 +375,91 @@ db/changelogs/
     └── 001-create-model-responses.sql
 ```
 
-No se crean tablas de idempotencia, locks, contexto, métricas, evaluaciones,
-ranking, retries ni versiones de respuesta.
-
 ## Testing and Quality
 
 ### Backend unit
 
-- título determinista y cursores;
-- cálculo `hasWorkInProgress` con turno o slot `pending`/`running`;
-- aislamiento/context window/evidencia sin contenido sensible;
-- una invocación por adapter ante falla recuperable;
-- retry base exitoso/fallido, retry Qwen y continue-without;
-- cálculo de estado terminal.
+- aislamiento de contexto base/Qwen;
+- estimación, threshold 80%, descarte de turnos antiguos, truncamiento auxiliar y
+  fallback `INVALID_PROMPT_SIZE`;
+- metadata segura sin contenido ni cifras estimadas;
+- cálculo de busy;
+- elegibilidad de retry excluyendo Continue-without;
+- retry fallido/exitoso y Qwen stale;
+- estados terminales y título determinista.
 
 ### Backend integration
 
-- creación atómica y replay concurrente de `POST /conversations` con el mismo
-  `clientRequestId`: un solo recurso y una sola ejecución;
-- replay de `POST /conversations/:id/turns` devuelve el turno original;
-- dos IDs nuevos simultáneos en una conversación: solo uno crea turno y el otro
-  recibe `409 CONVERSATION_BUSY`;
-- un turno/slot activo hace busy; `failed`/`partial` sin slots activos lo libera;
-- dos retries simultáneos del mismo slot: solo uno transiciona a `pending`;
-- retry de un turno antiguo mientras otro turno está activo devuelve busy;
-- resultado tardío de un intento anterior no sobrescribe el intento vigente;
-- retry base fallido no llama Qwen; exitoso marca stale y reconsolida;
-- historial, sidebar, rename, delete y continue-without;
-- recovery recreando aplicación/servicios sobre la misma DB y verificando orden,
-  atribución, estados y consulta en el 100% de casos del conjunto de recuperación;
-- SC-010 con providers fake: ambos endpoints debajo de un segundo en al menos el
-  95% de las ejecuciones controladas.
+- create/replay concurrente y orden replay → busy → create;
+- busy por turno o slot y liberación terminal;
+- retry concurrente y los tres errores 409;
+- Continue-without irreversible y omitido por Qwen;
+- delete busy sin cambios; delete terminal en cascade; rename durante busy;
+- protección técnica por cada deployment fake sin afectar otros slots;
+- recovery sin providers;
+- historia/sidebar por cursores;
+- SC-002 en 100% del fixture y SC-010 en al menos 95% del conjunto controlado.
 
-### Frontend
+### Frontend unit/integration
 
-- Enviar y Retry deshabilitados durante busy;
-- indicador de procesamiento y reactivación en `failed`/`partial` terminal;
-- primera falla muestra retry/continue inmediatamente; retry puede estar disabled
-  por busy y continue permanece disponible;
-- `clientRequestId` estable por submit/replay y nuevo para el siguiente submit;
-- polling/cache por IDs de origen;
-- cuatro tabs, scroll infinito, dialogs y colapso histórico;
-- aviso de contexto truncado sin exponer contenido.
+- Enviar/Retry/Delete disabled durante busy; Rename/navegación disponibles;
+- mensaje contextual de Delete;
+- primera falla muestra Retry y Continue-without;
+- confirmación permanente y retiro de elegibilidad;
+- polling inicia, se detiene por busy false o timeout y conserva IDs/cache;
+- aviso de `contextWindow.protectionApplied`;
+- sidebar e historial infinitos, tabs, dialogs y colapso.
 
 ### E2E
 
-- crear, comparar y consolidar;
-- doble submit/replay no duplica conversación/turno;
-- busy impide nuevo turno y deshabilita Enviar/Retry solo en esa conversación;
-- navegación a otra conversación durante procesamiento;
-- primera falla, continue-without y retry manual;
-- retry base exitoso reconsolida; retry fallido no invoca Qwen;
-- follow-up con aislamiento de contexto;
-- reapertura/historial/sidebar/rename/delete/nuevo draft.
+- comparación/consolidación y doble submit idempotente;
+- busy aislado por conversación;
+- retry y reconsolidación;
+- Continue-without permanente;
+- Delete bloqueado durante busy y cascade después;
+- follow-up con aislamiento y protección de contexto;
+- polling, reapertura, historial, sidebar, rename y draft nuevo.
 
-SC-005 mantiene un fixture versionado de máximo cinco casos y al menos 90% de
-checks simples. No introduce ranking general.
+### Product/UX acceptance
+
+**SC-003 — Diseñar protocolo**
+Owner: Product/UX. Entrega un protocolo versionado con guion para busy por
+conversación, retry/Continue-without, contexto truncado, Delete bloqueado e
+historial/polling; escenarios representativos y métricas subjetivas de claridad,
+confianza, esfuerzo percibido y posible frustración.
+
+**SC-004 — Ejecutar y documentar**
+Owner: Product/UX. Ejecuta al menos una sesión con participantes, registra
+observaciones/resultados y propone ajustes. El resumen sirve como insumo futuro;
+no amplía la implementación de v1 dentro de este plan.
+
+### Future task decomposition
+
+`/speckit-tasks` debe crear tareas pequeñas con owner y archivos concretos para:
+
+1. contexto/estimación/protección/fallback;
+2. busy/idempotencia/retry;
+3. Delete durante busy;
+4. Continue-without irreversible;
+5. polling y sus pruebas;
+6. protocolo y ejecución Product/UX;
+7. validaciones Liquibase, backend, frontend y E2E separadas.
+
+Una validación amplia solo ejecuta checks. Cualquier defecto hallado se convierte
+en una tarea específica por componente o flujo; no se corrige dentro de tareas
+genéricas sobre directorios o globs.
+
+SC-005 conserva el fixture de máximo cinco casos y umbral 90%; no crea ranking.
 
 ## Observability and Extension
 
-Pino registra IDs técnicos, slot/provider/model, duración, estado, busy,
-idempotent replay, recovery y paginación. No registra prompts, respuestas,
-credenciales, headers ni payloads externos.
+Pino registra IDs técnicos, slot/provider/model, duración, busy, replay, recovery,
+protección aplicada y código seguro, nunca prompts, respuestas, estimaciones,
+límites, credenciales, headers o payloads.
 
-El contrato LLM conserva una extensión opcional para métricas informadas por
-providers, pero v1 no las estima ni persiste. Nuevos adapters, ranking, métricas
-persistentes, trazas o colas requieren un spec posterior.
+Las métricas reales opcionales del provider siguen siendo extensión no persistida.
+No se implementan ranking, dashboards, trazas distribuidas, colas ni nuevos
+mecanismos de recovery.
 
 ## Project Structure
 
@@ -450,10 +483,8 @@ specs/001-compare-llm-responses/
 ```text
 apps/
 ├── frontend/src/
-│   ├── api/
 │   ├── components/
 │   ├── features/conversations/
-│   ├── hooks/
 │   ├── providers/
 │   ├── types/
 │   └── test/
@@ -477,9 +508,8 @@ db/changelogs/
 └── messages/
 ```
 
-**Structure Decision**: conservar el monolito modular existente. Los nuevos
-directorios corresponden a responsabilidades constitucionales presentes; no se
-crea otro workspace.
+**Structure Decision**: conservar el monolito modular existente. Solo se añaden
+directorios que corresponden a responsabilidades presentes.
 
 ## Complexity Tracking
 

@@ -44,6 +44,8 @@ Rules:
   vacío idéntico repetido.
 - Los checks inspeccionan únicamente la respuesta consolidada.
 - El fixture no contiene credenciales ni conversaciones reales.
+- `missingSlots` representa ausencias del turno, incluidos slots marcados
+  Continue-without; Qwen los omite y la evaluación no intenta recuperarlos.
 
 Estos tres checks son la implementación mínima propuesta para conservación de
 aportes, cobertura de información faltante y ausencia de bloques repetidos. No
@@ -64,3 +66,7 @@ El comando explícito de aceptación:
 El comando está separado de unit/integration tests porque puede usar el deployment
 Qwen configurado. No persiste respuestas, resultados históricos, rankings ni
 métricas.
+
+La protección técnica de contexto se prueba fuera de este fixture. SC-005 no
+estima tokens, no altera límites del deployment y no convierte ausencias
+Continue-without en retries.

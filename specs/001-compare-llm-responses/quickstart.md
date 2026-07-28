@@ -42,6 +42,11 @@ QWEN_MODEL=
 
 LLM_PROVIDER_TIMEOUT_MS=
 CONVERSATION_CONTEXT_MAX_TURNS=
+LLM_CONTEXT_THRESHOLD_RATIO=0.8
+OPENAI_CONTEXT_LIMIT_TOKENS=
+GOOGLE_CONTEXT_LIMIT_TOKENS=
+MINIMAX_CONTEXT_LIMIT_TOKENS=
+QWEN_CONTEXT_LIMIT_TOKENS=
 CONVERSATION_SIDEBAR_PAGE_SIZE=
 ```
 
@@ -49,18 +54,22 @@ Credenciales reales no pertenecen a `.env.sample`, logs ni datos
 conversacionales. Una variable requerida ausente impide startup e identifica solo
 su nombre.
 
-`CONVERSATION_CONTEXT_MAX_TURNS` acota turnos relevantes; no define presupuesto,
-estimación ni límite de tokens por modelo.
+`CONVERSATION_CONTEXT_MAX_TURNS` acota turnos relevantes. Los límites pertenecen
+al deployment y el ratio aplica protección técnica antes de cada adapter; no
+definen presupuesto de producto ni contabilidad persistente de tokens.
 
 ## 3. Configure frontend
 
 ```dotenv
 VITE_API_BASE_URL=http://localhost:3001/api/v1
 VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD=
+VITE_POLL_INTERVAL_MS=750
+VITE_POLL_TIMEOUT_MS=60000
 ```
 
 Frontend genera `clientRequestId` mediante `crypto.randomUUID()`; no requiere
-configuración.
+configuración. Polling se detiene cuando busy pasa a false o vence el timeout
+técnico; una invalidación/refetch posterior puede iniciar otro ciclo.
 
 ## 4. Start PostgreSQL and migrate
 
@@ -124,24 +133,39 @@ pnpm dev
    reemplaza.
 8. Forzar Qwen fallido: bases permanecen visibles y solo Qwen ofrece retry cuando
    la conversación deja de estar busy.
-9. Ejecutar Continue-without sobre base fallida: persiste la ausencia sin llamada
-   de provider ni estado activo nuevo.
+9. Ejecutar Continue-without sobre base fallida: el dialog debe advertir que es
+   permanente; tras confirmar persiste la ausencia sin llamada de provider ni
+   estado activo nuevo.
+10. Intentar retry del mismo slot: debe responder
+    `RESPONSE_NOT_RETRYABLE`; Qwen debe omitirlo también en reconsolidaciones.
 
 ## 9. Context and history smoke flow
 
 1. Crear follow-up y capturar mensajes fake: cada base ve solo su historial;
    Qwen ve su historial y respuestas base actuales.
-2. Reducir la ventana, crear suficientes turnos y verificar
-   `contextWindow.truncated=true` con ordinales.
-3. Confirmar aviso textual de truncamiento y ausencia de prompt compuesto/contexto
-   duplicado en PostgreSQL.
-4. Crear siete turnos, recargar y verificar solo los tres recientes.
-5. Hacer scroll arriba y comprobar bloques anteriores de hasta tres sin salto.
-6. Desbordar sidebar y comprobar scroll descendente/autofill.
-7. Comprobar “Mostrar más / Mostrar menos” sin red ni escrituras.
-8. Verificar rename, cancelación y delete confirmado.
+2. Reducir el límite fake o el ratio y verificar eliminación de turnos antiguos,
+   truncamiento auxiliar y `contextWindow.protectionApplied`.
+3. Forzar que ni el payload mínimo quepa y verificar
+   `INVALID_PROMPT_SIZE` solo en ese slot, sin request externo.
+4. Confirmar aviso textual y ausencia de prompt compuesto, estimaciones, límites
+   o contexto duplicado en PostgreSQL.
+5. Crear siete turnos, recargar y verificar solo los tres recientes.
+6. Hacer scroll arriba y comprobar bloques anteriores de hasta tres sin salto.
+7. Desbordar sidebar y comprobar scroll descendente/autofill.
+8. Comprobar “Mostrar más / Mostrar menos” sin red ni escrituras.
+9. Durante busy, verificar Delete disabled con explicación y Rename habilitado.
+10. Llamar `DELETE` directamente durante busy y esperar
+    `409 CONVERSATION_BUSY`; después de terminar, confirmar cascade.
 
-## 10. Recovery acceptance
+## 10. Polling smoke flow
+
+1. Con providers fake lentos, comprobar polling a la cadencia configurada.
+2. Terminar el turno y verificar que no hay más consultas al quedar
+   `hasWorkInProgress=false`.
+3. Mantener busy más allá de `VITE_POLL_TIMEOUT_MS` y verificar que termina ese
+   ciclo sin modificar el estado persistido.
+
+## 11. Recovery acceptance
 
 1. Preparar cada caso versionado con slots `pending`, `running` y completados.
 2. Recrear aplicación/servicios sobre la misma PostgreSQL.
@@ -151,7 +175,7 @@ pnpm dev
 5. Exigir éxito en el 100% de casos del conjunto de recuperación, sin extrapolar
    a todos los casos posibles.
 
-## 11. Controlled latency acceptance
+## 12. Controlled latency acceptance
 
 Con PostgreSQL local y providers fake:
 
@@ -163,7 +187,15 @@ Con PostgreSQL local y providers fake:
 
 No es garantía global de producción ni de providers reales.
 
-## 12. Validation
+## 13. Product/UX usability acceptance
+
+1. Product/UX documenta el protocolo SC-003 con guion para busy, retry,
+   Continue-without, contexto truncado, Delete bloqueado e historial/polling.
+2. El protocolo registra claridad, confianza, esfuerzo y posible frustración.
+3. Product/UX ejecuta al menos una sesión, conserva observaciones/resultados y
+   propone ajustes futuros sin ampliar v1.
+
+## 14. Validation
 
 ```bash
 pnpm typecheck
@@ -191,7 +223,14 @@ pnpm --filter backend test:consolidation-eval
   conversación; otras siguen disponibles.
 - Replay idempotente: reutilizar el mismo ID solo para el mismo submit/prompt.
 - `RESPONSE_RETRY_IN_PROGRESS`: el mismo slot ya tiene un retry activo.
+- `RESPONSE_NOT_RETRYABLE`: el slot no es fallido recuperable o ya tiene
+  Continue-without permanente.
 - Credencial rechazada/timeout: solo falla su slot; no hay retry automático.
-- Contexto acotado: UI muestra el tramo; DB conserva historial completo.
+- `INVALID_PROMPT_SIZE`: la protección no logró un payload válido; solo falla ese
+  slot.
+- Contexto acotado: UI muestra evidencia; DB conserva historial completo.
+- Delete busy: esperar estado terminal; Rename sigue disponible.
+- Polling timeout: el ciclo técnico terminó; una invalidación/refetch puede
+  iniciar otro.
 - Recovery: slots interrumpidos quedan terminales y manualmente recuperables.
 - Liquibase: corregir changeset; no editar PostgreSQL manualmente.

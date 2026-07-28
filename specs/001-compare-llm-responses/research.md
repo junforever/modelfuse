@@ -16,6 +16,9 @@ añaden coordinación sin cubrir requisitos adicionales.
 
 **Decision**: Persistir conversación, turno y slots antes de responder `202`.
 TanStack Query consulta después el recurso mientras haya trabajo no terminal.
+El frontend usa `VITE_POLL_INTERVAL_MS=750` y
+`VITE_POLL_TIMEOUT_MS=60000` como defaults técnicos configurables; detiene el
+ciclo cuando `hasWorkInProgress=false` o vence el timeout.
 
 **Rationale**: SC-010 fija `202` y el producto necesita cuatro estados
 independientes, no streaming.
@@ -23,7 +26,9 @@ independientes, no streaming.
 **Alternatives considered**: POST bloqueante, SSE, WebSockets y cola externa. No
 son necesarios para el comportamiento de v1.
 
-La cadencia de polling es configuración técnica, no regla de producto.
+La cadencia y el timeout de polling son configuración técnica, no reglas de
+producto. Backend mantiene endpoints consultables y no usa esos valores para
+alterar estado de dominio.
 
 ## Decision 3: Busy exclusivo por conversación
 
@@ -89,8 +94,10 @@ confunden prompts iguales con el mismo submit.
 ## Decision 6: Retry manual y exclusión atómica por slot
 
 **Decision**: Cada acción Retry ejecuta exactamente un intento. Backend solo
-transiciona atómicamente `failed → pending`; si el mismo slot ya está `pending` o
-`running`, responde `409 RESPONSE_RETRY_IN_PROGRESS`.
+transiciona atómicamente `failed → pending` cuando el slot base es recuperable y
+no tiene `continued_without_at`; si el mismo slot ya está `pending` o `running`,
+responde `409 RESPONSE_RETRY_IN_PROGRESS`, y si no es elegible responde
+`409 RESPONSE_NOT_RETRYABLE`.
 
 **Rationale**: Satisface retry manual, impide dos retries simultáneos del mismo
 slot y no requiere tabla de intentos.
@@ -111,17 +118,19 @@ Cada slot mantiene un contador `attempt_no`; completion/error solo se guarda si 
 contador sigue vigente. Así una respuesta tardía no sobrescribe un retry posterior
 sin crear tabla de intentos.
 
-## Decision 7: Continue-without no es trabajo en curso
+## Decision 7: Continue-without es irreversible y no es trabajo en curso
 
 **Decision**: Continue-without solo actualiza un slot base `failed`, persiste
-`continued_without_at` y no cambia el slot a `pending`/`running`.
+`continued_without_at`, no cambia el slot a `pending`/`running` y lo excluye de
+retry permanentemente para ese turno. Qwen omite ese slot en la consolidación
+actual y en cualquier reconsolidación.
 
 **Rationale**: Permite tomar la decisión inmediatamente, incluso mientras otros
 slots del mismo turno siguen ejecutándose, sin violar el bloqueo de emisores de
 trabajo.
 
-**Alternatives considered**: Invocar Qwen o crear otro turno desde esta acción;
-no están definidos y añadirían trabajo.
+**Alternatives considered**: Hacer reversible la decisión, invocar un provider o
+crear otro turno desde esta acción. Contradicen FR-051 o añadirían trabajo.
 
 ## Decision 8: Cuatro adapters separados y contrato normalizado
 
@@ -138,17 +147,33 @@ necesita.
 Endpoint, versión y deployment son configuración del adapter, no regla de
 producto.
 
-## Decision 9: Contexto acotado con evidencia segura
+## Decision 9: Contexto acotado con protección técnica y evidencia segura
 
 **Decision**: `ContextBuilder` selecciona una ventana configurable de turnos
-relevantes y persiste únicamente:
+relevantes. Antes de cada adapter obtiene el límite técnico configurado del
+deployment, estima el tamaño y compara contra
+`LLM_CONTEXT_THRESHOLD_RATIO=0.8`. Si excede el umbral, elimina primero turnos
+históricos antiguos y después recorta contenido contextual auxiliar preservando
+roles, etiquetas y prompt actual. Si el payload mínimo no cabe, el slot falla con
+`INVALID_PROMPT_SIZE` sin invocar al provider.
+
+V1 reutiliza un estimador conservador sin dependencias:
+`sum(ceil(Buffer.byteLength(content, "utf8") / 3) + 4) + 2`. Cada slot evalúa sus
+propios mensajes contra el límite configurado de su deployment. El margen del 20%
+cubre diferencias normales de tokenización; un rechazo real por tamaño se
+normaliza con el mismo código seguro.
+
+Persiste únicamente:
 
 - `truncated`;
 - primer ordinal incluido;
-- último ordinal incluido.
+- último ordinal incluido;
+- tipo de protección aplicada.
 
 **Rationale**: Permite explicar la ventana sin copiar el prompt compuesto,
-respuestas ni contexto sensible.
+respuestas, cifras estimadas, límites ni contexto sensible. El umbral deja margen
+para diferencias del tokenizer sin convertir la protección en presupuesto de
+producto.
 
 **Isolation**:
 
@@ -157,10 +182,12 @@ respuestas ni contexto sensible.
 - Qwen nunca recibe historiales base.
 
 **Alternatives considered**: Historial completo, copia del contexto compuesto,
-resumen automático o presupuesto por modelo. Respectivamente puede exceder
-límites, duplica contenido sensible o introduce políticas no definidas.
+resumen LLM adicional o presupuesto de producto por modelo. Respectivamente puede
+exceder límites, duplica contenido sensible, añade otra llamada o introduce una
+política no definida.
 
-La ventana no es presupuesto, estimación ni límite de tokens por modelo.
+La estimación es efímera y técnica. No se persiste ni usa para facturación,
+ranking o contabilidad por modelo. PostgreSQL conserva el historial completo.
 
 ## Decision 10: Recovery dedicado antes de HTTP
 
@@ -192,7 +219,20 @@ local.
 
 **Rationale**: Son las implementaciones directas de FR-039/FR-042.
 
-## Decision 13: Dos módulos Liquibase
+## Decision 13: Delete se excluye durante busy
+
+**Decision**: `DELETE /conversations/:id` bloquea la conversación dentro de la
+transacción, comprueba turnos y slots `pending`/`running` y devuelve
+`409 CONVERSATION_BUSY` sin borrar si existe trabajo. Sin busy, usa el cascade
+existente. Rename permanece permitido.
+
+**Rationale**: Evita borrar el destino persistente de resultados en curso sin
+introducir cancelación ni recuperación adicional.
+
+**Alternatives considered**: Borrar y descartar resultados tardíos, cancelar
+providers o bloquear Rename. No corresponden a FR-050.
+
+## Decision 14: Dos módulos Liquibase
 
 **Decision**: `conversations` crea conversaciones/turnos; `messages` crea slots e
 índices. Los XML se incluyen desde el master.
@@ -200,15 +240,29 @@ local.
 **Rationale**: Son los límites persistentes reales. Constraints PostgreSQL
 implementan idempotencia, ordinales, turno activo y slot único sin nuevas tablas.
 
-## Decision 14: Evaluación y observabilidad mínimas
+## Decision 15: Evaluación y observabilidad mínimas
 
 **Decision**: SC-005 usa un fixture versionado de máximo cinco casos y checks
 simples, con umbral del 90%. Pino registra IDs técnicos, busy, replay, slot,
-duración y estado sin contenido. El contrato LLM reserva métricas opcionales, pero
-v1 no estima ni persiste tokens/costo.
+duración, protección aplicada y estado sin contenido ni cifras estimadas. El
+contrato LLM reserva métricas reales opcionales, pero v1 no las estima para
+contabilidad ni persiste tokens/costo.
 
 **Rationale**: Hace aceptación y diagnóstico verificables sin ranking, dashboard
 ni plataforma de trazas.
+
+## Decision 16: SC-003 y SC-004 pertenecen a Product/UX
+
+**Decision**: Product/UX entrega un protocolo versionado que cubre busy,
+retry/Continue-without, contexto truncado, Delete bloqueado e historial/polling,
+con métricas subjetivas. Después ejecuta al menos una sesión con participantes y
+documenta observaciones, resultados y propuestas.
+
+**Rationale**: Los porcentajes de usabilidad no se sustituyen por E2E; requieren
+evidencia con participantes y owner explícito.
+
+**Alternatives considered**: Inferir usabilidad desde tests automatizados o
+incorporar ajustes futuros automáticamente a v1. Ninguna satisface SC-003/SC-004.
 
 ## Acceptance Scope
 
@@ -220,5 +274,6 @@ ni plataforma de trazas.
 
 ## Resolved Unknowns
 
-Concurrencia, busy UI, idempotencia, retry, primera falla, ventana contextual y
-alcances de aceptación están cerrados según la solicitud de v1.
+Concurrencia, busy UI, idempotencia, retry, primera falla, protección técnica de
+contexto, Delete busy, Continue-without irreversible, polling y aceptación
+Product/UX están cerrados según el spec.

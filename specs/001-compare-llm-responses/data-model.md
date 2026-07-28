@@ -75,7 +75,9 @@ Lifecycle:
 - Repetir `create_client_request_id` devuelve esta conversación y su primer turno.
 - Reutilizarlo con un prompt distinto produce `CLIENT_REQUEST_ID_CONFLICT`.
 - Rename aplica trim y actualiza `updated_at`.
-- Delete hace cascade a turnos/respuestas.
+- Delete bloquea brevemente la conversación, rechaza con `CONVERSATION_BUSY` si
+  cualquier turno/slot está `pending`/`running` y, en caso contrario, hace
+  cascade a turnos/respuestas.
 - Una conversación vacía nueva es estado frontend; no inserta fila.
 
 `has_work_in_progress` no se persiste: se deriva consultando turnos y slots
@@ -187,7 +189,8 @@ failed  -> pending -> running -> completed
 
 Una falla no transiciona automáticamente a `pending`. La UI recibe inmediatamente
 el fallo y acciones. Continue-without establece `continued_without_at` sin cambiar
-a estado activo y sin invocar providers.
+a estado activo ni invocar providers; la marca es irreversible en v1 y hace que
+ese slot deje de ser elegible para retry.
 
 ### Retry exclusion
 
@@ -200,12 +203,15 @@ SET status = 'pending',
     ...
 WHERE id = :response_id
   AND status = 'failed'
-  AND error_recoverable = true;
+  AND error_recoverable = true
+  AND continued_without_at IS NULL;
 ```
 
 Una sola request modifica la fila. Si no modifica ninguna y el slot está
 `pending`/`running`, la API devuelve `RESPONSE_RETRY_IN_PROGRESS`. No se necesita
-tabla de retries ni mutex en memoria.
+tabla de retries ni mutex en memoria. Si no está activo pero no satisface todos
+los predicados, incluida la ausencia de Continue-without, devuelve
+`RESPONSE_NOT_RETRYABLE`.
 
 Antes de llevar un turno terminal a `running`, la transacción bloquea la
 conversación y comprueba que no exista otro turno activo. Si existe uno distinto,
@@ -261,13 +267,31 @@ trabajo.
 {
   "truncated": true,
   "firstIncludedOrdinal": 8,
-  "lastIncludedOrdinal": 15
+  "lastIncludedOrdinal": 15,
+  "protectionApplied": "turn-window-and-truncate"
 }
 ```
 
-No persiste el prompt compuesto, mensajes seleccionados ni otra copia de contenido.
-La API proyecta la evidencia y la UI comunica el truncamiento. Los campos no
-representan presupuesto, estimación ni límite de tokens por modelo.
+No persiste el prompt compuesto, mensajes seleccionados, estimaciones, límites ni
+otra copia de contenido. La API proyecta la evidencia y la UI comunica el
+truncamiento/protección. Los campos no representan presupuesto ni contabilidad de
+tokens por modelo.
+
+### Technical token protection
+
+`ContextBuilder` recibe desde configuración el límite técnico del deployment y
+`LLM_CONTEXT_THRESHOLD_RATIO`, default `0.8`. Después de construir la ventana:
+
+1. estima el tamaño por slot/deployment;
+2. elimina turnos completos desde el más antiguo hasta alcanzar el umbral;
+3. si aún no cabe, recorta contenido contextual auxiliar preservando roles,
+   etiquetas y prompt actual;
+4. vuelve a estimar después de cada cambio;
+5. si el payload mínimo válido excede el umbral, no llama al adapter y falla solo
+   el slot con `INVALID_PROMPT_SIZE`.
+
+La estimación es efímera. PostgreSQL conserva el historial completo y el esquema
+no agrega columnas de tokens, presupuestos ni contexto compuesto.
 
 ### Base query
 
@@ -282,7 +306,9 @@ user(prompt 1) -> assistant(base response 1) -> ... -> user(current prompt)
 
 Selecciona prompts/consolidaciones Qwen previas vigentes, añade prompt actual y
 respuestas base completadas del turno actual, más etiquetas de ausencia actuales.
-Nunca une respuestas base de turnos anteriores.
+Nunca une respuestas base de turnos anteriores. Un slot con
+`continued_without_at` se representa como ausencia permanente y no vuelve a
+incorporarse en una reconsolidación del turno.
 
 ## Recovery
 
