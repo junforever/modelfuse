@@ -30,7 +30,11 @@
 
 ### Session 2026-07-27
 
-- Q: ¿Cómo se resuelven los hallazgos sobre protección técnica de contexto, busy, idempotencia, retry, delete, Continue-without, usabilidad y polling? → A: El backend protege el límite técnico de cada deployment sin crear presupuestos de producto; busy e idempotencia siguen reglas explícitas por conversación; retry y Continue-without son manuales y Continue-without es irreversible; delete se bloquea durante busy; Product/UX valida SC-003 y SC-004 con participantes; y la cadencia y tiempo máximo de polling son configuración técnica.
+- Q: ¿Cómo se resuelven los hallazgos sobre protección técnica de contexto, busy, idempotencia, retry, delete, Continue-without, usabilidad y seguimiento en tiempo real? → A: El backend protege el límite técnico de cada deployment sin crear presupuestos de producto; busy e idempotencia siguen reglas explícitas por conversación; retry y Continue-without son manuales y Continue-without es irreversible; delete se bloquea durante busy; Product/UX valida SC-003 y SC-004 con participantes; y el seguimiento en tiempo real usa SSE.
+
+### Session 2026-07-28
+
+- Q: ¿Cómo se reciben en tiempo real el progreso y los resultados de un turno? → A: La aplicación usa una arquitectura híbrida: REST para comandos y lectura de recursos persistidos, y Server-Sent Events (SSE) para recibir en tiempo real las actualizaciones del turno, de sus slots y de `hasWorkInProgress`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -48,6 +52,7 @@ Como usuario, quiero enviar un prompt una sola vez a tres modelos y ver cada res
 2. **Given** que los tres modelos de comparación respondieron, **When** Qwen procesa el turno como consolidador, **Then** la cuarta pestaña muestra una respuesta unificada que elimina redundancias, incorpora aportes relevantes y atiende vacíos detectados.
 3. **Given** que el usuario cambia entre pestañas, **When** selecciona una pestaña, **Then** ve únicamente la respuesta correspondiente, sin perder ni mezclar el contenido de las demás.
 4. **Given** que uno de los modelos de comparación falla o no responde, **When** termina el procesamiento del turno, **Then** su pestaña muestra un estado de error claro, la consolidación se produce con las respuestas disponibles y el usuario puede reintentar ese slot o continuar sin esa respuesta.
+5. **Given** que REST aceptó la creación de una conversación o un turno, **When** existe trabajo en curso, **Then** el frontend permanece suscrito al SSE del turno y recibe eventos en tiempo real hasta que este alcanza un estado terminal, momento en el que el stream correspondiente puede cerrarse.
 
 ---
 
@@ -117,7 +122,8 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - Si el usuario cambia de conversación mientras hay respuestas en curso, los resultados se guardan en la conversación que originó la solicitud y no aparecen en la conversación seleccionada después.
 - Si el campo del mensaje está vacío o está compuesto solo por espacios, el botón de enviar el mensaje no se activa, por lo tanto el sistema no crea un turno ni realiza solicitudes.
 - Si una conversación es extensa, el sistema usa una ventana acotada del historial conversacional relevante para componer el contexto de cada respuesta, respetando las reglas de aislamiento por modelo y por consolidador definidas en este spec; cuando no se incluya todo el historial disponible, el sistema DEBE comunicarlo sin implicar una política de presupuesto de tokens por modelo.
-- Si se recarga o cierra la aplicación durante una respuesta en curso, los resultados completados permanecen guardados; al reiniciar, un módulo de recovery reconcilia al menos los slots `pending` y `running` y recalcula el turno para que no quede atascado.
+- Si se recarga la aplicación o el usuario vuelve a abrir una conversación con trabajo en curso, se aplican las reglas de FR-SSE-7.
+- Si una suscripción SSE falla, se interrumpe y no puede restablecerse, o no puede establecerse al reabrir el turno, la interfaz muestra un error claro de actualización en tiempo real e indica que el usuario debe intentarlo más tarde; en v1 no activa polling, long polling, WebSockets ni otro fallback.
 - Si dos conversaciones tienen contenidos iniciales similares, la barra lateral también muestra su fecha de actualización para diferenciarlas.
 - Si el nuevo nombre está vacío, contiene solo espacios o supera 80 caracteres, el sistema no permite confirmar el renombrado y conserva el nombre anterior.
 - Si el usuario cancela el renombrado o la eliminación, la conversación no cambia.
@@ -180,10 +186,24 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - **FR-046**: La creación de conversaciones y turnos DEBE ser idempotente mediante un `clientRequestId` único. Repetir el mismo `clientRequestId` con el mismo prompt DEBE devolver el recurso original sin crear filas nuevas ni reiniciar providers; reutilizarlo con un prompt distinto DEBE producir `409 CLIENT_REQUEST_ID_CONFLICT`. En ambos flujos de creación, el backend DEBE evaluar en este orden: replay por `clientRequestId`, chequeo de busy y aceptación de trabajo nuevo.
 - **FR-047**: Retry DEBE ser manual, exclusivo por slot y sin backoff ni retry automático. Para slots base, solo DEBE admitir slots `failed` y recuperables y PUEDE responder `409 CONVERSATION_BUSY`, `409 RESPONSE_NOT_RETRYABLE` o `409 RESPONSE_RETRY_IN_PROGRESS` según las reglas de concurrencia definidas. Un retry base fallido NO DEBE invocar Qwen ni invalidar la consolidación vigente; uno exitoso DEBE marcar la consolidación previa como `stale` y ejecutar una nueva consolidación con Qwen. Un retry de Qwen NO DEBE ejecutar providers base.
 - **FR-048**: Ante la primera falla recuperable de un slot base, la UI DEBE mostrar inmediatamente Retry y Continue-without sin esperar otro intento. Mientras la conversación siga busy, Retry DEBE permanecer visible pero deshabilitado y Continue-without DEBE permanecer disponible porque no emite trabajo.
-- **FR-049**: Mientras `hasWorkInProgress=true`, la UI DEBE mantener deshabilitados Enviar y todos los Retry de esa conversación, mostrar un indicador textual de procesamiento y permitir navegar a otras conversaciones. Cuando `hasWorkInProgress` pase a `false`, la UI DEBE volver a habilitar Enviar y los Retry elegibles aunque el turno haya terminado como `failed` o `partial`.
+- **FR-049**: Cuando la UI reciba `busy_update` con `hasWorkInProgress=true`, DEBE mantener deshabilitados Enviar y todos los Retry de esa conversación, mostrar un indicador textual de procesamiento, permitir navegar a otras conversaciones y mantener disponible Continue-without porque no emite trabajo nuevo. Cuando reciba `busy_update` con `hasWorkInProgress=false`, DEBE volver a habilitar Enviar y los Retry elegibles aunque el turno haya terminado como `failed` o `partial`.
 - **FR-050**: El backend DEBE rechazar con `409 CONVERSATION_BUSY` la eliminación de una conversación que tenga cualquier turno o slot en estado `pending` o `running`, y la UI DEBE deshabilitar Delete mientras la conversación esté busy. Rename DEBE permanecer permitido durante busy porque solo modifica el título y no afecta el trabajo en curso. Fuera de busy, la eliminación conserva la confirmación previa y la semántica de cascade definidas.
 - **FR-051**: Continue-without DEBE ser una decisión persistente e irreversible sobre un slot base `failed`. Al aplicarla, el slot DEBE quedar marcado mediante `continuedWithout`/`continued_without_at`, dejar de ser elegible para retry aunque el error original fuera recuperable y ser omitido permanentemente por Qwen en ese turno. Esta decisión NO DEBE poder revertirse mediante retry en v1. La UI DEBE comunicar explícitamente que Continue-without es permanente para ese turno y que, una vez aplicado, el slot no podrá reintentarse.
-- **FR-052**: El historial y el estado de los turnos DEBEN consultarse mediante polling asíncrono hasta que la conversación deje de tener trabajo en curso. La cadencia y el tiempo máximo de polling DEBEN tratarse como configuración técnica y NO como reglas de producto.
+- **FR-052**: REST DEBE mantenerse como vía para crear conversaciones y turnos, leer historial, sidebar y detalle, y ejecutar rename, delete, retry y Continue-without. El seguimiento en tiempo real del turno en curso DEBE realizarse mediante SSE; la gestión de conexión, reconexión y cierre del stream es una decisión técnica de implementación subordinada al comportamiento definido en este spec.
+- **FR-SSE-1**: Tras aceptar mediante REST la creación de una conversación o de un turno, el sistema DEBE permitir que el frontend se suscriba a un stream SSE asociado al turno para recibir actualizaciones en tiempo real.
+- **FR-SSE-2**: Mientras un turno tenga trabajo en curso, el sistema DEBE emitir por SSE eventos `slot_update` y `turn_update` con cambios de estado relevantes, incluidos `pending`, `running`, `completed` y `failed`, y con la respuesta final normalizada del slot cuando esté disponible.
+- **FR-SSE-3**: El sistema DEBE emitir `busy_update` como evento SSE propio para reflejar cambios en `hasWorkInProgress` de la conversación; la interfaz NO DEBE deducir ese valor únicamente a partir de `turn_update`.
+- **FR-SSE-4**: La interfaz DEBE usar los eventos SSE como fuente principal para reflejar progreso, estados intermedios y resultados del turno en curso. REST permanece como fuente de verdad para recursos persistidos e historial.
+- **FR-SSE-5**: Cuando el turno alcance un estado terminal (`completed`, `partial` o `failed`) y `hasWorkInProgress=false`, el sistema DEBE permitir el cierre del stream SSE de ese turno sin perder la persistencia del resultado.
+- **FR-SSE-6**: Mientras un slot o el consolidador estén en ejecución, la interfaz PUEDE mostrar estados intermedios informativos proyectados por el backend mediante SSE, como “pensando”, “analizando contexto” o “consolidando”; estas proyecciones de runtime NO DEBEN sustituir los estados persistidos canónicos `pending`, `running`, `completed` y `failed`, ni implican streaming de texto token por token.
+- **FR-SSE-7**: Si la aplicación se recarga o el usuario reabre una conversación con trabajo en curso, la interfaz DEBE poder establecer una suscripción SSE nueva al turno correspondiente usando el estado persistido como fuente de verdad. Si la suscripción no puede establecerse o restablecerse, la interfaz DEBE mostrar un error visible de actualización en tiempo real e indicar que se intente más tarde.
+- **FR-SSE-8**: En v1, SSE DEBE ser el único mecanismo de actualización en tiempo real del turno en curso. Si SSE falla, el sistema NO DEBE activar polling, long polling, WebSockets ni otro fallback; esta ausencia de fallback es una decisión deliberada de alcance.
+
+Los eventos SSE mínimos de producto son:
+
+- **`slot_update`**: cambio de estado de un slot individual, incluidos estados intermedios visibles y el resultado final cuando exista.
+- **`turn_update`**: cambio del estado agregado del turno.
+- **`busy_update`**: cambio de `hasWorkInProgress` para la conversación activa, emitido como evento propio y no solo deducido de `turn_update`.
 
 ### Key Entities
 
