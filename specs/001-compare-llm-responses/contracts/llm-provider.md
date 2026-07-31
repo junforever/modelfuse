@@ -36,9 +36,13 @@ type LlmResult = {
   metadata?: Record<string, string | number | boolean | null>;
 };
 
+type InputTokenMeasurement =
+  | { kind: 'exact'; tokens: number }
+  | { kind: 'upper_bound'; tokens: number; basis: string };
+
 type LlmContextCapabilities = {
   limitTokens: number;
-  estimateInputTokens(messages: LlmMessage[]): number;
+  measureInputTokens(messages: LlmMessage[]): InputTokenMeasurement;
 };
 
 interface LlmProvider {
@@ -53,15 +57,21 @@ interface LlmProvider {
 `operationId` correlaciona una ejecución interna; no es `clientRequestId` ni
 implementa idempotencia HTTP.
 
-`metrics` reserva el punto de extensión exigido por la constitución. V1 no estima
-valores ausentes para métricas, no aplica presupuestos de producto y no persiste
-tokens/costo. `estimateInputTokens` es únicamente validación técnica previa y su
-resultado no entra en `metrics` ni se persiste.
+`metrics` reserva el punto de extensión exigido por la constitución. V1 no infiere
+valores ausentes, no aplica presupuestos de producto y no persiste tokens/costo.
+`measureInputTokens` es solo validación técnica previa; su resultado no entra en
+`metrics` ni se persiste.
 
-Los cuatro adapters reutilizan el estimador conservador
-`sum(ceil(Buffer.byteLength(content, "utf8") / 3) + 4) + 2`; cada adapter lo
-aplica a sus mensajes y a su `limitTokens` configurado. No se añade tokenizer ni
-SDK solo para esta estimación.
+Cada adapter/deployment implementa uno de estos modos:
+
+- `exact`: contador/tokenizer compatible que incluye mensajes y overhead del
+  envelope;
+- `upper_bound`: cota conservadora documentada y demostrable para el tokenizer,
+  versión y envelope configurados.
+
+Ningún modo puede subestimar. No existe un estimador genérico compartido basado
+solo en bytes o caracteres. Un deployment requiere una implementación cuya
+garantía esté cubierta por contract tests.
 
 ## Provider Adapters
 
@@ -78,8 +88,8 @@ Cada adapter:
 2. traduce `LlmMessage[]` al protocolo del deployment;
 3. realiza una llamada Axios con timeout/`AbortSignal`;
 4. normaliza contenido, identidad, timestamps, métricas informadas y error;
-5. expone el límite técnico configurado y un estimador apropiado para el
-   deployment;
+5. expone el límite técnico configurado y un medidor exacto o cota superior
+   verificable para el deployment;
 6. mantiene payloads/headers externos dentro del módulo.
 
 Endpoint y versión exactos son configuración del deployment. No se comparten
@@ -164,7 +174,7 @@ Antes de `generate()`, `ContextBuilder`:
 
 1. construye la ventana por turnos;
 2. obtiene `limitTokens` y aplica `LLM_CONTEXT_THRESHOLD_RATIO`, default `0.8`;
-3. llama `estimateInputTokens`;
+3. llama `measureInputTokens` y usa `tokens` como conteo o límite superior;
 4. elimina turnos antiguos y, si hace falta, recorta contenido contextual
    auxiliar preservando roles, etiquetas y prompt actual;
 5. vuelve a estimar hasta quedar bajo el umbral;
@@ -172,7 +182,7 @@ Antes de `generate()`, `ContextBuilder`:
    cabe.
 
 La evidencia se persiste fuera del provider como ordinales, booleano y tipo de
-protección. No se guardan `messages`, prompt compuesto, estimaciones, límites ni
+protección. No se guardan `messages`, prompt compuesto, mediciones, límites ni
 contenido duplicado. Esta protección técnica no implica presupuesto ni
 contabilidad de tokens por modelo.
 
@@ -200,7 +210,13 @@ Cada adapter demuestra:
 - normalización de contenido/métricas informadas;
 - credencial rechazada;
 - timeout/cancelación;
-- estimación técnica y límite configurado del deployment;
+- medición técnica y límite configurado del deployment;
+- corpus con ASCII, puntuación densa, Unicode, emoji, scripts no latinos y
+  contenido fragmentado/con delimitadores;
+- igualdad contra el conteo de referencia en modo exacto o
+  `measurement.tokens >= referenceTokens` en modo `upper_bound`;
+- inclusión del overhead de roles/envelope y nueva validación después de cada
+  compactación;
 - no invocar `generate()` cuando ContextBuilder produce `invalid_prompt_size`;
 - respuesta vacía/inválida;
 - un solo request externo por `generate()`, incluso ante error recuperable;

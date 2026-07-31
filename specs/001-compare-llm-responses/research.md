@@ -12,23 +12,26 @@ independientes.
 **Alternatives considered**: Microservicios por provider o nuevos workspaces;
 añaden coordinación sin cubrir requisitos adicionales.
 
-## Decision 2: REST asíncrono con polling
+## Decision 2: Arquitectura híbrida REST + SSE
 
 **Decision**: Persistir conversación, turno y slots antes de responder `202`.
-TanStack Query consulta después el recurso mientras haya trabajo no terminal.
-El frontend usa `VITE_POLL_INTERVAL_MS=750` y
-`VITE_POLL_TIMEOUT_MS=60000` como defaults técnicos configurables; detiene el
-ciclo cuando `hasWorkInProgress=false` o vence el timeout.
+REST conserva comandos y lecturas persistidas. Después, el frontend abre un
+`EventSource` por turno sobre
+`GET /api/v1/conversations/:conversationId/turns/:turnId/events` y recibe
+`slot_update`, `turn_update` y el `busy_update` explícito.
 
-**Rationale**: SC-010 fija `202` y el producto necesita cuatro estados
-independientes, no streaming.
+El endpoint emite primero el snapshot PostgreSQL vigente y luego eventos
+posteriores al commit desde un publicador en memoria del monolito. Al terminar el
+turno y quedar `hasWorkInProgress=false`, frontend y backend pueden cerrar el
+stream. Una conexión nueva obtiene otro snapshot; no necesita replay durable.
 
-**Alternatives considered**: POST bloqueante, SSE, WebSockets y cola externa. No
-son necesarios para el comportamiento de v1.
+**Rationale**: Cumple FR-052 y FR-SSE-1–8 sin convertir el transporte en fuente
+de verdad. El snapshot inicial cubre el intervalo entre el `202` y la suscripción,
+además de reload/reopen, con menos infraestructura que un log de eventos.
 
-La cadencia y el timeout de polling son configuración técnica, no reglas de
-producto. Backend mantiene endpoints consultables y no usa esos valores para
-alterar estado de dominio.
+**Alternatives considered**: POST bloqueante, polling, long polling, WebSockets,
+streaming token por token y cola/bus externo. Todos quedan fuera de v1. Si SSE
+falla, la UI muestra un error y solo puede restablecer SSE; no existe fallback.
 
 ## Decision 3: Busy exclusivo por conversación
 
@@ -53,17 +56,18 @@ siendo navegables y procesables.
 
 ## Decision 4: Busy visible y accionable en frontend
 
-**Decision**: `ConversationDetail.hasWorkInProgress` controla la UI. Mientras sea
-verdadero, Enviar y todos los retries de esa conversación quedan disabled y se
-muestra un aviso de procesamiento. Cuando ya no hay estados `pending`/`running`,
-las acciones válidas se reactivan aunque el turno sea `failed` o `partial`.
+**Decision**: PostgreSQL calcula `hasWorkInProgress` y el backend lo publica como
+`busy_update` propio después de cada commit relevante. La UI aplica ese evento a
+la conversación correspondiente: true deshabilita Enviar, Retry y Delete; false
+reactiva acciones elegibles aunque el turno sea `failed` o `partial`.
 
 **Rationale**: Evita dobles emisores de trabajo y mantiene la regla por
 conversación, no por aplicación.
 
-**Interaction with first failure**: Retry y Continue-without se muestran al
-primer fallo recuperable. Si otros slots siguen activos, Retry aparece disabled;
-Continue-without permanece disponible porque no invoca providers.
+**Interaction with first failure**: `slot_update` muestra Retry y Continue-without
+al primer fallo recuperable. Si `busy_update` sigue true, Retry aparece disabled;
+Continue-without permanece disponible porque no invoca providers. Navegación y
+Rename siguen disponibles.
 
 **Alternatives considered**: Ocultar acciones hasta terminar o bloquear toda la
 aplicación. No cumplen la visibilidad inmediata ni el alcance por conversación.
@@ -157,11 +161,17 @@ históricos antiguos y después recorta contenido contextual auxiliar preservand
 roles, etiquetas y prompt actual. Si el payload mínimo no cabe, el slot falla con
 `INVALID_PROMPT_SIZE` sin invocar al provider.
 
-V1 reutiliza un estimador conservador sin dependencias:
-`sum(ceil(Buffer.byteLength(content, "utf8") / 3) + 4) + 2`. Cada slot evalúa sus
-propios mensajes contra el límite configurado de su deployment. El margen del 20%
-cubre diferencias normales de tokenización; un rechazo real por tamaño se
-normaliza con el mismo código seguro.
+Cada adapter/deployment usa un contador exacto compatible cuando exista o una
+cota superior conservadora demostrable para su tokenizer, versión y envelope.
+La medición incluye contenido, roles y overhead del protocolo. No se acepta un
+heurístico que pueda subestimar; un rechazo real por tamaño se normaliza con el
+mismo código seguro.
+
+Los contract tests cubren ASCII, puntuación densa, Unicode, emoji, scripts no
+latinos y contenido fragmentado/con delimitadores. Cuando existe conteo real o
+tokenizer de referencia, el modo exacto debe coincidir y la cota debe cumplir
+`medición >= real`. Un deployment no se habilita con un medidor cuya garantía no
+esté documentada y probada.
 
 Persiste únicamente:
 
@@ -189,17 +199,22 @@ política no definida.
 La estimación es efímera y técnica. No se persiste ni usa para facturación,
 ranking o contabilidad por modelo. PostgreSQL conserva el historial completo.
 
-## Decision 10: Recovery dedicado antes de HTTP
+## Decision 10: Recovery dedicado y reanudación mediante SSE nuevo
 
 **Decision**: `server.ts` ejecuta `recoverInterruptedTurns()` antes de `listen()`;
 `index.ts` solo llama start/stop. Recovery termina slots persistidos
 `pending`/`running`, recalcula turnos y busy, y no relanza providers.
 
+Al recargar o reabrir, frontend lee el estado persistido y abre una suscripción
+SSE nueva si todavía hay trabajo. El snapshot inicial entrega lo ocurrido durante
+la desconexión. Un error de stream es visible y nunca inicia otro transporte.
+
 **Rationale**: El trabajo en memoria no sobrevive reinicios. La reconciliación
 libera conversaciones atascadas y conserva resultados completados.
 
-**Alternatives considered**: Recovery en `index.ts` o reanudación automática;
-violan FR-037 o requieren ejecución durable no especificada.
+**Alternatives considered**: Recovery en `index.ts`, reanudación de providers,
+replay de eventos o fallback de transporte; violan FR-037 o añaden ejecución
+durable no especificada.
 
 ## Decision 11: Cursores para historial y sidebar
 
@@ -244,22 +259,25 @@ implementan idempotencia, ordinales, turno activo y slot único sin nuevas tabla
 
 **Decision**: SC-005 usa un fixture versionado de máximo cinco casos y checks
 simples, con umbral del 90%. Pino registra IDs técnicos, busy, replay, slot,
-duración, protección aplicada y estado sin contenido ni cifras estimadas. El
-contrato LLM reserva métricas reales opcionales, pero v1 no las estima para
-contabilidad ni persiste tokens/costo.
+duración, conexión/cierre SSE, protección aplicada y estado sin contenido,
+payloads de eventos ni cifras medidas. El contrato LLM reserva métricas reales
+opcionales, pero v1 no las usa para contabilidad ni persiste tokens/costo.
 
 **Rationale**: Hace aceptación y diagnóstico verificables sin ranking, dashboard
 ni plataforma de trazas.
 
 ## Decision 16: SC-003 y SC-004 pertenecen a Product/UX
 
-**Decision**: Product/UX entrega un protocolo versionado que cubre busy,
-retry/Continue-without, contexto truncado, Delete bloqueado e historial/polling,
-con métricas subjetivas. Después ejecuta al menos una sesión con participantes y
-documenta observaciones, resultados y propuestas.
+**Decision**: Product/UX entrega un protocolo versionado con tareas, escenarios,
+criterios observables y métricas subjetivas para busy, retry/Continue-without,
+contexto truncado, Delete bloqueado, historial y error SSE. Después ejecuta con
+participantes y registra por separado para SC-003 y SC-004 el numerador,
+denominador, porcentaje y `pass`/`fail` frente al 90%, además de observaciones y
+propuestas.
 
-**Rationale**: Los porcentajes de usabilidad no se sustituyen por E2E; requieren
-evidencia con participantes y owner explícito.
+**Rationale**: Los porcentajes de usabilidad no se sustituyen por E2E ni por la
+mera realización de una sesión; requieren evidencia cuantificable con
+participantes y owner explícito.
 
 **Alternatives considered**: Inferir usabilidad desde tests automatizados o
 incorporar ajustes futuros automáticamente a v1. Ninguna satisface SC-003/SC-004.
@@ -275,5 +293,5 @@ incorporar ajustes futuros automáticamente a v1. Ninguna satisface SC-003/SC-00
 ## Resolved Unknowns
 
 Concurrencia, busy UI, idempotencia, retry, primera falla, protección técnica de
-contexto, Delete busy, Continue-without irreversible, polling y aceptación
-Product/UX están cerrados según el spec.
+contexto, Delete busy, Continue-without irreversible, REST + SSE, reconexión sin
+fallback y aceptación Product/UX están cerrados según el spec.

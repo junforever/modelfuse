@@ -63,13 +63,11 @@ definen presupuesto de producto ni contabilidad persistente de tokens.
 ```dotenv
 VITE_API_BASE_URL=http://localhost:3001/api/v1
 VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD=
-VITE_POLL_INTERVAL_MS=750
-VITE_POLL_TIMEOUT_MS=60000
 ```
 
 Frontend genera `clientRequestId` mediante `crypto.randomUUID()`; no requiere
-configuración. Polling se detiene cuando busy pasa a false o vence el timeout
-técnico; una invalidación/refetch posterior puede iniciar otro ciclo.
+configuración. Tras un create `202`, abre un `EventSource` para el turno. SSE es
+el único transporte de actualizaciones en tiempo real de v1.
 
 ## 4. Start PostgreSQL and migrate
 
@@ -94,13 +92,14 @@ pnpm dev
 ## 6. Core smoke flow
 
 1. Enviar un prompt y verificar tabs OpenAI, Google, MiniMax y Qwen.
-2. Confirmar tres bases en paralelo y consolidación con respuestas disponibles.
-3. Durante `pending`/`running`, verificar aviso de procesamiento, Enviar disabled
-   y todos los Retry disabled en esa conversación.
+2. Confirmar `202`, apertura del stream del turno y eventos `slot_update`,
+   `turn_update` y `busy_update` durante bases/consolidación.
+3. Con `busy_update=true`, verificar aviso de procesamiento, Enviar/Retry/Delete
+   disabled, y navegación, Rename y Continue-without disponibles.
 4. Navegar a otra conversación y comprobar que sus acciones dependen de su propio
    busy; resultados siguen guardándose en la conversación de origen.
-5. Al terminar todos los slots, verificar que acciones se reactivan incluso si el
-   turno queda `failed` o `partial`.
+5. Con turno terminal y `busy_update=false`, verificar acciones reactivadas,
+   resultado persistido y stream cerrado.
 
 ## 7. Idempotency and concurrency smoke flow
 
@@ -143,27 +142,38 @@ pnpm dev
 
 1. Crear follow-up y capturar mensajes fake: cada base ve solo su historial;
    Qwen ve su historial y respuestas base actuales.
-2. Reducir el límite fake o el ratio y verificar eliminación de turnos antiguos,
+2. Probar el medidor de cada adapter con ASCII, puntuación densa, Unicode/emoji,
+   scripts no latinos y fragmentos/delimitadores; el modo exacto coincide y la
+   cota superior nunca queda por debajo del conteo de referencia.
+3. Reducir el límite fake o el ratio y verificar eliminación de turnos antiguos,
    truncamiento auxiliar y `contextWindow.protectionApplied`.
-3. Forzar que ni el payload mínimo quepa y verificar
+4. Forzar que ni el payload mínimo quepa y verificar
    `INVALID_PROMPT_SIZE` solo en ese slot, sin request externo.
-4. Confirmar aviso textual y ausencia de prompt compuesto, estimaciones, límites
+5. Confirmar aviso textual y ausencia de prompt compuesto, mediciones, límites
    o contexto duplicado en PostgreSQL.
-5. Crear siete turnos, recargar y verificar solo los tres recientes.
-6. Hacer scroll arriba y comprobar bloques anteriores de hasta tres sin salto.
-7. Desbordar sidebar y comprobar scroll descendente/autofill.
-8. Comprobar “Mostrar más / Mostrar menos” sin red ni escrituras.
-9. Durante busy, verificar Delete disabled con explicación y Rename habilitado.
-10. Llamar `DELETE` directamente durante busy y esperar
+6. Crear siete turnos, recargar y verificar solo los tres recientes.
+7. Hacer scroll arriba y comprobar bloques anteriores de hasta tres sin salto.
+8. Desbordar sidebar y comprobar scroll descendente/autofill.
+9. Comprobar “Mostrar más / Mostrar menos” sin red ni escrituras.
+10. Durante busy, verificar Delete disabled con explicación y Rename habilitado.
+11. Llamar `DELETE` directamente durante busy y esperar
     `409 CONVERSATION_BUSY`; después de terminar, confirmar cascade.
 
-## 10. Polling smoke flow
+## 10. SSE smoke flow
 
-1. Con providers fake lentos, comprobar polling a la cadencia configurada.
-2. Terminar el turno y verificar que no hay más consultas al quedar
-   `hasWorkInProgress=false`.
-3. Mantener busy más allá de `VITE_POLL_TIMEOUT_MS` y verificar que termina ese
-   ciclo sin modificar el estado persistido.
+1. Abrir
+   `/api/v1/conversations/:conversationId/turns/:turnId/events` y verificar
+   `Content-Type: text/event-stream`, snapshot inicial y los tres eventos.
+2. Confirmar que `slot_update` entrega estados/resultados, `turn_update` el estado
+   agregado y `busy_update` el busy explícito; los runtime stages no cambian DB.
+3. Desconectar y abrir un stream nuevo: debe converger desde PostgreSQL sin replay
+   histórico de eventos.
+4. Recargar/reabrir una conversación activa y verificar una suscripción nueva al
+   mismo turno.
+5. Interrumpir SSE: mostrar error visible y comprobar que no aparecen consultas
+   periódicas, long polling ni WebSockets.
+6. Terminar el turno, recibir `busy_update=false`, confirmar estado persistido y
+   cierre sin streaming token por token.
 
 ## 11. Recovery acceptance
 
@@ -189,11 +199,12 @@ No es garantía global de producción ni de providers reales.
 
 ## 13. Product/UX usability acceptance
 
-1. Product/UX documenta el protocolo SC-003 con guion para busy, retry,
-   Continue-without, contexto truncado, Delete bloqueado e historial/polling.
-2. El protocolo registra claridad, confianza, esfuerzo y posible frustración.
-3. Product/UX ejecuta al menos una sesión, conserva observaciones/resultados y
-   propone ajustes futuros sin ampliar v1.
+1. Product/UX documenta tareas, escenarios y criterio observable para comparación,
+   busy, retry/Continue-without, contexto truncado, Delete, historial y error SSE.
+2. El protocolo registra claridad, confianza, esfuerzo y frustración.
+3. La ejecución conserva, por separado para SC-003 y SC-004, numerador,
+   denominador, porcentaje y `pass`/`fail` frente al 90%.
+4. Conservar observaciones y propuestas; una sesión sin esa evidencia no basta.
 
 ## 14. Validation
 
@@ -230,7 +241,7 @@ pnpm --filter backend test:consolidation-eval
   slot.
 - Contexto acotado: UI muestra evidencia; DB conserva historial completo.
 - Delete busy: esperar estado terminal; Rename sigue disponible.
-- Polling timeout: el ciclo técnico terminó; una invalidación/refetch puede
-  iniciar otro.
+- SSE: un error visible indica que el stream no pudo establecerse/restablecerse;
+  intentar más tarde. V1 no activa ningún fallback.
 - Recovery: slots interrumpidos quedan terminales y manualmente recuperables.
 - Liquibase: corregir changeset; no editar PostgreSQL manualmente.

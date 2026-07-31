@@ -257,7 +257,23 @@ OR EXISTS (
 
 `ConversationSummary` y `ConversationDetail` proyectan el booleano
 `hasWorkInProgress`. Un slot/turno `failed`, `partial` o `completed` no cuenta como
-trabajo.
+trabajo. Cada commit que pueda cambiarlo produce además un `busy_update`
+explícito; frontend no lo deduce de `turn_update`.
+
+## SSE Projections
+
+SSE no agrega entidades ni persistencia. El endpoint por turno emite snapshots
+normalizados derivados del modelo vigente:
+
+- `slot_update`: `conversationId`, `turnId`, slot, status canónico, resultado/error
+  cuando exista, `attemptNo`, `updatedAt` y un `runtimeStage` opcional;
+- `turn_update`: IDs, status agregado y `updatedAt`;
+- `busy_update`: IDs y `hasWorkInProgress` calculado.
+
+`runtimeStage` es efímero (“pensando”, “analizando contexto”, “consolidando”);
+nunca se escribe en `model_responses.status`. Los demás campos representan estado
+PostgreSQL ya confirmado. El snapshot inicial de una conexión nueva usa estas
+mismas proyecciones, por lo que no se almacenan eventos ni se añade replay durable.
 
 ## Context Evidence
 
@@ -282,7 +298,8 @@ tokens por modelo.
 `ContextBuilder` recibe desde configuración el límite técnico del deployment y
 `LLM_CONTEXT_THRESHOLD_RATIO`, default `0.8`. Después de construir la ventana:
 
-1. estima el tamaño por slot/deployment;
+1. mide el payload por slot/deployment mediante un contador exacto compatible o
+   una cota superior conservadora demostrable que incluya el envelope;
 2. elimina turnos completos desde el más antiguo hasta alcanzar el umbral;
 3. si aún no cabe, recorta contenido contextual auxiliar preservando roles,
    etiquetas y prompt actual;
@@ -290,8 +307,11 @@ tokens por modelo.
 5. si el payload mínimo válido excede el umbral, no llama al adapter y falla solo
    el slot con `INVALID_PROMPT_SIZE`.
 
-La estimación es efímera. PostgreSQL conserva el historial completo y el esquema
-no agrega columnas de tokens, presupuestos ni contexto compuesto.
+La medición no puede subestimar. Sus pruebas cubren ASCII, puntuación, Unicode,
+emoji, scripts no latinos y contenido fragmentado/con delimitadores, comparando
+contra el conteo real o tokenizer de referencia cuando exista. Es efímera:
+PostgreSQL conserva el historial completo y el esquema no agrega columnas de
+tokens, presupuestos ni contexto compuesto.
 
 ### Base query
 
@@ -333,6 +353,8 @@ en el 100% de casos del conjunto versionado de recuperación.
   timestamps.
 - `ModelResponse`: slot, role, provider/model, status, content/error,
   recoverable, continuedWithout, stale, contextWindow, timestamps y metadata.
+- `SlotUpdate`, `TurnUpdate` y `BusyUpdate`: proyecciones SSE efímeras de las filas
+  y del busy derivado; no son entidades persistidas.
 
 No se proyectan credenciales, bodies externos, contexto compuesto ni errores
 crudos.

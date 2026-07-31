@@ -1,7 +1,7 @@
-# REST API Contract
+# HTTP API Contract: REST + SSE
 
 Base URL: `/api/v1`  
-Content type: `application/json`
+Content types: `application/json` para REST y `text/event-stream` para SSE
 
 ## Common Types
 
@@ -48,6 +48,7 @@ type ApiError = {
   "recoverable": false,
   "continuedWithout": false,
   "isStale": false,
+  "attemptNo": 1,
   "metadata": {
     "durationMs": 820,
     "contextWindow": {
@@ -70,6 +71,7 @@ Rules:
 - `continuedWithout=true` solo aplica a un slot base fallido y lo excluye
   permanentemente de retry en ese turno.
 - `isStale=true` identifica una consolidación Qwen obsoleta y nunca vigente.
+- `attemptNo` permite ignorar una actualización tardía de un intento anterior.
 - Si `contextWindow.truncated=true`, UI comunica que se usó una ventana acotada.
   `protectionApplied` solo expone el tipo de protección técnica; no proyecta
   mensajes, estimaciones, límites, presupuesto ni contabilidad de tokens.
@@ -244,10 +246,61 @@ Response `200`:
 }
 ```
 
-Frontend consulta mientras `hasWorkInProgress=true`. La cadencia no es regla de
-producto. El ciclo usa configuración frontend
-`VITE_POLL_INTERVAL_MS` (default 750 ms) y `VITE_POLL_TIMEOUT_MS` (default
-60000 ms), y se detiene cuando busy pasa a false o vence el timeout técnico.
+Es una lectura puntual del estado persistido para detalle, reapertura y
+convergencia final. No se consulta periódicamente para seguir el turno activo.
+
+### GET /conversations/:conversationId/turns/:turnId/events
+
+Stream SSE de un turno. Valida que el turno pertenezca a la conversación antes de
+abrir la respuesta.
+
+Headers `200`:
+
+```http
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+```
+
+Al conectar o reconectar, el backend emite el snapshot PostgreSQL vigente como
+cuatro `slot_update`, un `turn_update` y un `busy_update`; después envía cambios
+canónicos publicados tras su commit y `runtimeStage` efímeros solo para slots ya
+persistidos `running`. Si el snapshot ya es terminal y
+`hasWorkInProgress=false`, puede cerrar después de emitirlo.
+
+Eventos mínimos:
+
+```text
+event: slot_update
+data: {"conversationId":"uuid","turnId":"uuid","response":{"slot":"openai","status":"running","attemptNo":1,"updatedAt":"..."},"runtimeStage":"pensando"}
+
+event: turn_update
+data: {"conversationId":"uuid","turn":{"id":"uuid","status":"running","updatedAt":"..."}}
+
+event: busy_update
+data: {"conversationId":"uuid","turnId":"uuid","hasWorkInProgress":true,"updatedAt":"..."}
+```
+
+Rules:
+
+- `slot_update.response` usa el mismo `ModelResponse` normalizado de REST e
+  incluye contenido/error final cuando exista.
+- `runtimeStage` es opcional y efímero; nunca sustituye `response.status` ni se
+  persiste. No se transmiten tokens de texto incrementalmente.
+- `turn_update` refleja el agregado persistido.
+- `busy_update` siempre es un evento propio; frontend no lo deduce de
+  `turn_update`.
+- IDs, `updatedAt` y `attemptNo` permiten aplicar snapshots de forma idempotente e
+  ignorar actualizaciones anteriores.
+- No hay log de eventos, IDs durables ni contrato `Last-Event-ID`. Una conexión
+  nueva converge mediante su snapshot inicial.
+- Al recibir turno terminal y `busy_update=false`, frontend cierra `EventSource`;
+  backend también puede cerrar la respuesta.
+- Si la conexión falla, UI muestra un error de actualización en tiempo real y
+  solo puede restablecer este endpoint SSE. V1 no activa polling, long polling,
+  WebSockets ni otro fallback.
+
+Missing o mismatch antes de abrir: `404 TURN_NOT_FOUND`.
 
 ### POST /conversations/:conversationId/turns/:turnId/responses/:slot/retry
 
@@ -292,9 +345,9 @@ permanentemente en cualquier consolidación del turno. Qwen no admite esta acci�
 
 Cuando un slot base falla por primera vez:
 
-1. el polling proyecta inmediatamente `failed`, `recoverable=true`;
+1. `slot_update` proyecta `failed`, `recoverable=true`;
 2. UI muestra Retry y Continue-without sin esperar otro intento;
-3. si la conversación sigue busy por otros slots, Retry queda visible disabled;
+3. si `busy_update` mantiene true por otros slots, Retry queda visible disabled;
 4. Continue-without puede ejecutarse porque no emite trabajo;
 5. cuando busy queda false, Retry se habilita si el slot sigue siendo elegible;
 6. antes de Continue-without, UI confirma que la decisión es permanente y que el
@@ -302,7 +355,7 @@ Cuando un slot base falla por primera vez:
 
 ## Busy UI Contract
 
-Mientras `hasWorkInProgress=true` para la conversación seleccionada:
+Cuando `busy_update` informa `hasWorkInProgress=true` para la conversación:
 
 - Enviar está disabled;
 - todos sus botones Retry están disabled;
@@ -311,9 +364,9 @@ Mientras `hasWorkInProgress=true` para la conversación seleccionada:
 - aparece un indicador textual de procesamiento;
 - navegación a otras conversaciones sigue disponible.
 
-Cuando queda false, Enviar y retries elegibles se habilitan aunque el turno
-terminal sea `failed` o `partial`. Los estados locales de mutación también
-previenen doble click antes de recibir el busy del servidor.
+Cuando `busy_update` informa false, Enviar y retries elegibles se habilitan aunque
+el turno terminal sea `failed` o `partial`. Los estados locales de mutación
+previenen doble click antes del primer evento; backend conserva la regla canónica.
 
 ## Startup Behavior
 
@@ -339,6 +392,6 @@ turnos/busy y no relanza providers.
 | 500 | `INTERNAL_ERROR` | Falla inesperada saneada |
 
 Errores de provider se persisten dentro del slot afectado; no eliminan respuestas
-exitosas ni convierten polling en error HTTP.
+exitosas ni convierten SSE en error HTTP del comando REST.
 `INVALID_PROMPT_SIZE` es un código seguro de error de slot, no un error HTTP del
-endpoint de polling.
+endpoint SSE.
