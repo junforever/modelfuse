@@ -251,7 +251,7 @@ providers o bloquear Rename. No corresponden a FR-050.
 ## Decision 14: Dos módulos Liquibase
 
 **Decision**: `conversations` crea conversaciones/turnos; `messages` crea slots e
-índices. Los XML se incluyen desde el master.
+índices. Los XML se incluyen desde el master. Cada changeset de v1 incluye rollback explícito. La validación ejecuta migración desde cero, rollback sobre una base desechable y una segunda migración para demostrar reversibilidad y repetibilidad sin cambios manuales.
 
 **Rationale**: Son los límites persistentes reales. Constraints PostgreSQL
 implementan idempotencia, ordinales, turno activo y slot único sin nuevas tablas.

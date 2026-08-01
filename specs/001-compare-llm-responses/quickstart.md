@@ -246,4 +246,9 @@ pnpm --filter backend test:consolidation-eval
   nuevo; la actualización en tiempo real solo puede recuperarse con una nueva
   conexión SSE al turno. V1 no activa fallback de transporte.
 - Recovery: slots interrumpidos quedan terminales y manualmente recuperables.
-- Liquibase: corregir changeset; no editar PostgreSQL manualmente.
+- Liquibase: corregir changeset; no editar PostgreSQL manualmente. La validación de Liquibase también debe:
+  1. aplicar todos los changesets desde una base vacía;
+  2. ejecutar sus rollbacks explícitos sobre esa base desechable;
+  3. comprobar que se recuperó el estado anterior;
+  4. aplicar nuevamente los changesets y verificar el esquema final.
+  Nunca ejecutar esta prueba destructiva contra una base con datos que deban conservarse.

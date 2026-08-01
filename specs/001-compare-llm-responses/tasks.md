@@ -43,9 +43,9 @@ colas ni infraestructura genérica de idempotencia.
 
 ### Database / Liquibase
 
-- [ ] T007 [P] [TEST] Escribir validación de tres tablas, cascades, checks, uniques e índices parciales en `db/tests/validate-model-fuse-schema.sql`; tipo: integration PostgreSQL, debe fallar antes de T008–T010.
-- [ ] T008 [DB] Crear `conversations` y `turns` con request IDs, ordinal, estados, cascades e índice único parcial de turno activo en `db/changelogs/conversations/001-create-conversations-and-turns.sql`; prueba mínima: integration T007.
-- [ ] T009 [DB] Crear `model_responses` con cuatro slots, errores, `continued_without_at`, `is_stale`, `attempt_no`, metadata y checks/índices busy en `db/changelogs/messages/001-create-model-responses.sql` (depende de T008); prueba mínima: integration T007.
+- [ ] T007 [P] [TEST] Escribir validación de tres tablas, cascades, checks, uniques, índices parciales y restauración del estado anterior tras rollback en `db/tests/validate-model-fuse-schema.sql`; tipo: integration PostgreSQL, debe fallar antes de T008–T010.
+- [ ] T008 [DB] Crear `conversations` y `turns` con request IDs, ordinal, estados, cascades, índice único parcial de turno activo y rollback explícito en `db/changelogs/conversations/001-create-conversations-and-turns.sql`; prueba mínima: integration T007.
+- [ ] T009 [DB] Crear `model_responses` con cuatro slots, errores, `continued_without_at`, `is_stale`, `attempt_no`, metadata, checks/índices busy y rollback explícito en `db/changelogs/messages/001-create-model-responses.sql` (depende de T008); prueba mínima: integration T007.
 - [ ] T010 [DB] Incluir ambos módulos en `db/changelogs/conversations/db.changelog-conversations.xml`, `db/changelogs/messages/db.changelog-messages.xml` y `db/changelogs/db.changelog-master.xml` (depende de T008, T009); prueba mínima: Liquibase validate y T007.
 
 ### Backend foundation
@@ -94,7 +94,7 @@ Continue-without irreversible sin fallback de transporte.
 - [ ] T032 [P] [US1] [TEST] Probar mapping, cancelación, error seguro y una llamada de Qwen en `apps/backend/src/infrastructure/llm/providers/__tests__/QwenProvider.test.ts`; tipo: contract unit.
 - [ ] T033 [P] [US1] [TEST] Probar bases paralelas, protección del prompt actual, `INVALID_PROMPT_SIZE`, persistencia por intento y consolidación con disponibles en `apps/backend/src/services/conversations/__tests__/TurnOrchestrator.test.ts`; tipo: unit.
 - [ ] T034 [P] [US1] [TEST] Probar `202`, replay concurrente antes de busy, conflicto ID/prompt y título en `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts`; tipo: integration REST/PostgreSQL.
-- [ ] T035 [P] [US1] [TEST] Probar pertenencia, headers, snapshot inicial, tres eventos, publicación post-commit, cleanup y cierre terminal en `apps/backend/src/routes/conversations/__tests__/turnEvents.integration.test.ts`; tipo: integration SSE/PostgreSQL.
+- [ ] T035 [P] [US1] [TEST] Probar pertenencia, headers, snapshot inicial, `slot_update`, `turn_update`, `busy_update`, publicación post-commit, cleanup, cierre terminal, ausencia de eventos o contenido parcial token por token y entrega del contenido únicamente como respuesta final normalizada en `apps/backend/src/routes/conversations/__tests__/turnEvents.integration.test.ts`; tipo: integration SSE/PostgreSQL.
 - [ ] T036 [P] [US1] [TEST] Probar CAS de retry, tres códigos 409, `attempt_no`, reconsolidación y Continue-without irreversible en `apps/backend/src/routes/conversations/__tests__/responseActions.integration.test.ts`; tipo: integration.
 - [ ] T037 [P] [US1] [TEST] Probar un `EventSource`, cache idempotente, runtime stage efímero, cierre terminal y error visible sin fallback en `apps/frontend/src/features/conversations/__tests__/useTurnEvents.test.tsx`; tipo: unit/integration frontend.
 - [ ] T038 [P] [US1] [TEST] Probar tabs/labels, estados aislados, busy controls y confirmación permanente en `apps/frontend/src/features/conversations/__tests__/comparison-workspace.test.tsx`; tipo: component integration.
