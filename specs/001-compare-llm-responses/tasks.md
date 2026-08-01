@@ -69,7 +69,7 @@ colas ni infraestructura genérica de idempotencia.
 - [ ] T024 [P] [FE] Definir tipos/schemas REST y SSE en `apps/frontend/src/features/conversations/types/conversation.ts`, `sse.ts` y `schemas/conversationSchemas.ts`; prueba mínima: unit de parseo en `apps/frontend/src/features/conversations/__tests__/conversationSchemas.test.ts`.
 - [ ] T025 [P] [FE] Crear configuración frontend validada, cliente Axios cancelable y query keys en `apps/frontend/src/config/env.ts`, `apps/frontend/src/features/conversations/api/client.ts` y `queries/conversation-keys.ts`; prueba mínima: unit de env, URL, cancelación y claves estables.
 - [ ] T026 [P] [TEST] Probar aplicación idempotente y rechazo de `updatedAt`/`attemptNo` antiguos en `apps/frontend/src/features/conversations/queries/__tests__/conversation-cache.test.ts`; tipo: unit, debe fallar antes de T027.
-- [ ] T027 [FE] Implementar helpers de cache para `slot_update`, `turn_update` y `busy_update` en `apps/frontend/src/features/conversations/queries/conversation-cache.ts` (depende de T024–T026); prueba mínima: unit T026.
+- [ ] T027 [FE] Implementar helpers de cache que apliquen únicamente los campos canónicos de `slot_update`, `turn_update` y `busy_update`, excluyendo explícitamente `runtimeStage`, en `apps/frontend/src/features/conversations/queries/conversation-cache.ts` (depende de T024–T026); prueba mínima: unit T026.
 
 **Checkpoint**: foundation validada sin tablas de eventos, locks, tokens,
 presupuestos, métricas, ranking o retries.
@@ -121,7 +121,7 @@ Continue-without irreversible sin fallback de transporte.
 ### Frontend implementation
 
 - [ ] T055 [P] [US1] [FE] Implementar API validada de create, snapshot, retry y Continue-without en `apps/frontend/src/features/conversations/api/conversationsApi.ts`; prueba mínima: unit de contratos/errores.
-- [ ] T056 [US1] [FE] Implementar ciclo SSE/cache/error/cierre en `apps/frontend/src/features/conversations/hooks/useTurnEvents.ts` (depende de T027, T055); prueba mínima: frontend T037; no crear fallback.
+- [ ] T056 [US1] [FE] Implementar el ciclo SSE en `apps/frontend/src/features/conversations/hooks/useTurnEvents.ts`: aplicar actualizaciones canónicas mediante los helpers de cache, mantener `runtimeStage` como estado local por slot y limpiarlo al alcanzar un estado terminal, cambiar de turno o cerrar el stream; gestionar error visible y cierre sin crear fallback de transporte (depende de T027, T055); prueba mínima: frontend T037.
 - [ ] T057 [P] [US1] [FE] Crear layout accesible en `apps/frontend/src/components/layout/AppShell.tsx`; prueba mínima: component de landmarks/foco.
 - [ ] T058 [P] [US1] [FE] Crear aviso textual busy/SSE en `apps/frontend/src/features/conversations/components/ConversationProcessingNotice.tsx`; prueba mínima: component T038.
 - [ ] T059 [P] [US1] [FE] Crear tabs y panel de cuatro respuestas en `apps/frontend/src/features/conversations/components/ResponseTabs.tsx` y `ResponsePanel.tsx`; prueba mínima: component T038.
