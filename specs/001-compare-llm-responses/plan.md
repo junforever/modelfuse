@@ -10,9 +10,10 @@ mantendrá conversaciones multiturno persistidas y proyectará cuatro slots en u
 interfaz privada monousuario. La arquitectura es híbrida: REST crea trabajo,
 consulta recursos persistidos y ejecuta acciones explícitas; después de un `202`,
 el frontend abre un stream SSE por turno para recibir `slot_update`, `turn_update`
-y el `busy_update` explícito hasta el estado terminal. PostgreSQL permanece como
-fuente de verdad. V1 no usa polling, long polling, WebSockets, streaming token por
-token, colas externas ni fallback de transporte.
+y el `busy_update` explícito hasta el estado terminal. SSE es el único mecanismo
+de actualización en tiempo real de v1 y PostgreSQL permanece como fuente de
+verdad. V1 no usa polling, long polling, WebSockets, streaming token por token,
+colas externas ni fallback de transporte.
 
 ## Technical Context
 
@@ -30,8 +31,8 @@ página de historial bajo un segundo en al menos 95% del conjunto SC-010; al men
 95% de consultas fake alcanza estados terminales dentro de 60 segundos
 **Constraints**: REST + SSE; un turno activo por conversación; idempotencia con
 `clientRequestId`; retry manual sin backoff; Continue-without irreversible;
-cuatro slots fijos; contexto acotado por turnos con protección técnica que nunca
-subestima el tamaño; sin presupuesto de producto, polling, long polling,
+cuatro slots fijos; contexto acotado por turnos con protección técnica medida por
+contador exacto o cota superior verificable, que nunca subestima el tamaño; sin presupuesto de producto, polling, long polling,
 WebSockets, streaming token por token, colas externas ni fallback de transporte
 **Scale/Scope**: un usuario privado, un proceso backend, cuatro slots
 predefinidos, conversación multiturno, sidebar e historial con cursores

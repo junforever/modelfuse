@@ -67,7 +67,8 @@ VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD=
 
 Frontend genera `clientRequestId` mediante `crypto.randomUUID()`; no requiere
 configuración. Tras un create `202`, abre un `EventSource` para el turno. SSE es
-el único transporte de actualizaciones en tiempo real de v1.
+el único mecanismo de actualizaciones en tiempo real de v1 y no tiene fallback de
+transporte.
 
 ## 4. Start PostgreSQL and migrate
 
@@ -241,7 +242,8 @@ pnpm --filter backend test:consolidation-eval
   slot.
 - Contexto acotado: UI muestra evidencia; DB conserva historial completo.
 - Delete busy: esperar estado terminal; Rename sigue disponible.
-- SSE: un error visible indica que el stream no pudo establecerse/restablecerse;
-  intentar más tarde. V1 no activa ningún fallback.
+- SSE: un error visible indica que el stream no pudo establecerse o abrirse de
+  nuevo; la actualización en tiempo real solo puede recuperarse con una nueva
+  conexión SSE al turno. V1 no activa fallback de transporte.
 - Recovery: slots interrumpidos quedan terminales y manualmente recuperables.
 - Liquibase: corregir changeset; no editar PostgreSQL manualmente.

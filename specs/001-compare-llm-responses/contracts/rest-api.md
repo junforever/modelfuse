@@ -247,7 +247,8 @@ Response `200`:
 ```
 
 Es una lectura puntual del estado persistido para detalle, reapertura y
-convergencia final. No se consulta periódicamente para seguir el turno activo.
+convergencia final. No sustituye al stream SSE del turno activo ni se usa como
+mecanismo de actualización en tiempo real.
 
 ### GET /conversations/:conversationId/turns/:turnId/events
 
@@ -265,8 +266,9 @@ Connection: keep-alive
 Al conectar o reconectar, el backend emite el snapshot PostgreSQL vigente como
 cuatro `slot_update`, un `turn_update` y un `busy_update`; después envía cambios
 canónicos publicados tras su commit y `runtimeStage` efímeros solo para slots ya
-persistidos `running`. Si el snapshot ya es terminal y
-`hasWorkInProgress=false`, puede cerrar después de emitirlo.
+persistidos `running`. Este endpoint es el único mecanismo de actualización en
+tiempo real de v1. Si el snapshot ya es terminal y `hasWorkInProgress=false`,
+puede cerrar después de emitirlo.
 
 Eventos mínimos:
 

@@ -31,7 +31,8 @@ además de reload/reopen, con menos infraestructura que un log de eventos.
 
 **Alternatives considered**: POST bloqueante, polling, long polling, WebSockets,
 streaming token por token y cola/bus externo. Todos quedan fuera de v1. Si SSE
-falla, la UI muestra un error y solo puede restablecer SSE; no existe fallback.
+falla, la UI muestra un error y solo puede abrir una nueva conexión SSE al mismo
+turno; no existe fallback de transporte.
 
 ## Decision 3: Busy exclusivo por conversación
 
