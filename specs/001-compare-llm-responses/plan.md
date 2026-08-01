@@ -104,12 +104,14 @@ flowchart LR
 El publicador vive en memoria dentro del monolito y solo notifica cambios
 canónicos ya confirmados; también puede proyectar un `runtimeStage` no autoritativo
 después de persistir el slot `running`. No es fuente de verdad, cola durable ni
-bus externo. Al abrir un
-stream, el endpoint lee y emite el snapshot PostgreSQL vigente antes de continuar
-con eventos nuevos; así una conexión inicial o nueva converge sin replay complejo.
-Los eventos son snapshots idempotentes con IDs de origen y timestamps/attempt
-vigentes, por lo que la UI no aplica una actualización anterior sobre otra más
-nueva.
+bus externo. Al abrir un stream, el endpoint registra primero el listener y
+acumula temporalmente sus eventos mientras lee y emite el snapshot PostgreSQL
+vigente. Después descarta del buffer los eventos ya representados por el snapshot
+según `updatedAt` y `attemptNo`, entrega los posteriores en orden de publicación y
+continúa en vivo; así una conexión inicial o nueva converge sin perder commits
+ocurridos durante la lectura del snapshot ni requerir replay durable. Los eventos
+son snapshots idempotentes con IDs de origen y timestamps/attempt vigentes, por
+lo que la UI no aplica una actualización anterior sobre otra más nueva.
 
 ## Request and Turn Lifecycle
 
@@ -126,7 +128,9 @@ nueva.
    responde `202` antes de esperar providers.
 5. El frontend abre
    `GET /api/v1/conversations/:conversationId/turns/:turnId/events`.
-6. El stream entrega snapshot actual, luego eventos canónicos posteriores a cada
+6. El stream registra su listener, bufferiza durante la lectura, entrega el
+   snapshot actual, filtra y drena los eventos posteriores no representados por
+   ese snapshot y luego continúa en vivo con eventos canónicos posteriores a cada
    commit y `runtimeStage` efímeros solo para slots ya persistidos `running`.
 7. La UI cierra su `EventSource` al recibir turno terminal y
    `hasWorkInProgress=false`; el servidor también puede cerrar ese stream.
@@ -293,9 +297,10 @@ evento, sin reemplazar validación backend.
 - types/utils: contratos HTTP/SSE/LLM, cursores, título y estado puro.
 
 El endpoint SSE valida que conversación y turno correspondan, fija headers
-`text/event-stream`, `Cache-Control: no-cache` y `Connection: keep-alive`, emite
-snapshot persistido y se desuscribe al cerrar la request. El publicador en proceso
-se inyecta en servicios; controllers no observan repositorios ni reglas de dominio.
+`text/event-stream`, `Cache-Control: no-cache` y `Connection: keep-alive`, se
+suscribe antes de leer el snapshot persistido, drena el buffer de apertura y se
+desuscribe al cerrar la request. El publicador en proceso se inyecta en servicios;
+controllers no observan repositorios ni reglas de dominio.
 
 ### HTTP surface
 
@@ -338,7 +343,8 @@ Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La val
 ### Backend integration
 
 - create/replay concurrente y orden replay → busy → create;
-- endpoint SSE valida pertenencia, headers, snapshot inicial, los tres nombres de
+- endpoint SSE valida pertenencia, headers, suscripción previa al snapshot,
+  buffering y drenaje sin pérdida ante un commit concurrente, los tres nombres de
   evento, resultados finales, cierre terminal y cleanup al desconectar;
 - estado SSE coincide con PostgreSQL y nunca anuncia una transacción fallida;
 - retry concurrente y los tres 409; Continue-without irreversible;

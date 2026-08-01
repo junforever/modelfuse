@@ -263,12 +263,16 @@ Cache-Control: no-cache
 Connection: keep-alive
 ```
 
-Al conectar o reconectar, el backend emite el snapshot PostgreSQL vigente como
-cuatro `slot_update`, un `turn_update` y un `busy_update`; después envía cambios
-canónicos publicados tras su commit y `runtimeStage` efímeros solo para slots ya
-persistidos `running`. Este endpoint es el único mecanismo de actualización en
-tiempo real de v1. Si el snapshot ya es terminal y `hasWorkInProgress=false`,
-puede cerrar después de emitirlo.
+Al conectar o reconectar, el backend registra primero el listener del publicador
+y guarda sus eventos en un buffer efímero por conexión mientras lee PostgreSQL.
+Luego emite el snapshot vigente como cuatro `slot_update`, un `turn_update` y un
+`busy_update`, descarta del buffer los eventos ya representados por el snapshot
+según `updatedAt` y `attemptNo`, entrega los posteriores en orden de publicación
+y pasa al envío en vivo. Los `runtimeStage` efímeros solo se entregan para slots
+que continúan persistidos `running`. Este endpoint es el único mecanismo de
+actualización en tiempo real de v1. Puede cerrar únicamente después de drenar el
+buffer cuando el estado más reciente proyectado sea terminal y
+`hasWorkInProgress=false`.
 
 Eventos mínimos:
 
@@ -294,6 +298,8 @@ Rules:
   `turn_update`.
 - IDs, `updatedAt` y `attemptNo` permiten aplicar snapshots de forma idempotente e
   ignorar actualizaciones anteriores.
+- El buffer de apertura existe solo durante esa conexión y se descarta al
+  desconectar; no agrega replay durable ni soporte para `Last-Event-ID`.
 - No hay log de eventos, IDs durables ni contrato `Last-Event-ID`. Una conexión
   nueva converge mediante su snapshot inicial.
 - Al recibir turno terminal y `busy_update=false`, frontend cierra `EventSource`;
