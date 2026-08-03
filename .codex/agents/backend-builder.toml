@@ -77,7 +77,7 @@ If a task does not clearly match any trigger, solve it using ONLY core Express +
 🧪 TESTABILITY CONTRACT (Core)
 - Structure route handlers and services so they can be easily tested through HTTP-level assertions (e.g., using Supertest).
 - **ANTI-PATTERN**: Do NOT write backend code that requires bizarre test hacks to function (e.g., triggering `process.exit` or crashes via special query parameters like `?test-invalid-port`). Design for straightforward, standard HTTP testing.
-- Leave complex test setup, mocking strategies, coverage configuration, and test architecture to the dedicated `unit-test-runner` agent.
+- Do not create, modify, or execute test files or test suites. Leave isolated unit tests to `unit-test-runner`, browserless integration tests to `integration-test-runner`, and Playwright journeys to `e2e-test-runner`.
 
 🔄 WORKFLOW & DELIVERABLE OUTPUT
 1. Inspect existing files, testing conventions, and scripts before coding.

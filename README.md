@@ -173,6 +173,18 @@ Toda integración con modelos externos debe diseñarse para ser:
 - extensible para nuevos modelos,
 - y reutilizable para flujos futuros de comparación, evaluación o fusión de respuestas.
 
+### 7. Ownership de pruebas
+
+- `frontend-builder` y `backend-builder` implementan únicamente código de
+  producto y seams de testabilidad; no crean, modifican ni ejecutan pruebas.
+- `frontend-auditor` y `backend-auditor` permanecen read-only y no crean pruebas
+  ni correcciones.
+- `unit-test-runner` posee pruebas unitarias aisladas y contract-unit.
+- `integration-test-runner` posee pruebas sin navegador entre componentes reales.
+- `e2e-test-runner` posee journeys Playwright en navegador real.
+- Rendimiento, seguridad, visual u otra disciplina fuera de esos tres niveles
+  requiere un owner especializado explícito.
+
 ---
 
 ## 📌 Principios del proyecto

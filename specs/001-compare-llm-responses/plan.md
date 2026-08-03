@@ -71,8 +71,11 @@ feature queda lista para implementación.
       fuera de logs y metadata sensible.
 - [x] Idempotencia, busy, SSE, retry, Continue-without, delete, recovery y sizing
       tienen la prueba mínima determinista en su límite propietario.
-- [x] Las tareas futuras pueden asignarse a frontend, backend, DB, UI, testing y
-      Product/UX sin responsabilidad ambigua.
+- [x] Las tareas unitarias, de integración y E2E se asignan exclusivamente a
+      `unit-test-runner`, `integration-test-runner` y `e2e-test-runner`; builders
+      implementan código de producto y auditores permanecen read-only.
+- [x] La validación de rendimiento SC-010 queda separada con owner `PERF`; no se
+      transfiere a builders, auditores ni a un runner fuera de su alcance.
 - [x] No existen excepciones constitucionales.
 
 **Post-design re-check**: **PASS**. Research, modelo, contratos y quickstart
@@ -328,6 +331,24 @@ changesets: se derivan de commits y de una proyección efímera en proceso.
 Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La validación de base de datos DEBE ejecutarse sobre una PostgreSQL desechable en este orden: migración desde cero, validación del esquema resultante, rollback hasta el estado anterior y nueva aplicación de los changesets. Este rollback es un quality gate técnico de Liquibase; no constituye recovery de producto ni un rollback automático en producción.
 
 ## Testing and Quality
+
+### Test ownership
+
+- `unit-test-runner` crea, modifica y ejecuta pruebas unitarias aisladas y
+  contract-unit, incluidas pruebas de componentes/hooks con colaboradores
+  mockeados.
+- `integration-test-runner` crea, modifica y ejecuta pruebas sin navegador que
+  mantienen dos o más componentes reales: REST/SSE, PostgreSQL/Liquibase,
+  adapters con fakes y frontend con hooks/providers/cache reales.
+- `e2e-test-runner` crea, modifica y ejecuta exclusivamente journeys Playwright
+  observados mediante un navegador real.
+- El owner `PERF` conserva validaciones de latencia/distribución que los tres
+  runners anteriores excluyen. Para T102 se requiere un responsable especializado;
+  todavía no existe un subagente configurado para ese dominio.
+- Builders modifican solo código de producto y seams de testabilidad; no crean,
+  modifican ni ejecutan pruebas. Auditores permanecen read-only. La prueba mínima
+  indicada en una tarea de implementación es su criterio de aceptación y no
+  transfiere ownership al builder.
 
 ### Backend unit and contract
 

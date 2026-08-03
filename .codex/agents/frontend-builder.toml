@@ -85,7 +85,7 @@ If a task does not clearly match any trigger, solve it using ONLY core component
 - Prefer user-observable behavior over implementation details to prevent brittle tests.
 - Use stable, accessible queries (roles, labels, headings) as the primary testing surface.
 - Add `data-testid` only when accessibility are impossible or explicitly requested.
-- Leave test file creation, mocking, and coverage to the dedicated testing agent.
+- Do not create, modify, or execute test files or test suites. Leave isolated unit tests to `unit-test-runner`, browserless integration tests to `integration-test-runner`, and Playwright journeys to `e2e-test-runner`.
 
 🔄 WORKFLOW & AUDITABLE OUTPUT
 1. Inspect existing files, testing conventions, and scripts before coding.

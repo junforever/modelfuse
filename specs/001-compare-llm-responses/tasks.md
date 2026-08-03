@@ -15,7 +15,14 @@ objetivo, archivos principales y prueba mínima.
 
 - **[P]**: ejecutable en paralelo tras sus dependencias y sin conflicto de archivo.
 - **[Story]**: `US1`, `US2`, `US3` o `US4`; solo en fases de historia.
-- **[Domain]**: `FE`, `BE`, `UI`, `DB`, `TEST`, `DOC`, `UX` o `SHARED`.
+- **[Domain]**: `FE`, `BE`, `UI`, `DB`, `UNIT`, `INTEGRATION`, `E2E`, `PERF`,
+  `DOC`, `UX` o `SHARED`.
+- `UNIT`, `INTEGRATION` y `E2E` pertenecen exclusivamente a
+  `unit-test-runner`, `integration-test-runner` y `e2e-test-runner`. `PERF`
+  requiere un owner especializado independiente.
+- Builders no crean, modifican ni ejecutan pruebas; auditores permanecen
+  read-only. La prueba mínima de una tarea de implementación es un criterio de
+  aceptación y no transfiere ownership al builder.
 - Si una validación falla, se crea una tarea concreta para su causa; la tarea de
   validación no corrige código.
 
@@ -25,11 +32,11 @@ objetivo, archivos principales y prueba mínima.
 
 **Purpose**: instalar solo dependencias y runners exigidos por los artefactos.
 
-- [ ] T001 [FE] Añadir TanStack Query y Playwright/scripts en `apps/frontend/package.json` y `pnpm-lock.yaml`; prueba mínima: build frontend y arranque del runner Playwright.
+- [ ] T001 [FE] Añadir TanStack Query en `apps/frontend/package.json` y `pnpm-lock.yaml`; prueba mínima: build frontend.
 - [ ] T002 [P] [UI] Añadir/exportar con Shadcn `Tabs`, `Dialog`, `DropdownMenu`, `ScrollArea`, `Skeleton` y `Alert` en `packages/ui/src/components/`; prueba mínima: unit de render, teclado y foco por primitiva interactiva.
 - [ ] T003 [FE] Montar `QueryClientProvider` en `apps/frontend/src/providers/query-provider.tsx` y `apps/frontend/src/main.tsx` (depende de T001); prueba mínima: unit de montaje sin provider ausente.
-- [ ] T004 [P] [TEST] Configurar Testing Library y QueryClient aislado en `apps/frontend/src/test/setup.ts`, `apps/frontend/src/test/query-test-utils.tsx` y `apps/frontend/vitest.config.ts`; tipo: unit infrastructure.
-- [ ] T005 [P] [TEST] Configurar Playwright y providers fake deterministas en `apps/frontend/playwright.config.ts` y `apps/frontend/e2e/fixtures/modelFuse.ts`; tipo: E2E smoke del fixture.
+- [ ] T004 [P] [UNIT] Configurar Testing Library y QueryClient aislado en `apps/frontend/src/test/setup.ts`, `apps/frontend/src/test/query-test-utils.tsx` y `apps/frontend/vitest.config.ts`; tipo: unit infrastructure.
+- [ ] T005 [P] [E2E] Añadir Playwright/scripts y configurar providers fake deterministas en `apps/frontend/package.json`, `pnpm-lock.yaml`, `apps/frontend/playwright.config.ts` y `apps/frontend/e2e/fixtures/modelFuse.ts`; tipo: E2E smoke del fixture.
 - [ ] T006 [P] [DOC] Documentar solo variables vigentes de providers, límites, ratio, ventana, sidebar, API y colapso en `apps/backend/.env.sample` y `apps/frontend/.env.sample`; prueba mínima: revisión contra `quickstart.md` sin variables de polling.
 
 **Checkpoint**: no se añaden SDKs LLM preventivos, librerías SSE, retry automático,
@@ -43,32 +50,32 @@ colas ni infraestructura genérica de idempotencia.
 
 ### Database / Liquibase
 
-- [ ] T007 [P] [TEST] Escribir validación de tres tablas, cascades, checks, uniques, índices parciales y restauración del estado anterior tras rollback en `db/tests/validate-model-fuse-schema.sql`; tipo: integration PostgreSQL, debe fallar antes de T008–T010.
+- [ ] T007 [P] [INTEGRATION] Escribir validación de tres tablas, cascades, checks, uniques, índices parciales y restauración del estado anterior tras rollback en `db/tests/validate-model-fuse-schema.sql`; tipo: integration PostgreSQL, debe fallar antes de T008–T010.
 - [ ] T008 [DB] Crear `conversations` y `turns` con request IDs, ordinal, estados, cascades, índice único parcial de turno activo y rollback explícito en `db/changelogs/conversations/001-create-conversations-and-turns.sql`; prueba mínima: integration T007.
 - [ ] T009 [DB] Crear `model_responses` con cuatro slots, errores, `continued_without_at`, `is_stale`, `attempt_no`, metadata, checks/índices busy y rollback explícito en `db/changelogs/messages/001-create-model-responses.sql` (depende de T008); prueba mínima: integration T007.
 - [ ] T010 [DB] Incluir ambos módulos en `db/changelogs/conversations/db.changelog-conversations.xml`, `db/changelogs/messages/db.changelog-messages.xml` y `db/changelogs/db.changelog-master.xml` (depende de T008, T009); prueba mínima: Liquibase validate y T007.
 
 ### Backend foundation
 
-- [ ] T011 [P] [TEST] Probar credenciales requeridas, timeouts, ventana, ratio `(0,1]`, límites por deployment y sidebar en `apps/backend/src/infrastructure/config/__tests__/env.test.ts`; tipo: unit, debe fallar antes de T012.
+- [ ] T011 [P] [UNIT] Probar credenciales requeridas, timeouts, ventana, ratio `(0,1]`, límites por deployment y sidebar en `apps/backend/src/infrastructure/config/__tests__/env.test.ts`; tipo: unit, debe fallar antes de T012.
 - [ ] T012 [BE] Implementar configuración Zod segura en `apps/backend/src/infrastructure/config/env.ts` (depende de T011); prueba mínima: unit T011.
 - [ ] T013 [P] [BE] Definir contratos REST/SSE de conversación, turno, slots, eventos y errores en `apps/backend/src/types/conversations.ts` y `apps/backend/src/types/sse.ts`; prueba mínima: typecheck y contract tests de T035.
 - [ ] T014 [P] [BE] Definir `LlmProvider`, `InputTokenMeasurement`, resultado normalizado y error seguro en `apps/backend/src/types/llm.ts` y `apps/backend/src/services/llm/llmErrors.ts`; prueba mínima: typecheck y contract tests T028–T032.
-- [ ] T015 [P] [TEST] Probar UUIDs, prompt, rename, IDs, slots y cursores inválidos en `apps/backend/src/middleware/validation/__tests__/conversationSchemas.test.ts`; tipo: unit, debe fallar antes de T016.
+- [ ] T015 [P] [UNIT] Probar UUIDs, prompt, rename, IDs, slots y cursores inválidos en `apps/backend/src/middleware/validation/__tests__/conversationSchemas.test.ts`; tipo: unit, debe fallar antes de T016.
 - [ ] T016 [BE] Implementar schemas Zod y middleware de error saneado en `apps/backend/src/middleware/validation/conversationSchemas.ts`, `validateRequest.ts` y `apps/backend/src/types/apiError.ts` (depende de T015); prueba mínima: unit T015.
 - [ ] T017 [P] [BE] Crear helper transaccional PostgreSQL en `apps/backend/src/infrastructure/postgres/transaction.ts`; prueba mínima: integration de commit/rollback en T034.
 - [ ] T018 [P] [BE] Crear mapper PostgreSQL→contrato sin secretos ni mediciones en `apps/backend/src/infrastructure/postgres/mappers/conversationMapper.ts`; prueba mínima: unit de mapping en `apps/backend/src/infrastructure/postgres/mappers/__tests__/conversationMapper.test.ts`.
-- [ ] T019 [P] [TEST] Probar cálculo de turno y busy desde cuatro slots en `apps/backend/src/services/conversations/__tests__/turnState.test.ts`; tipo: unit, debe fallar antes de T020.
+- [ ] T019 [P] [UNIT] Probar cálculo de turno y busy desde cuatro slots en `apps/backend/src/services/conversations/__tests__/turnState.test.ts`; tipo: unit, debe fallar antes de T020.
 - [ ] T020 [BE] Implementar cálculo puro de turno/`hasWorkInProgress` en `apps/backend/src/services/conversations/turnState.ts` (depende de T019); prueba mínima: unit T019.
-- [ ] T021 [P] [TEST] Probar `createApp()`, error JSON y separación start/stop en `apps/backend/src/__tests__/app-lifecycle.test.ts`; tipo: integration, debe fallar antes de T022.
+- [ ] T021 [P] [INTEGRATION] Probar `createApp()`, error JSON y separación start/stop en `apps/backend/src/__tests__/app-lifecycle.test.ts`; tipo: integration, debe fallar antes de T022.
 - [ ] T022 [BE] Crear `apiRouter`, `createApp()`, `startServer()` y limitar `index.ts` a start/stop en `apps/backend/src/routes/apiRouter.ts`, `apps/backend/src/app.ts`, `apps/backend/src/server.ts` y `apps/backend/src/index.ts` (depende de T012, T016, T021); prueba mínima: integration T021.
-- [ ] T023 [P] [TEST] Crear cuatro providers fake y fixtures deterministas en `apps/backend/src/test/fakes/fakeLlmProvider.ts` y `apps/backend/src/test/fixtures/conversationFixtures.ts`; tipo: unit self-test de llamadas/errores controlados.
+- [ ] T023 [P] [UNIT] Crear cuatro providers fake y fixtures deterministas en `apps/backend/src/test/fakes/fakeLlmProvider.ts` y `apps/backend/src/test/fixtures/conversationFixtures.ts`; tipo: unit self-test de llamadas/errores controlados.
 
 ### Frontend foundation
 
 - [ ] T024 [P] [FE] Definir tipos/schemas REST y SSE en `apps/frontend/src/features/conversations/types/conversation.ts`, `sse.ts` y `schemas/conversationSchemas.ts`; prueba mínima: unit de parseo en `apps/frontend/src/features/conversations/__tests__/conversationSchemas.test.ts`.
 - [ ] T025 [P] [FE] Crear configuración frontend validada, cliente Axios cancelable y query keys en `apps/frontend/src/config/env.ts`, `apps/frontend/src/features/conversations/api/client.ts` y `queries/conversation-keys.ts`; prueba mínima: unit de env, URL, cancelación y claves estables.
-- [ ] T026 [P] [TEST] Probar aplicación idempotente y rechazo de `updatedAt`/`attemptNo` antiguos en `apps/frontend/src/features/conversations/queries/__tests__/conversation-cache.test.ts`; tipo: unit, debe fallar antes de T027.
+- [ ] T026 [P] [UNIT] Probar aplicación idempotente y rechazo de `updatedAt`/`attemptNo` antiguos en `apps/frontend/src/features/conversations/queries/__tests__/conversation-cache.test.ts`; tipo: unit, debe fallar antes de T027.
 - [ ] T027 [FE] Implementar helpers de cache que apliquen únicamente los campos canónicos de `slot_update`, `turn_update` y `busy_update`, excluyendo explícitamente `runtimeStage`, en `apps/frontend/src/features/conversations/queries/conversation-cache.ts` (depende de T024–T026); prueba mínima: unit T026.
 
 **Checkpoint**: foundation validada sin tablas de eventos, locks, tokens,
@@ -87,19 +94,19 @@ Continue-without irreversible sin fallback de transporte.
 
 ### Tests for User Story 1
 
-- [ ] T028 [P] [US1] [TEST] Probar medición exacta/`upper_bound`, overhead y corpus ASCII, puntuación, Unicode/emoji, scripts no latinos y delimitadores en `apps/backend/src/infrastructure/llm/providers/__tests__/inputMeasurement.contract.test.ts`; tipo: contract unit, debe fallar antes de T043–T046.
-- [ ] T029 [P] [US1] [TEST] Probar mapping, cancelación, error seguro y una llamada de OpenAI en `apps/backend/src/infrastructure/llm/providers/__tests__/OpenAiProvider.test.ts`; tipo: contract unit.
-- [ ] T030 [P] [US1] [TEST] Probar mapping, cancelación, error seguro y una llamada de Google en `apps/backend/src/infrastructure/llm/providers/__tests__/GoogleProvider.test.ts`; tipo: contract unit.
-- [ ] T031 [P] [US1] [TEST] Probar mapping, cancelación, error seguro y una llamada de MiniMax en `apps/backend/src/infrastructure/llm/providers/__tests__/MiniMaxProvider.test.ts`; tipo: contract unit.
-- [ ] T032 [P] [US1] [TEST] Probar mapping, cancelación, error seguro y una llamada de Qwen en `apps/backend/src/infrastructure/llm/providers/__tests__/QwenProvider.test.ts`; tipo: contract unit.
-- [ ] T033 [P] [US1] [TEST] Probar bases paralelas, protección del prompt actual, `INVALID_PROMPT_SIZE`, persistencia por intento y consolidación con disponibles en `apps/backend/src/services/conversations/__tests__/TurnOrchestrator.test.ts`; tipo: unit.
-- [ ] T034 [P] [US1] [TEST] Probar `202`, replay concurrente antes de busy, conflicto ID/prompt y título en `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts`; tipo: integration REST/PostgreSQL.
-- [ ] T035 [P] [US1] [TEST] Probar pertenencia, headers, snapshot inicial, `slot_update`, `turn_update`, `busy_update`, publicación post-commit, cleanup, cierre terminal después del drenaje, ausencia de eventos o contenido parcial token por token y entrega del contenido únicamente como respuesta final normalizada en `apps/backend/src/routes/conversations/__tests__/turnEvents.integration.test.ts`; incluir casos deterministas donde un commit entre la suscripción y la finalización del snapshot se entrega después de este sin pérdida, y donde eventos viejos o duplicados almacenados en el buffer se descartan por `updatedAt` y `attemptNo`; tipo: integration SSE/PostgreSQL.
-- [ ] T036 [P] [US1] [TEST] Probar CAS de retry, tres códigos 409, `attempt_no`, reconsolidación y Continue-without irreversible en `apps/backend/src/routes/conversations/__tests__/responseActions.integration.test.ts`; tipo: integration.
-- [ ] T037 [P] [US1] [TEST] Probar un único `EventSource`, aplicación idempotente de eventos canónicos, `runtimeStage` local y efímero y, al coincidir turno terminal con `busy_update=false`, cierre del stream, limpieza del estado efímero y exactamente una invalidación final de las queries de detalle/turno; comprobar además que no existe fetch periódico y que un fallo SSE muestra un error visible sin activar fallback en `apps/frontend/src/features/conversations/__tests__/useTurnEvents.test.tsx`; tipo: unit/integration frontend.
-- [ ] T038 [P] [US1] [TEST] Probar tabs/labels, estados aislados, busy controls y confirmación permanente en `apps/frontend/src/features/conversations/__tests__/comparison-workspace.test.tsx`; tipo: component integration.
-- [ ] T039 [P] [US1] [TEST] Escribir flujo `202 → SSE → cuatro resultados → cierre` en `apps/frontend/e2e/conversation-comparison.spec.ts`; tipo: E2E.
-- [ ] T040 [P] [US1] [TEST] Escribir retry manual, reconsolidación, 409 y Continue-without en `apps/frontend/e2e/conversation-response-actions.spec.ts`; tipo: E2E.
+- [ ] T028 [P] [US1] [UNIT] Probar medición exacta/`upper_bound`, overhead y corpus ASCII, puntuación, Unicode/emoji, scripts no latinos y delimitadores en `apps/backend/src/infrastructure/llm/providers/__tests__/inputMeasurement.contract.test.ts`; tipo: contract unit, debe fallar antes de T043–T046.
+- [ ] T029 [P] [US1] [UNIT] Probar mapping, cancelación, error seguro y una llamada de OpenAI en `apps/backend/src/infrastructure/llm/providers/__tests__/OpenAiProvider.test.ts`; tipo: contract unit.
+- [ ] T030 [P] [US1] [UNIT] Probar mapping, cancelación, error seguro y una llamada de Google en `apps/backend/src/infrastructure/llm/providers/__tests__/GoogleProvider.test.ts`; tipo: contract unit.
+- [ ] T031 [P] [US1] [UNIT] Probar mapping, cancelación, error seguro y una llamada de MiniMax en `apps/backend/src/infrastructure/llm/providers/__tests__/MiniMaxProvider.test.ts`; tipo: contract unit.
+- [ ] T032 [P] [US1] [UNIT] Probar mapping, cancelación, error seguro y una llamada de Qwen en `apps/backend/src/infrastructure/llm/providers/__tests__/QwenProvider.test.ts`; tipo: contract unit.
+- [ ] T033 [P] [US1] [UNIT] Probar bases paralelas, protección del prompt actual, `INVALID_PROMPT_SIZE`, persistencia por intento y consolidación con disponibles en `apps/backend/src/services/conversations/__tests__/TurnOrchestrator.test.ts`; tipo: unit.
+- [ ] T034 [P] [US1] [INTEGRATION] Probar `202`, replay concurrente antes de busy, conflicto ID/prompt y título en `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts`; tipo: integration REST/PostgreSQL.
+- [ ] T035 [P] [US1] [INTEGRATION] Probar pertenencia, headers, snapshot inicial, `slot_update`, `turn_update`, `busy_update`, publicación post-commit, cleanup, cierre terminal después del drenaje, ausencia de eventos o contenido parcial token por token y entrega del contenido únicamente como respuesta final normalizada en `apps/backend/src/routes/conversations/__tests__/turnEvents.integration.test.ts`; incluir casos deterministas donde un commit entre la suscripción y la finalización del snapshot se entrega después de este sin pérdida, y donde eventos viejos o duplicados almacenados en el buffer se descartan por `updatedAt` y `attemptNo`; tipo: integration SSE/PostgreSQL.
+- [ ] T036 [P] [US1] [INTEGRATION] Probar CAS de retry, tres códigos 409, `attempt_no`, reconsolidación y Continue-without irreversible en `apps/backend/src/routes/conversations/__tests__/responseActions.integration.test.ts`; tipo: integration.
+- [ ] T037 [P] [US1] [INTEGRATION] Probar un único `EventSource`, aplicación idempotente de eventos canónicos, `runtimeStage` local y efímero y, al coincidir turno terminal con `busy_update=false`, cierre del stream, limpieza del estado efímero y exactamente una invalidación final de las queries de detalle/turno; comprobar además que no existe fetch periódico y que un fallo SSE muestra un error visible sin activar fallback en `apps/frontend/src/features/conversations/__tests__/useTurnEvents.test.tsx`; tipo: frontend integration con hook, QueryClient y cache reales y boundary EventSource controlado.
+- [ ] T038 [P] [US1] [INTEGRATION] Probar tabs/labels, estados aislados, busy controls y confirmación permanente en `apps/frontend/src/features/conversations/__tests__/comparison-workspace.test.tsx`; tipo: component integration.
+- [ ] T039 [P] [US1] [E2E] Escribir flujo `202 → SSE → cuatro resultados → cierre` en `apps/frontend/e2e/conversation-comparison.spec.ts`; tipo: E2E.
+- [ ] T040 [P] [US1] [E2E] Escribir retry manual, reconsolidación, 409 y Continue-without en `apps/frontend/e2e/conversation-response-actions.spec.ts`; tipo: E2E.
 
 ### Backend implementation
 
@@ -144,11 +151,11 @@ precede a busy y protección técnica cubre cabe/compacta/falla sin subestimar.
 
 ### Tests for User Story 2
 
-- [ ] T064 [P] [US2] [TEST] Probar aislamiento base/Qwen, ventana, compactación, re-medición y `INVALID_PROMPT_SIZE` en `apps/backend/src/services/conversations/__tests__/ContextBuilder.test.ts`; tipo: unit.
-- [ ] T065 [P] [US2] [TEST] Probar replay→busy→create, ordinal y liberación terminal en `apps/backend/src/routes/conversations/__tests__/conversationContinuation.integration.test.ts`; tipo: integration.
-- [ ] T066 [P] [US2] [TEST] Probar createTurn, UUID estable, navegación, cache por IDs y nueva suscripción SSE en `apps/frontend/src/features/conversations/__tests__/conversation-continuation.test.tsx`; tipo: frontend integration.
-- [ ] T067 [P] [US2] [TEST] Probar aviso de contexto acotado sin contenido/mediciones/límites en `apps/frontend/src/features/conversations/__tests__/ContextWindowNotice.test.tsx`; tipo: component unit.
-- [ ] T068 [P] [US2] [TEST] Escribir E2E multiturno de aislamiento, busy por conversación y protección de contexto en `apps/frontend/e2e/conversation-continuation.spec.ts`; tipo: E2E.
+- [ ] T064 [P] [US2] [UNIT] Probar aislamiento base/Qwen, ventana, compactación, re-medición y `INVALID_PROMPT_SIZE` en `apps/backend/src/services/conversations/__tests__/ContextBuilder.test.ts`; tipo: unit.
+- [ ] T065 [P] [US2] [INTEGRATION] Probar replay→busy→create, ordinal y liberación terminal en `apps/backend/src/routes/conversations/__tests__/conversationContinuation.integration.test.ts`; tipo: integration.
+- [ ] T066 [P] [US2] [INTEGRATION] Probar createTurn, UUID estable, navegación, cache por IDs y nueva suscripción SSE en `apps/frontend/src/features/conversations/__tests__/conversation-continuation.test.tsx`; tipo: frontend integration.
+- [ ] T067 [P] [US2] [UNIT] Probar aviso de contexto acotado sin contenido/mediciones/límites en `apps/frontend/src/features/conversations/__tests__/ContextWindowNotice.test.tsx`; tipo: component unit.
+- [ ] T068 [P] [US2] [E2E] Escribir E2E multiturno de aislamiento, busy por conversación y protección de contexto en `apps/frontend/e2e/conversation-continuation.spec.ts`; tipo: E2E.
 
 ### Implementation for User Story 2
 
@@ -176,13 +183,13 @@ busy y Delete responde 409 hasta quedar terminal.
 
 ### Tests for User Story 3
 
-- [ ] T077 [P] [US3] [TEST] Probar encode/decode y rechazo de cursores en `apps/backend/src/utils/__tests__/cursor.test.ts`; tipo: unit.
-- [ ] T078 [P] [US3] [TEST] Probar sidebar estable y bloques 3/3/1 completos en `apps/backend/src/infrastructure/postgres/repositories/__tests__/conversationHistoryRepository.integration.test.ts`; tipo: integration.
-- [ ] T079 [P] [US3] [TEST] Probar list/detail/rename, Delete busy, cascade y errores en `apps/backend/src/routes/conversations/__tests__/conversationManagement.integration.test.ts`; tipo: integration.
-- [ ] T080 [P] [US3] [TEST] Probar queries infinitas, autofill y compensación al anteponer en `apps/frontend/src/features/conversations/__tests__/conversation-history.test.tsx`; tipo: frontend integration.
-- [ ] T081 [P] [US3] [TEST] Probar menú, dialogs, foco, contador, busy y colapso local en `apps/frontend/src/features/conversations/__tests__/conversation-management.test.tsx`; tipo: component integration.
-- [ ] T082 [P] [US3] [TEST] Escribir E2E de reapertura y scroll histórico 3/3/1 en `apps/frontend/e2e/conversation-history.spec.ts`; tipo: E2E.
-- [ ] T083 [P] [US3] [TEST] Escribir E2E de sidebar, Rename, Delete busy/cascade y error SSE al reabrir en `apps/frontend/e2e/conversation-management.spec.ts`; tipo: E2E.
+- [ ] T077 [P] [US3] [UNIT] Probar encode/decode y rechazo de cursores en `apps/backend/src/utils/__tests__/cursor.test.ts`; tipo: unit.
+- [ ] T078 [P] [US3] [INTEGRATION] Probar sidebar estable y bloques 3/3/1 completos en `apps/backend/src/infrastructure/postgres/repositories/__tests__/conversationHistoryRepository.integration.test.ts`; tipo: integration.
+- [ ] T079 [P] [US3] [INTEGRATION] Probar list/detail/rename, Delete busy, cascade y errores en `apps/backend/src/routes/conversations/__tests__/conversationManagement.integration.test.ts`; tipo: integration.
+- [ ] T080 [P] [US3] [INTEGRATION] Probar queries infinitas, autofill y compensación al anteponer en `apps/frontend/src/features/conversations/__tests__/conversation-history.test.tsx`; tipo: frontend integration.
+- [ ] T081 [P] [US3] [INTEGRATION] Probar menú, dialogs, foco, contador, busy y colapso local en `apps/frontend/src/features/conversations/__tests__/conversation-management.test.tsx`; tipo: component integration.
+- [ ] T082 [P] [US3] [E2E] Escribir E2E de reapertura y scroll histórico 3/3/1 en `apps/frontend/e2e/conversation-history.spec.ts`; tipo: E2E.
+- [ ] T083 [P] [US3] [E2E] Escribir E2E de sidebar, Rename, Delete busy/cascade y error SSE al reabrir en `apps/frontend/e2e/conversation-management.spec.ts`; tipo: E2E.
 
 ### Implementation for User Story 3
 
@@ -206,8 +213,8 @@ busy y Delete responde 409 hasta quedar terminal.
 **Independent Test**: Nueva conversación no inserta datos; el primer prompt crea
 el recurso sin contexto previo y conserva conversaciones existentes.
 
-- [ ] T092 [P] [US4] [TEST] Probar draft repetido, cero persistencia y conservación de lista en `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx`; tipo: frontend unit.
-- [ ] T093 [P] [US4] [TEST] Escribir primer prompt de draft y contexto aislado en `apps/frontend/e2e/new-conversation.spec.ts`; tipo: E2E.
+- [ ] T092 [P] [US4] [UNIT] Probar draft repetido, cero persistencia y conservación de lista en `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx`; tipo: frontend unit.
+- [ ] T093 [P] [US4] [E2E] Escribir primer prompt de draft y contexto aislado en `apps/frontend/e2e/new-conversation.spec.ts`; tipo: E2E.
 - [ ] T094 [US4] [FE] Implementar draft/selección local y acción Nueva conversación en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationSidebar.tsx`; prueba mínima: unit T092.
 - [ ] T095 [US4] [FE] Enviar primer prompt por `POST /conversations`, seleccionar ID y conservar historial en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T094); prueba mínima: E2E T093.
 
@@ -219,19 +226,19 @@ el recurso sin contexto previo y conserva conversaciones existentes.
 
 **Purpose**: cerrar v1 con evidencia medible y checks separados.
 
-- [ ] T096 [P] [TEST] Escribir fixture/versionado de recovery `pending`/`running` y prueba sobre la misma DB en `apps/backend/src/services/conversations/__tests__/fixtures/recoveryCases.ts` y `recovery.integration.test.ts`; tipo: integration SC-002, debe fallar antes de T097.
+- [ ] T096 [P] [INTEGRATION] Escribir fixture/versionado de recovery `pending`/`running` y prueba sobre la misma DB en `apps/backend/src/services/conversations/__tests__/fixtures/recoveryCases.ts` y `recovery.integration.test.ts`; tipo: integration SC-002, debe fallar antes de T097.
 - [ ] T097 [BE] Implementar `recoverInterruptedTurns()` antes de listen en `apps/backend/src/services/conversations/recoverInterruptedTurns.ts` y `apps/backend/src/server.ts` (depende de T096); prueba mínima: integration T096 al 100% del fixture.
-- [ ] T098 [P] [TEST] Probar ausencia de prompts, respuestas, payloads SSE, mediciones, límites, headers y secretos en `apps/backend/src/services/conversations/__tests__/observabilitySafety.test.ts`; tipo: unit, debe fallar antes de T099.
+- [ ] T098 [P] [UNIT] Probar ausencia de prompts, respuestas, payloads SSE, mediciones, límites, headers y secretos en `apps/backend/src/services/conversations/__tests__/observabilitySafety.test.ts`; tipo: unit, debe fallar antes de T099.
 - [ ] T099 [BE] Añadir logs Pino seguros de IDs, busy, replay, slot, duración, SSE y recovery en `apps/backend/src/middleware/logger/requestContext.ts`, `TurnOrchestrator.ts` y `turnEventsController.ts` (depende de T098); prueba mínima: unit T098.
-- [ ] T100 [P] [TEST] Crear fixture ≤5 casos y runner de consolidación ≥90% en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json` y `apps/backend/src/acceptance/consolidationEvaluation.ts`; tipo: acceptance SC-005.
-- [ ] T101 [P] [TEST] Implementar estados terminales ≤60 s con providers fake en `apps/backend/src/acceptance/terminalStates.acceptance.test.ts`; tipo: acceptance SC-001.
-- [ ] T102 [P] [TEST] Implementar latencia `202`/primer historial p95 <1 s en `apps/backend/src/acceptance/latency.acceptance.test.ts`; tipo: acceptance SC-010.
+- [ ] T100 [P] [INTEGRATION] Crear fixture ≤5 casos y runner de consolidación ≥90% en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json` y `apps/backend/src/acceptance/consolidationEvaluation.ts`; tipo: integration acceptance SC-005 con providers fake.
+- [ ] T101 [P] [INTEGRATION] Implementar estados terminales ≤60 s con providers fake en `apps/backend/src/acceptance/terminalStates.acceptance.test.ts`; tipo: integration acceptance SC-001.
+- [ ] T102 [P] [PERF] Implementar latencia `202`/primer historial p95 <1 s en `apps/backend/src/acceptance/latency.acceptance.test.ts` (owner: performance-validation-owner; no existe subagente configurado); tipo: performance acceptance SC-010.
 - [ ] T103 [P] [UX] Diseñar tareas, escenarios, criterios observables y escalas subjetivas en `specs/001-compare-llm-responses/usability/sc-003-protocol.md`; prueba mínima: revisión Product/UX de cobertura SC-003/SC-004.
 - [ ] T104 [UX] Ejecutar participantes y registrar numerador, denominador, porcentaje y pass/fail por SC en `specs/001-compare-llm-responses/usability/sc-004-results.md` (depende de T103); tipo: aceptación Product/UX, umbral 90% separado.
-- [ ] T105 [DB] Ejecutar migrate-from-zero, Liquibase validate y rollback con `docker-compose.yml` y `db/changelogs/db.changelog-master.xml`; tipo: integration DB, sin corregir fallos dentro de esta tarea.
-- [ ] T106 [P] [TEST] Ejecutar Vitest backend desde `apps/backend/package.json`; tipo: unit/integration backend, registrar fallos como tareas concretas.
-- [ ] T107 [P] [TEST] Ejecutar Vitest frontend desde `apps/frontend/package.json`; tipo: unit/integration frontend, registrar fallos como tareas concretas.
-- [ ] T108 [TEST] Ejecutar Playwright con fakes desde `apps/frontend/playwright.config.ts` (depende de historias implementadas); tipo: E2E, registrar fallos como tareas concretas.
+- [ ] T105 [INTEGRATION] Ejecutar migrate-from-zero, Liquibase validate y rollback con `docker-compose.yml` y `db/changelogs/db.changelog-master.xml`; tipo: integration DB, sin corregir fallos dentro de esta tarea.
+- [ ] T106 [P] [UNIT] Ejecutar las suites unitarias backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json`; registrar fallos como tareas concretas.
+- [ ] T107 [P] [INTEGRATION] Ejecutar las suites de integración backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json`; registrar fallos como tareas concretas.
+- [ ] T108 [E2E] Ejecutar Playwright con fakes desde `apps/frontend/playwright.config.ts` (depende de historias implementadas); tipo: E2E, registrar fallos como tareas concretas.
 - [ ] T109 [SHARED] Ejecutar `pnpm typecheck`, `pnpm lint` y `pnpm build` desde `package.json` (owner: integration-owner); prueba mínima: los tres comandos exitosos, sin corregir hallazgos aquí.
 - [ ] T110 [DOC] Ejecutar todos los smoke flows de `specs/001-compare-llm-responses/quickstart.md` (depende de T100–T109); prueba mínima: aceptación manual documentada, discrepancias como tareas concretas.
 
@@ -317,12 +324,15 @@ Flow:  T094 → T095
 | UI | `frontend-builder` | `packages/ui` primitives only |
 | BE | `backend-builder` | API, orchestration, SSE and LLM adapters |
 | DB | `backend-builder` | Liquibase/schema validation |
-| TEST | `unit-test-runner` or owning builder | exact test/acceptance file |
+| UNIT | `unit-test-runner` | isolated unit and contract-unit tests |
+| INTEGRATION | `integration-test-runner` | browserless real-component boundaries |
+| E2E | `e2e-test-runner` | Playwright browser journeys |
+| PERF | `performance-validation-owner` | latency/distribution acceptance; no configured subagent yet |
 | UX | Product/UX | participant protocol/evidence |
 | DOC | integration owner | env samples/quickstart validation |
 | SHARED | named owner | cross-boundary integration/checks |
 
-Auditors remain read-only.
+Builders do not create, modify, or execute tests. Auditors remain read-only.
 
 ## Independent test criteria
 

@@ -18,7 +18,12 @@ critical cross-product journeys.
 
 - **[P]**: Can run in parallel (different files, no dependencies)
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
-- **[Domain]**: Primary owner: `FE`, `BE`, `UI`, `DB`, `TEST`, or `SHARED`
+- **[Domain]**: Primary owner: `FE`, `BE`, `UI`, `DB`, `UNIT`, `INTEGRATION`,
+  `E2E`, `PERF`, or `SHARED`
+- `UNIT`, `INTEGRATION`, and `E2E` belong exclusively to `unit-test-runner`,
+  `integration-test-runner`, and `e2e-test-runner`. `PERF` or another testing
+  discipline must name its own specialized owner.
+- Builders do not author, modify, or execute tests. Auditors remain read-only.
 - Include exact file paths in descriptions
 - Split cross-domain work into independently reviewable tasks and add one explicit
   integration task. A `SHARED` task must name its responsible owner.
@@ -88,8 +93,8 @@ Examples of foundational tasks (adjust based on your project):
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T010 [P] [US1] [TEST] Contract test for [endpoint] in [exact test path]
-- [ ] T011 [P] [US1] [TEST] Integration test for [user journey] in [exact test path]
+- [ ] T010 [P] [US1] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
+- [ ] T011 [P] [US1] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]
 
 ### Implementation for User Story 1
 
@@ -112,8 +117,8 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Tests for User Story 2 *(required for non-trivial behavior)* ⚠️
 
-- [ ] T018 [P] [US2] [TEST] Contract test for [endpoint] in [exact test path]
-- [ ] T019 [P] [US2] [TEST] Integration test for [user journey] in [exact test path]
+- [ ] T018 [P] [US2] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
+- [ ] T019 [P] [US2] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]
 
 ### Implementation for User Story 2
 
@@ -134,8 +139,8 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Tests for User Story 3 *(required for non-trivial behavior)* ⚠️
 
-- [ ] T024 [P] [US3] [TEST] Contract test for [endpoint] in [exact test path]
-- [ ] T025 [P] [US3] [TEST] Integration test for [user journey] in [exact test path]
+- [ ] T024 [P] [US3] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
+- [ ] T025 [P] [US3] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]
 
 ### Implementation for User Story 3
 
@@ -158,9 +163,9 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] TXXX [P] [SHARED] Documentation updates in docs/ (owner: [agent])
 - [ ] TXXX [SHARED] Code cleanup and refactoring (owner: [agent])
 - [ ] TXXX [SHARED] Performance optimization across all stories (owner: [agent])
-- [ ] TXXX [P] [TEST] Additional behavior-focused tests in [exact test path]
+- [ ] TXXX [P] [UNIT|INTEGRATION|E2E|PERF] Additional behavior-focused tests in [exact test path] (owner: [test owner])
 - [ ] TXXX [SHARED] Security hardening (owner: [agent])
-- [ ] TXXX [TEST] Run quickstart.md validation
+- [ ] TXXX [SHARED] Run quickstart.md validation (owner: [validation owner])
 
 ---
 
@@ -183,7 +188,8 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Within Each User Story
 
-- Tests (if included) MUST be written and FAIL before implementation
+- UNIT, INTEGRATION, and E2E tests MUST be written by their owning runners and
+  fail before implementation
 - Models before services
 - Services before endpoints
 - Core implementation before integration
@@ -204,8 +210,9 @@ Examples of foundational tasks (adjust based on your project):
 
 ```bash
 # Launch all tests for User Story 1 together (if tests requested):
-Task: "[TEST] Contract test for [endpoint] in [exact test path]"
-Task: "[TEST] Integration test for [user journey] in [exact test path]"
+Task: "[UNIT] Contract-unit test for [contract] in [exact test path]"
+Task: "[INTEGRATION] Browserless integration test for [boundary] in [exact test path]"
+Task: "[E2E] Playwright test for [critical journey] in [exact test path]"
 
 # Launch all models for User Story 1 together:
 Task: "[BE] Create [Entity1] model in [exact path]"

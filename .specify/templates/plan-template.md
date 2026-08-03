@@ -48,8 +48,11 @@
 - [ ] Non-trivial behavior has the smallest sufficient automated test, with
       integration or end-to-end coverage for affected boundaries and critical
       journeys.
-- [ ] Tasks can be assigned to frontend, backend, database/UI, audit, and testing
-      owners without ambiguous cross-domain responsibility.
+- [ ] Unit, integration, and E2E test tasks name `unit-test-runner`,
+      `integration-test-runner`, or `e2e-test-runner` respectively; any other
+      testing discipline names a separate specialized owner.
+- [ ] Builders own production changes and testability seams but do not author,
+      modify, or execute tests; auditors remain read-only.
 - [ ] Any violation is justified in Complexity Tracking and approved before
       implementation.
 

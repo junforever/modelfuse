@@ -13,7 +13,7 @@ metadata:
 
 # Test Design & Quality Skill
 
-Apply this skill ALWAYS before writing or modifying any test. It is the foundational source of truth for test quality, ensuring "quality over quantity" and eliminating redundant, brittle, or implementation-focused tests.
+Apply this skill before writing or modifying any **unit test** within `unit-test-runner`. For integration tests use `integration-test-design`. For E2E tests use `e2e-test-design`. This skill is the foundational source of truth for unit test quality, ensuring "quality over quantity" and eliminating redundant, brittle, or implementation-focused tests.
 
 ## 🎯 Core Philosophy: Quality Over Quantity
 
