@@ -1,6 +1,6 @@
 ---
 name: test-determinism-utilities
-description: Implements deterministic testing utilities for controlling time, randomness, cryptographic outputs, timezone shifts, shared data factories, and stabilizing flaky async workflows in Vitest/Testing Library environments.
+description: Implements deterministic testing utilities for isolated Vitest and Testing Library unit tests by controlling time, randomness, cryptographic outputs, timezone shifts, in-memory fixtures, and mocked async workflows. Use only for unit-test-runner tasks. Use integration-test-determinism for real component or resource lifecycles and e2e-test-determinism for Playwright or browser behavior.
 compatibility: Node.js 18+, TypeScript 5+, Vitest 1+, Testing Library React 14+, user-event 14+, date-fns, crypto. Compatible with seeded generators, timezone utilities, or custom test fixture patterns.
 metadata:
   author: junforever
@@ -10,7 +10,18 @@ metadata:
 
 # Test Determinism & Utilities Skill
 
-Apply this skill ONLY when test execution suffers from non-determinism, async race conditions, time-dependent behavior, or requires shared data factories. For standard isolated unit tests with static inputs, use the core `unit-test-runner` rules instead.
+Apply this skill ONLY within `unit-test-runner` tasks when isolated unit test
+execution suffers from nondeterminism, local async race conditions,
+time-dependent behavior, or requires deterministic in-memory data factories.
+
+This skill does not cover real PostgreSQL connections, transactions, ports,
+servers, HTTP/SSE streams, shared QueryClients, integration resource cleanup, or
+browser lifecycle. Return those scenarios to `integration-test-runner` with
+`integration-test-determinism`, or to `e2e-test-runner` with
+`e2e-test-determinism` when Playwright or real browser behavior is involved.
+
+For standard isolated unit tests with static inputs, use the core
+`unit-test-runner` rules instead.
 
 ## 🎯 When to Activate
 
