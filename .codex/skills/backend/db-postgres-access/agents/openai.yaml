@@ -1,0 +1,7 @@
+interface:
+  display_name: "PostgreSQL Data Access"
+  short_description: "Implement safe PostgreSQL access and transactions"
+  default_prompt: "Use $db-postgres-access to implement safe PostgreSQL access and transaction handling for this backend change."
+
+policy:
+  allow_implicit_invocation: false

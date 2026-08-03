@@ -2,3 +2,6 @@ interface:
   display_name: "Playwright E2E Authoring"
   short_description: "Write resilient Playwright browser journeys"
   default_prompt: "Use $playwright-e2e-authoring to implement this E2E journey with resilient Playwright locators, assertions, and fixtures."
+
+policy:
+  allow_implicit_invocation: false

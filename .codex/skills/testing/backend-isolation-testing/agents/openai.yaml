@@ -1,0 +1,7 @@
+interface:
+  display_name: "Backend Isolation Testing"
+  short_description: "Test backend services and HTTP boundaries in isolation"
+  default_prompt: "Use $backend-isolation-testing to implement focused unit tests for this backend service or HTTP boundary."
+
+policy:
+  allow_implicit_invocation: false

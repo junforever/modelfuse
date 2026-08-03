@@ -1,0 +1,7 @@
+interface:
+  display_name: "Unit Test Design"
+  short_description: "Design small, high-value behavioral unit tests"
+  default_prompt: "Use $test-design to design the smallest unit test that proves this behavior."
+
+policy:
+  allow_implicit_invocation: false

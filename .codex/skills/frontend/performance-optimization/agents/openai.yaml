@@ -1,0 +1,7 @@
+interface:
+  display_name: "Frontend Performance Optimization"
+  short_description: "Implement targeted React performance improvements"
+  default_prompt: "Use $performance-optimization to implement the smallest measurable performance improvement for this React feature."
+
+policy:
+  allow_implicit_invocation: false

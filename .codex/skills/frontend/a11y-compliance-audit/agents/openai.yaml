@@ -1,0 +1,7 @@
+interface:
+  display_name: "Accessibility Compliance Audit"
+  short_description: "Audit frontend accessibility against WCAG 2.2 AA"
+  default_prompt: "Use $a11y-compliance-audit to audit this frontend change for WCAG 2.2 AA accessibility defects."
+
+policy:
+  allow_implicit_invocation: false

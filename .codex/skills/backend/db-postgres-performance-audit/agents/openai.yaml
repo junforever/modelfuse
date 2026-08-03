@@ -1,0 +1,7 @@
+interface:
+  display_name: "PostgreSQL Performance Audit"
+  short_description: "Audit PostgreSQL queries, pooling, and transactions"
+  default_prompt: "Use $db-postgres-performance-audit to audit this PostgreSQL access path for performance and transaction risks."
+
+policy:
+  allow_implicit_invocation: false

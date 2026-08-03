@@ -2,3 +2,6 @@ interface:
   display_name: "Frontend Integration Testing"
   short_description: "Test React providers, cache, routing, and transport"
   default_prompt: "Use $frontend-integration-testing to implement a focused React integration test across this component boundary."
+
+policy:
+  allow_implicit_invocation: false

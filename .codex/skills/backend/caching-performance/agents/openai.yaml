@@ -1,0 +1,7 @@
+interface:
+  display_name: "Caching & Performance"
+  short_description: "Implement targeted backend caching and performance"
+  default_prompt: "Use $caching-performance to implement the smallest justified caching or performance improvement for this backend."
+
+policy:
+  allow_implicit_invocation: false

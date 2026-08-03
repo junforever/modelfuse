@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Data Fetching"
+  short_description: "Implement robust React data fetching with Axios"
+  default_prompt: "Use $data-fetching to implement the async data flow for this React feature with cancellation and error handling."
+
+policy:
+  allow_implicit_invocation: false

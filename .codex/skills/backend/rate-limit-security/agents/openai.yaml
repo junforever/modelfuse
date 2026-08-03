@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rate Limiting & Security"
+  short_description: "Implement rate limits, CORS, and request protections"
+  default_prompt: "Use $rate-limit-security to implement the required rate limiting and HTTP security controls for this backend."
+
+policy:
+  allow_implicit_invocation: false

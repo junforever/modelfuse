@@ -2,3 +2,6 @@ interface:
   display_name: "Backend Contract Integration"
   short_description: "Test Express, SSE, and adapter contracts end to end"
   default_prompt: "Use $backend-contract-integration-testing to implement a focused backend integration test for this HTTP, SSE, or adapter contract."
+
+policy:
+  allow_implicit_invocation: false

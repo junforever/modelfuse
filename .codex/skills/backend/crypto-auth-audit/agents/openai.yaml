@@ -1,0 +1,7 @@
+interface:
+  display_name: "Cryptography & Auth Audit"
+  short_description: "Audit cryptography, sessions, and token lifecycles"
+  default_prompt: "Use $crypto-auth-audit to audit this cryptographic or authentication flow for security defects."
+
+policy:
+  allow_implicit_invocation: false

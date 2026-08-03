@@ -1,0 +1,7 @@
+interface:
+  display_name: "Cache Architecture Audit"
+  short_description: "Audit cache correctness, invalidation, and limits"
+  default_prompt: "Use $cache-architect-audit to audit this backend caching design for correctness and operational risks."
+
+policy:
+  allow_implicit_invocation: false

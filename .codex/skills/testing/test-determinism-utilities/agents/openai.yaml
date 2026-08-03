@@ -1,0 +1,7 @@
+interface:
+  display_name: "Test Determinism Utilities"
+  short_description: "Control time, randomness, and flaky async behavior"
+  default_prompt: "Use $test-determinism-utilities to make this unit test deterministic without weakening its assertions."
+
+policy:
+  allow_implicit_invocation: false

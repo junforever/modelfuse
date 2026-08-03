@@ -1,0 +1,7 @@
+interface:
+  display_name: "Frontend Security Audit"
+  short_description: "Audit frontend data exposure and DOM security risks"
+  default_prompt: "Use $security-audit to audit this frontend change for data exposure and unsafe DOM behavior."
+
+policy:
+  allow_implicit_invocation: false
