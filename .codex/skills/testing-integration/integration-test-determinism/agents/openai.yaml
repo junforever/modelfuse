@@ -1,0 +1,4 @@
+interface:
+  display_name: "Integration Test Determinism"
+  short_description: "Stabilize flaky integration tests at the root cause"
+  default_prompt: "Use $integration-test-determinism to diagnose and remove nondeterminism from this flaky integration test."
