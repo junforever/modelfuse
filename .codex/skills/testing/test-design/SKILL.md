@@ -1,7 +1,10 @@
 ---
 name: test-design
 description: Foundational philosophy for writing high-value, non-redundant unit tests. Enforces observable behavior testing, intention-driven assertions, and the elimination of test bloat.
-compatibility: Universal (Vitest, Testing Library, Supertest, TypeScript).
+compatibility: >-
+  Unit tests only — Vitest 1+, Testing Library React 14+, Supertest 7+,
+  TypeScript 5+. For integration tests use `integration-test-design`.
+  For E2E tests use `e2e-test-design`.
 metadata:
   author: junforever
   version: '2.0'

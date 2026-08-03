@@ -59,7 +59,7 @@ Use integration coverage when one of these boundaries is essential:
 - Express routing, middleware, controller, service, and error translation must collaborate.
 - A repository or service must execute real SQL or transaction behavior.
 - Database constraints, locks, unique indexes, cascades, rollback, or recovery determine the result.
-- An HTTP/SSE protocol contract must be observed without a browser.
+- An HTTP/SSE endpoint's protocol contract must be observed directly—status, content type, event ordering, buffering, or disconnect cleanup—without a browser. Use integration. If the acceptance criterion requires the user to see rendered streamed content, progress, reconnection, or errors in a real browser, return it to `e2e-test-runner`.
 - A frontend component must collaborate with real hooks, context/providers, cache, or routing while network/browser boundaries remain controlled.
 - An adapter must translate a deterministic provider protocol into the public normalized contract.
 - A migration must produce and reverse a verifiable schema state.
@@ -80,7 +80,11 @@ Do not use integration coverage when a direct unit test proves the same rule fas
 🔍 REPOSITORY AND CONTRACT DISCOVERY
 Before changing tests:
 1. Read repository instructions, the relevant specification/acceptance criteria, and the implementation task.
-2. Inspect package scripts, lockfile, Vitest configuration, test setup, environment examples, Docker/Testcontainers usage, Liquibase configuration, and existing integration tests.
+2. Inspect package scripts, lockfile, Vitest configuration, test setup, environment examples, Docker/Testcontainers usage, Liquibase configuration, and existing integration tests. Determine the established directory and naming convention before adding files:
+   - If a separate Vitest project or configuration defines its own root or include pattern, follow it.
+   - If integration tests are co-located with unit tests, use the same adjacent `__tests__` directory and name files `*.integration.test.ts` or `*.integration.test.tsx`.
+   - If no convention exists, use `__tests__` adjacent to the module that owns the public entry point, apply the integration suffix, and record the chosen convention in **Assumptions & Gaps**.
+   - Report missing runner configuration only when existing commands cannot select integration tests independently and reliably. Do not invent a new configuration unless the task explicitly requires it.
 3. Trace the real boundary under test from its public entry point through collaborators and cleanup.
 4. Identify which collaborators must remain real and which external dependencies must be controlled.
 5. Reuse existing app factories, pools, migrations, fixtures, fake providers, QueryClient factories, and cleanup utilities.

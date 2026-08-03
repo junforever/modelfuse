@@ -31,6 +31,30 @@ Redirect the scenario when another layer proves it more directly:
 - Pixel appearance → visual regression.
 - Live production availability → production operations, never integration.
 
+#### Decision path for a hook/API/database flow
+
+A data-fetching hook whose application flow eventually reaches PostgreSQL can
+involve three test layers. Choose the lowest layer that proves the observable
+contract:
+
+1. **Pure transformation logic inside the hook**—mapping, filtering, or default
+   values—→ unit. Mock the fetch boundary and test the hook's output logic.
+2. **Hook + HTTP/EventSource boundary + QueryClient cache collaboration**—loading
+   and error states, cache invalidation, or optimistic updates—→ integration via
+   `frontend-integration-testing`. Run the hook and cache for real; control the
+   network boundary with a deterministic fake. This route does not exercise
+   PostgreSQL.
+3. **HTTP/SSE endpoint + backend collaborators + PostgreSQL**—persistence,
+   transactions, event ordering, or disconnect cleanup—→ integration. Keep the
+   relevant route, service, repository, and database behavior real; do not add a
+   browser.
+4. **Complete user journey**—the user submits, sees streamed output, reloads, and
+   observes the persisted result—→ E2E. Exercise the real browser and application
+   path, and assert persistence through the public user-visible surface.
+
+Do not promote a scenario unless the lower layer cannot prove its contract. Do
+not duplicate the same assertion at multiple layers.
+
 Record the decision in one sentence. Importance alone does not justify integration coverage.
 
 ### 2. State one boundary intention

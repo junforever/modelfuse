@@ -57,6 +57,7 @@ Use E2E only when the behavior requires a real browser plus at least one applica
 - Navigation or reload must preserve or recover server-owned state.
 - Multiple screens, browser sessions, or conversations must remain isolated.
 - Streaming, reconnection, redirects, downloads, uploads, or browser lifecycle behavior must be observed as the user experiences it.
+- Do not create an E2E test solely to verify SSE protocol mechanics such as HTTP status, content-type headers, event IDs, raw event ordering, buffering, or disconnect cleanup. Return those contracts to `integration-test-runner`. Use E2E only when the rendered streaming or reconnection experience in a real browser is the acceptance criterion.
 - A critical journey crosses enough layers that isolated tests cannot establish confidence.
 
 Do not create an E2E test when a unit or integration test can prove the same behavior more directly and reliably.
