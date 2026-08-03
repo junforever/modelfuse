@@ -62,7 +62,6 @@ Activate this skill when the test task involves:
 - Known Library IDs:
   - Vitest: /vitest-dev/vitest
   - Supertest: /ladjs/supertest
-  - Testing Library React: /testing-library/react-testing-library
   - Express: /expressjs/express
   - Node.js Modules: /nodejs/node
   - TypeScript: /microsoft/typescript
