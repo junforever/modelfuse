@@ -6,6 +6,7 @@ nickname_candidates = ["FBU-Tester"]
 
 # 🎯 Skill restriction
 skills = [
+    ".codex/skills/testing/test-design/SKILL.md",
     ".codex/skills/testing/frontend-advanced-unit/SKILL.md",
     ".codex/skills/testing/backend-isolation-testing/SKILL.md",
     ".codex/skills/testing/test-determinism-utilities/SKILL.md",

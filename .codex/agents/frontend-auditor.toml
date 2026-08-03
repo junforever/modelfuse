@@ -9,7 +9,7 @@ skills = [
     ".codex/skills/frontend/security-audit/SKILL.md",
     ".codex/skills/frontend/performance-audit/SKILL.md",
     ".codex/skills/frontend/a11y-compliance-audit/SKILL.md",
-    ".codex/skills/frontend/react-patterns-audi/SKILL.mdt"
+    ".codex/skills/frontend/react-patterns-audit/SKILL.md"
 ]
 
 developer_instructions = '''
