@@ -1,0 +1,7 @@
+interface:
+  display_name: "Performance Test Design"
+  short_description: "Design safe, focused performance tests"
+  default_prompt: "Use $performance-test-design to define the smallest valid performance test, its workload, metrics, thresholds, and correct test-layer ownership."
+
+policy:
+  allow_implicit_invocation: false
