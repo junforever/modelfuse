@@ -12,6 +12,33 @@ metadata:
 
 Apply this skill ONLY when testing service boundaries, dependency injection containers, external client stubs, `createApp()` factory integration, or complex middleware-handler interactions. For general endpoint security or basic input validation, use the core auditor rules instead.
 
+## 🚦 Escalation Gate — When Not to Use This Skill
+
+Before applying this skill, determine whether the behavior under test depends on
+real collaboration between application-owned components rather than the isolated
+behavior of one unit.
+
+Using `createApp()` with Supertest does not determine the test layer by itself.
+
+Stop immediately, do not create, modify, or execute unit tests, and return the
+task to `integration-test-runner` when any of these conditions applies:
+
+| Condition | Concrete signal |
+|---|---|
+| The test verifies that an HTTP payload reaches and persists in the database | The assertion requires a real PostgreSQL row rather than a service spy |
+| A real middleware chain such as validation, authentication, or error translation is part of the contract | Replacing a middleware participant with a mock would remove the behavior being verified |
+| Two or more application-owned components must remain real and collaborate | Mocking one of those components would destroy the intended contract |
+| The behavior depends on real PostgreSQL constraints, transactions, locks, or concurrency | A test double cannot reproduce the required database semantics |
+| The contract of an SSE endpoint is under test, including headers, event ordering, terminal closure, or disconnect cleanup | The test requires real HTTP streaming behavior rather than a simple isolated request/response |
+
+If none of these conditions applies, continue with this skill because the test is
+genuinely unit-level.
+
+> **Golden rule:** If the test loses its value when any collaborator inside the
+> intended contract is mocked, it belongs to integration testing. If the same
+> behavior remains meaningful with every collaborator mocked or stubbed, it
+> belongs to unit testing.
+
 ## 🎯 When to Activate
 
 Activate this skill when the test task involves:
