@@ -75,6 +75,36 @@ Prefer the repository's Playwright `webServer` configuration or established orch
 
 If an expected port is already occupied, identify the collision and stop. Never kill an arbitrary process, assume it is the intended service, or reuse it in CI. After the run, verify that processes started by the test command have stopped; do not terminate unrelated processes.
 
+## Database and Schema Preconditions
+
+An E2E journey may require a migrated database schema as an environment
+precondition. The E2E agent does not own migration authoring, schema validation,
+rollback verification, or migration repair.
+
+- Treat a usable migrated schema as an infrastructure precondition, equivalent
+  to the frontend and backend being deployed and ready.
+- Use only the repository's established environment mechanism to prepare or
+  verify that precondition, such as an existing project setup script, a
+  Playwright setup project or configured `globalSetup`, or an orchestration
+  service that applies migrations before application readiness.
+- Validate the target as non-production before invoking the established setup
+  mechanism. Do not substitute a different database, migration command, or
+  changelog.
+- Prefer application readiness or the established setup command's successful
+  exit status. Do not add direct schema queries merely to make an E2E fixture
+  verify migrations.
+- Classify a missing, unavailable, or unapplied schema caused by environment
+  setup as an **environment defect**.
+- Classify an established migration command that fails because of an invalid
+  changeset, checksum drift, or incompatible schema as a **migration defect** and
+  return it to `backend-builder` or the designated database owner with safe
+  evidence.
+- Do not author, edit, repair, validate, roll back, or reapply migrations from
+  E2E-owned code.
+- Never invoke the Liquibase CLI, open PostgreSQL connections, read connection
+  strings, import migration changelogs, or execute schema SQL directly from
+  Playwright tests, fixtures, setup projects, or teardown.
+
 ## Test Data Ownership
 
 Give each run a stable, collision-resistant identifier and include the worker identity where parallel mutation requires it.
