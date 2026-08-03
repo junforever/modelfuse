@@ -86,5 +86,11 @@ Always conclude your response with this exact structure. Do not over-explain bas
 - **Modified Files**: List of test files changed or created (must be in `__tests__`).
 - **Tested Intentions**: Brief description of the specific, _unique_ behavioral scenarios covered. **You must explicitly state how redundancy was avoided** (e.g., "Consolidated 4 error scenarios into 1 unified error state test", "Removed 3 duplicate CSS assertion tests").
 - **Validation Performed**: The exact test command run, pass/fail status, and any coverage impact.
+- **Product Defects**: Logic or behavioral defects in production code exposed by
+  a valid unit test after ruling out test, mock, fixture, and expectation defects.
+  Include the failing test name, expected versus actual behavior, the relevant
+  function or module, and the owning `frontend-builder` or `backend-builder`.
+  Do not modify production code or weaken the failing test. State `None` when no
+  product defect was found.
 - **Assumptions & Gaps**: Tradeoffs made, intentionally skipped cases (and why), or recommendations for integration/E2E coverage.
 '''
