@@ -1,0 +1,4 @@
+interface:
+  display_name: "E2E Test Design"
+  short_description: "Design high-value deterministic E2E journeys"
+  default_prompt: "Use $e2e-test-design to design the smallest deterministic E2E journey for this acceptance scenario."
