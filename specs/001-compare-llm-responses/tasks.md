@@ -17,9 +17,9 @@ objetivo, archivos principales y prueba mínima.
 - **[Story]**: `US1`, `US2`, `US3` o `US4`; solo en fases de historia.
 - **[Domain]**: `FE`, `BE`, `UI`, `DB`, `UNIT`, `INTEGRATION`, `E2E`, `PERF`,
   `DOC`, `UX` o `SHARED`.
-- `UNIT`, `INTEGRATION` y `E2E` pertenecen exclusivamente a
-  `unit-test-runner`, `integration-test-runner` y `e2e-test-runner`. `PERF`
-  requiere un owner especializado independiente.
+- `UNIT`, `INTEGRATION`, `E2E` y `PERF` pertenecen exclusivamente a
+  `unit-test-runner`, `integration-test-runner`, `e2e-test-runner` y
+  `performance-test-runner`, respectivamente.
 - Builders no crean, modifican ni ejecutan pruebas; auditores permanecen
   read-only. La prueba mínima de una tarea de implementación es un criterio de
   aceptación y no transfiere ownership al builder.
@@ -232,7 +232,7 @@ el recurso sin contexto previo y conserva conversaciones existentes.
 - [ ] T099 [BE] Añadir logs Pino seguros de IDs, busy, replay, slot, duración, SSE y recovery en `apps/backend/src/middleware/logger/requestContext.ts`, `TurnOrchestrator.ts` y `turnEventsController.ts` (depende de T098); prueba mínima: unit T098.
 - [ ] T100 [P] [INTEGRATION] Crear fixture ≤5 casos y runner de consolidación ≥90% en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json` y `apps/backend/src/acceptance/consolidationEvaluation.ts`; tipo: integration acceptance SC-005 con providers fake.
 - [ ] T101 [P] [INTEGRATION] Implementar estados terminales ≤60 s con providers fake en `apps/backend/src/acceptance/terminalStates.acceptance.test.ts`; tipo: integration acceptance SC-001.
-- [ ] T102 [P] [PERF] Implementar latencia `202`/primer historial p95 <1 s en `apps/backend/src/acceptance/latency.acceptance.test.ts` (owner: performance-validation-owner; no existe subagente configurado); tipo: performance acceptance SC-010.
+- [ ] T102 [P] [PERF] Implementar latencia `202`/primer historial p95 <1 s en `apps/backend/src/acceptance/latency.acceptance.test.ts` (owner: `performance-test-runner`); tipo: performance acceptance SC-010.
 - [ ] T103 [P] [UX] Diseñar tareas, escenarios, criterios observables y escalas subjetivas en `specs/001-compare-llm-responses/usability/sc-003-protocol.md`; prueba mínima: revisión Product/UX de cobertura SC-003/SC-004.
 - [ ] T104 [UX] Ejecutar participantes y registrar numerador, denominador, porcentaje y pass/fail por SC en `specs/001-compare-llm-responses/usability/sc-004-results.md` (depende de T103); tipo: aceptación Product/UX, umbral 90% separado.
 - [ ] T105 [INTEGRATION] Ejecutar migrate-from-zero, Liquibase validate y rollback con `docker-compose.yml` y `db/changelogs/db.changelog-master.xml`; tipo: integration DB, sin corregir fallos dentro de esta tarea.
@@ -327,7 +327,7 @@ Flow:  T094 → T095
 | UNIT | `unit-test-runner` | isolated unit and contract-unit tests |
 | INTEGRATION | `integration-test-runner` | browserless real-component boundaries |
 | E2E | `e2e-test-runner` | Playwright browser journeys |
-| PERF | `performance-validation-owner` | latency/distribution acceptance; no configured subagent yet |
+| PERF | `performance-test-runner` | latency/distribution acceptance in controlled non-production environments |
 | UX | Product/UX | participant protocol/evidence |
 | DOC | integration owner | env samples/quickstart validation |
 | SHARED | named owner | cross-boundary integration/checks |

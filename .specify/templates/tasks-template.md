@@ -20,9 +20,10 @@ critical cross-product journeys.
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
 - **[Domain]**: Primary owner: `FE`, `BE`, `UI`, `DB`, `UNIT`, `INTEGRATION`,
   `E2E`, `PERF`, or `SHARED`
-- `UNIT`, `INTEGRATION`, and `E2E` belong exclusively to `unit-test-runner`,
-  `integration-test-runner`, and `e2e-test-runner`. `PERF` or another testing
-  discipline must name its own specialized owner.
+- `UNIT`, `INTEGRATION`, `E2E`, and `PERF` belong exclusively to
+  `unit-test-runner`, `integration-test-runner`, `e2e-test-runner`, and
+  `performance-test-runner`. Any other testing discipline must name its own
+  specialized owner.
 - Builders do not author, modify, or execute tests. Auditors remain read-only.
 - Include exact file paths in descriptions
 - Split cross-domain work into independently reviewable tasks and add one explicit

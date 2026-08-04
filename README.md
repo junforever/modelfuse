@@ -182,8 +182,12 @@ Toda integración con modelos externos debe diseñarse para ser:
 - `unit-test-runner` posee pruebas unitarias aisladas y contract-unit.
 - `integration-test-runner` posee pruebas sin navegador entre componentes reales.
 - `e2e-test-runner` posee journeys Playwright en navegador real.
-- Rendimiento, seguridad, visual u otra disciplina fuera de esos tres niveles
-  requiere un owner especializado explícito.
+- `performance-test-runner` posee pruebas de aceptación, regresión, carga,
+  stress, spike y soak con contratos medibles en entornos no productivos;
+  reutiliza el tooling existente, usa Node.js para mediciones acotadas y k6
+  cuando la carga concurrente o sostenida lo requiere.
+- Seguridad, visual u otra disciplina restante requiere un owner especializado
+  explícito.
 
 ---
 

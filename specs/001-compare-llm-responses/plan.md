@@ -74,8 +74,9 @@ feature queda lista para implementación.
 - [x] Las tareas unitarias, de integración y E2E se asignan exclusivamente a
       `unit-test-runner`, `integration-test-runner` y `e2e-test-runner`; builders
       implementan código de producto y auditores permanecen read-only.
-- [x] La validación de rendimiento SC-010 queda separada con owner `PERF`; no se
-      transfiere a builders, auditores ni a un runner fuera de su alcance.
+- [x] La validación de rendimiento SC-010 se asigna exclusivamente a
+      `performance-test-runner`; no se transfiere a builders, auditores ni a un
+      runner fuera de su alcance.
 - [x] No existen excepciones constitucionales.
 
 **Post-design re-check**: **PASS**. Research, modelo, contratos y quickstart
@@ -342,9 +343,9 @@ Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La val
   adapters con fakes y frontend con hooks/providers/cache reales.
 - `e2e-test-runner` crea, modifica y ejecuta exclusivamente journeys Playwright
   observados mediante un navegador real.
-- El owner `PERF` conserva validaciones de latencia/distribución que los tres
-  runners anteriores excluyen. Para T102 se requiere un responsable especializado;
-  todavía no existe un subagente configurado para ese dominio.
+- `performance-test-runner` crea, modifica y ejecuta exclusivamente validaciones
+  de latencia/distribución que los tres runners anteriores excluyen, usando
+  medición Node.js acotada o k6 cuando la carga concurrente/sostenida lo exige.
 - Builders modifican solo código de producto y seams de testabilidad; no crean,
   modifican ni ejecutan pruebas. Auditores permanecen read-only. La prueba mínima
   indicada en una tarea de implementación es su criterio de aceptación y no

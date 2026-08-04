@@ -1,29 +1,26 @@
 <!--
 Sync Impact Report
-- Version: 1.0.0 → 1.1.0
-- Modified principles:
-  - IX. AI Agents Work Within Specialized Boundaries → explicit exclusive
-    ownership for unit, integration, E2E, and other specialized test work
-  - Development Workflow and Quality Gates → test tasks require one named test
-    owner and remain separate from builders and auditors
+- Version: 1.1.0 → 1.1.0 (no semantic change)
+- Modified principles: none; Principle IX operational follow-up completed
 - Added sections: none
 - Removed sections: none
 - Templates and guidance:
-  - ✅ .specify/templates/plan-template.md — exact test ownership gate added
+  - ✅ .specify/templates/plan-template.md — performance owner mapped explicitly
   - ✅ .specify/templates/spec-template.md — reviewed; no change required
-  - ✅ .specify/templates/tasks-template.md — UNIT/INTEGRATION/E2E/PERF ownership added
+  - ✅ .specify/templates/tasks-template.md — PERF mapped to performance-test-runner
   - ✅ .specify/templates/commands/*.md — directory absent; no command templates to update
   - ✅ README.md — specialized test ownership documented
   - ✅ AGENTS.md — reviewed; no change required
   - ✅ .codex/agents/frontend-builder.toml and backend-builder.toml — test
     authoring/execution excluded explicitly
+  - ✅ .codex/agents/performance-test-runner.toml and
+    .codex/skills/testing-performance/ — specialized performance owner configured
   - ✅ specs/001-compare-llm-responses/plan.md and tasks.md — migrated to exact
     test owners
-- Migration plan: replace generic TEST ownership with UNIT, INTEGRATION, E2E,
-  or another named specialized test owner; builders retain production-code work
-  and auditors remain read-only.
-- Follow-up TODOs:
-  - T102 has a named PERF owner but no configured performance-test subagent.
+- Migration plan: replace the provisional PERF owner with
+  performance-test-runner; builders retain production-code work and auditors
+  remain read-only.
+- Follow-up TODOs: none
 -->
 
 # ModelFuse Constitution
