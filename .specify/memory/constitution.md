@@ -1,25 +1,24 @@
 <!--
 Sync Impact Report
-- Version: 1.1.0 → 1.1.0 (no semantic change)
-- Modified principles: none; Principle IX operational follow-up completed
+- Version: 1.1.0 → 1.1.1 (clarifies informational cost metrics)
+- Modified principles:
+  - IV. PostgreSQL Is the Conversational Source of Truth — context selection now
+    explicitly minimizes irrelevant provider usage; optional cost metrics remain
+    informational and cannot control v1 behavior
 - Added sections: none
 - Removed sections: none
 - Templates and guidance:
-  - ✅ .specify/templates/plan-template.md — performance owner mapped explicitly
+  - ✅ .specify/templates/plan-template.md — reviewed; no change required
   - ✅ .specify/templates/spec-template.md — reviewed; no change required
-  - ✅ .specify/templates/tasks-template.md — PERF mapped to performance-test-runner
+  - ✅ .specify/templates/tasks-template.md — reviewed; no change required
   - ✅ .specify/templates/commands/*.md — directory absent; no command templates to update
-  - ✅ README.md — specialized test ownership documented
+  - ✅ README.md — informational future cost/token metrics remain consistent
   - ✅ AGENTS.md — reviewed; no change required
-  - ✅ .codex/agents/frontend-builder.toml and backend-builder.toml — test
-    authoring/execution excluded explicitly
-  - ✅ .codex/agents/performance-test-runner.toml and
-    .codex/skills/testing-performance/ — specialized performance owner configured
-  - ✅ specs/001-compare-llm-responses/plan.md and tasks.md — migrated to exact
-    test owners
-- Migration plan: replace the provisional PERF owner with
-  performance-test-runner; builders retain production-code work and auditors
-  remain read-only.
+  - ✅ specs/001-compare-llm-responses/spec.md, plan.md, research.md,
+    data-model.md, quickstart.md, tasks.md, and contracts/ — already distinguish
+    informational metrics from product budgets, billing, and persistence
+- Migration plan: no runtime or data migration; v1 implementations must not use
+  optional cost metrics to control context or product behavior.
 - Follow-up TODOs: none
 -->
 
@@ -74,8 +73,12 @@ truth. Each comparison model MUST retain only the user's prompts and that model'
 own prior responses. The integrator MUST retain its own history of prompts and
 consolidated responses and receive the current turn's new normalized model responses;
 it MUST NOT receive the full histories of the three comparison models. Context
-construction MUST account for provider token limits and cost. When a full context
-no longer fits, the design MUST apply an explicit bounded window, summary, or
+construction MUST avoid unnecessary provider usage by enforcing those isolation
+rules, selecting only model-relevant conversational history, and respecting
+provider token limits. Optional token and cost metrics are informational extension
+fields only; they MUST NOT control context selection, truncation, request
+admission, retry, or other v1 product behavior. When a full relevant context no
+longer fits, the design MUST apply an explicit bounded window, summary, or
 compression strategy and MUST preserve enough persisted information to explain
 what was included. Context MUST NOT be discarded silently.
 
@@ -199,4 +202,4 @@ merge unless approved and recorded as a temporary exception. `README.md`,
 `AGENTS.md`, the Spec Kit templates, and specialized agent instructions provide
 operational guidance but MUST remain consistent with this constitution.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-08-03
+**Version**: 1.1.1 | **Ratified**: 2026-07-24 | **Last Amended**: 2026-08-04
