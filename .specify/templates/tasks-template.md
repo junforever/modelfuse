@@ -29,6 +29,10 @@ critical cross-product journeys.
   specialized owner.
 - Builders do not author, modify, or execute tests. Auditors remain read-only;
   blocking findings create a separate builder task followed by re-audit.
+- Every production task with an automated minimum-test criterion MUST reference
+  one or more explicit test task IDs owned by `UNIT`, `INTEGRATION`, `E2E`,
+  `PERF`, or another specialized test domain; a test path or description inside
+  a builder task is not a test task and does not transfer ownership.
 - Include exact file paths in descriptions
 - Split cross-domain work into independently reviewable tasks and add one explicit
   integration task. A `SHARED` task must name its responsible owner.
