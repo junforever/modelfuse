@@ -18,13 +18,17 @@ critical cross-product journeys.
 
 - **[P]**: Can run in parallel (different files, no dependencies)
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
-- **[Domain]**: Primary owner: `FE`, `BE`, `UI`, `DB`, `UNIT`, `INTEGRATION`,
-  `E2E`, `PERF`, or `SHARED`
+- **[Domain]**: Primary owner: `FE`, `BE`, `UI`, `DB`, `FE-AUDIT`, `BE-AUDIT`,
+  `UNIT`, `INTEGRATION`, `E2E`, `PERF`, or `SHARED`
+- `FE-AUDIT` and `BE-AUDIT` belong exclusively to `frontend-auditor` and
+  `backend-auditor`; they emit an agent report and never modify files or execute
+  tests.
 - `UNIT`, `INTEGRATION`, `E2E`, and `PERF` belong exclusively to
   `unit-test-runner`, `integration-test-runner`, `e2e-test-runner`, and
   `performance-test-runner`. Any other testing discipline must name its own
   specialized owner.
-- Builders do not author, modify, or execute tests. Auditors remain read-only.
+- Builders do not author, modify, or execute tests. Auditors remain read-only;
+  blocking findings create a separate builder task followed by re-audit.
 - Include exact file paths in descriptions
 - Split cross-domain work into independently reviewable tasks and add one explicit
   integration task. A `SHARED` task must name its responsible owner.
@@ -157,7 +161,19 @@ Examples of foundational tasks (adjust based on your project):
 
 ---
 
-## Phase N: Polish & Cross-Cutting Concerns
+## Phase N: Read-Only Constitutional Audits
+
+**Purpose**: Review all completed production changes before final validation.
+
+- [ ] TXXX [P] [BE-AUDIT] Review `apps/backend/` and `db/changelogs/` against spec, plan, contracts, and applicable constitution principles (owner: `backend-auditor`); output an agent report with pass/fail, severity, file, and line; do not modify files or execute tests
+- [ ] TXXX [P] [FE-AUDIT] Review `apps/frontend/` and `packages/ui/` against spec, plan, contracts, and applicable constitution principles (owner: `frontend-auditor`); output an agent report with pass/fail, severity, file, and line; do not modify files or execute tests
+
+**Audit gate**: Blocking findings create focused builder tasks and require
+re-audit before final validation continues.
+
+---
+
+## Phase N+1: Polish & Cross-Cutting Concerns
 
 **Purpose**: Improvements that affect multiple user stories
 
@@ -179,7 +195,8 @@ Examples of foundational tasks (adjust based on your project):
 - **User Stories (Phase 3+)**: All depend on Foundational phase completion
   - User stories can then proceed in parallel (if staffed)
   - Or sequentially in priority order (P1 → P2 → P3)
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
+- **Audits**: Depend on all production work in their respective domain
+- **Polish (Final Phase)**: Depends on completed audits without blocking findings
 
 ### User Story Dependencies
 
@@ -195,6 +212,8 @@ Examples of foundational tasks (adjust based on your project):
 - Services before endpoints
 - Core implementation before integration
 - Story complete before moving to next priority
+- Domain production complete before its read-only audit; blocking findings before
+  final validation
 
 ### Parallel Opportunities
 
@@ -204,6 +223,8 @@ Examples of foundational tasks (adjust based on your project):
 - All tests for a user story marked [P] can run in parallel
 - Models within a story marked [P] can run in parallel
 - Different user stories can be worked on in parallel by different team members
+- Backend and frontend audits can run in parallel after their production
+  dependencies complete
 
 ---
 
@@ -260,6 +281,8 @@ With multiple developers:
 - [Domain] names the specialized owner and review boundary
 - Each user story should be independently completable and testable
 - Verify tests fail before implementing
+- Auditors emit reports only; fixes belong to new builder tasks and require
+  re-audit
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence

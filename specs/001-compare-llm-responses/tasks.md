@@ -15,14 +15,19 @@ objetivo, archivos principales y prueba mínima.
 
 - **[P]**: ejecutable en paralelo tras sus dependencias y sin conflicto de archivo.
 - **[Story]**: `US1`, `US2`, `US3` o `US4`; solo en fases de historia.
-- **[Domain]**: `FE`, `BE`, `UI`, `DB`, `UNIT`, `INTEGRATION`, `E2E`, `PERF`,
-  `DOC`, `UX` o `SHARED`.
+- **[Domain]**: `FE`, `BE`, `UI`, `DB`, `FE-AUDIT`, `BE-AUDIT`, `UNIT`,
+  `INTEGRATION`, `E2E`, `PERF`, `DOC`, `UX` o `SHARED`.
+- `FE-AUDIT` y `BE-AUDIT` pertenecen exclusivamente a `frontend-auditor` y
+  `backend-auditor`; producen un reporte en la salida del agente, no modifican
+  archivos ni ejecutan pruebas.
 - `UNIT`, `INTEGRATION`, `E2E` y `PERF` pertenecen exclusivamente a
   `unit-test-runner`, `integration-test-runner`, `e2e-test-runner` y
   `performance-test-runner`, respectivamente.
 - Builders no crean, modifican ni ejecutan pruebas; auditores permanecen
   read-only. La prueba mínima de una tarea de implementación es un criterio de
   aceptación y no transfiere ownership al builder.
+- Un hallazgo bloqueante de auditoría crea una tarea nueva para el builder
+  correspondiente y exige una nueva revisión del mismo auditor.
 - Si una validación falla, se crea una tarea concreta para su causa; la tarea de
   validación no corrige código.
 
@@ -230,17 +235,24 @@ el recurso sin contexto previo y conserva conversaciones existentes.
 - [ ] T097 [BE] Implementar `recoverInterruptedTurns()` antes de listen en `apps/backend/src/services/conversations/recoverInterruptedTurns.ts` y `apps/backend/src/server.ts` (depende de T096); prueba mínima: integration T096 al 100% del fixture.
 - [ ] T098 [P] [UNIT] Probar ausencia de prompts, respuestas, payloads SSE, mediciones, límites, headers y secretos en `apps/backend/src/services/conversations/__tests__/observabilitySafety.test.ts`; tipo: unit, debe fallar antes de T099.
 - [ ] T099 [BE] Añadir logs Pino seguros de IDs, busy, replay, slot, duración, SSE y recovery en `apps/backend/src/middleware/logger/requestContext.ts`, `TurnOrchestrator.ts` y `turnEventsController.ts` (depende de T098); prueba mínima: unit T098.
-- [ ] T100 [P] [INTEGRATION] Crear fixture ≤5 casos y runner de consolidación ≥90% en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json` y `apps/backend/src/acceptance/consolidationEvaluation.ts`; tipo: integration acceptance SC-005 con providers fake.
-- [ ] T101 [P] [INTEGRATION] Implementar estados terminales ≤60 s con providers fake en `apps/backend/src/acceptance/terminalStates.acceptance.test.ts`; tipo: integration acceptance SC-001.
-- [ ] T102 [P] [PERF] Implementar latencia `202`/primer historial p95 <1 s en `apps/backend/src/acceptance/latency.acceptance.test.ts` (owner: `performance-test-runner`); tipo: performance acceptance SC-010.
-- [ ] T103 [P] [UX] Diseñar tareas, escenarios, criterios observables y escalas subjetivas en `specs/001-compare-llm-responses/usability/sc-003-protocol.md`; prueba mínima: revisión Product/UX de cobertura SC-003/SC-004.
-- [ ] T104 [UX] Ejecutar participantes y registrar numerador, denominador, porcentaje y pass/fail por SC en `specs/001-compare-llm-responses/usability/sc-004-results.md` (depende de T103); tipo: aceptación Product/UX, umbral 90% separado.
-- [ ] T105 [INTEGRATION] Ejecutar migrate-from-zero, Liquibase validate y rollback con `docker-compose.yml` y `db/changelogs/db.changelog-master.xml`; tipo: integration DB, sin corregir fallos dentro de esta tarea.
-- [ ] T106 [P] [UNIT] Ejecutar las suites unitarias backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json`; registrar fallos como tareas concretas.
-- [ ] T107 [P] [INTEGRATION] Ejecutar las suites de integración backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json`; registrar fallos como tareas concretas.
-- [ ] T108 [E2E] Ejecutar Playwright con fakes desde `apps/frontend/playwright.config.ts` (depende de historias implementadas); tipo: E2E, registrar fallos como tareas concretas.
-- [ ] T109 [SHARED] Ejecutar `pnpm typecheck`, `pnpm lint` y `pnpm build` desde `package.json` (owner: integration-owner); prueba mínima: los tres comandos exitosos, sin corregir hallazgos aquí.
-- [ ] T110 [DOC] Ejecutar todos los smoke flows de `specs/001-compare-llm-responses/quickstart.md` (depende de T100–T109); prueba mínima: aceptación manual documentada, discrepancias como tareas concretas.
+- [ ] T100 [P] [BE-AUDIT] Auditar read-only `apps/backend/` y `db/changelogs/` contra spec, plan, contratos y principios I–IV, VI–IX (owner: `backend-auditor`; depende de T054, T073, T086, T097 y T099); inputs: archivos de producción de esas cadenas; output: reporte del agente con pass/fail, severidad, archivo y línea, sin modificar archivos ni ejecutar pruebas.
+- [ ] T101 [P] [FE-AUDIT] Auditar read-only `apps/frontend/` y `packages/ui/` contra spec, plan, contratos y principios I, V, VII–IX (owner: `frontend-auditor`; depende de T063, T076, T091 y T095); inputs: archivos de producción de esas cadenas; output: reporte del agente con pass/fail, severidad, archivo y línea, sin modificar archivos ni ejecutar pruebas.
+
+**Audit gate**: un hallazgo bloqueante de T100/T101 crea una tarea builder
+concreta y exige reauditoría; no avanzan los quality gates dependientes mientras
+quede un hallazgo bloqueante abierto.
+
+- [ ] T102 [P] [INTEGRATION] Crear fixture ≤5 casos y runner de consolidación ≥90% en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json` y `apps/backend/src/acceptance/consolidationEvaluation.ts` (depende de T100); tipo: integration acceptance SC-005 con providers fake.
+- [ ] T103 [P] [INTEGRATION] Implementar estados terminales ≤60 s con providers fake en `apps/backend/src/acceptance/terminalStates.acceptance.test.ts` (depende de T100); tipo: integration acceptance SC-001.
+- [ ] T104 [P] [PERF] Implementar latencia `202`/primer historial p95 <1 s en `apps/backend/src/acceptance/latency.acceptance.test.ts` (owner: `performance-test-runner`; depende de T100); tipo: performance acceptance SC-010.
+- [ ] T105 [P] [UX] Diseñar tareas, escenarios, criterios observables y escalas subjetivas en `specs/001-compare-llm-responses/usability/sc-003-protocol.md` (depende de T101); prueba mínima: revisión Product/UX de cobertura SC-003/SC-004.
+- [ ] T106 [UX] Ejecutar participantes y registrar numerador, denominador, porcentaje y pass/fail por SC en `specs/001-compare-llm-responses/usability/sc-004-results.md` (depende de T105); tipo: aceptación Product/UX, umbral 90% separado.
+- [ ] T107 [INTEGRATION] Ejecutar migrate-from-zero, Liquibase validate y rollback con `docker-compose.yml` y `db/changelogs/db.changelog-master.xml` (depende de T100); tipo: integration DB, sin corregir fallos dentro de esta tarea.
+- [ ] T108 [P] [UNIT] Ejecutar las suites unitarias backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T100, T101); registrar fallos como tareas concretas.
+- [ ] T109 [P] [INTEGRATION] Ejecutar las suites de integración backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T100, T101); registrar fallos como tareas concretas.
+- [ ] T110 [E2E] Ejecutar Playwright con fakes desde `apps/frontend/playwright.config.ts` (depende de T100, T101 y de las historias implementadas); tipo: E2E, registrar fallos como tareas concretas.
+- [ ] T111 [SHARED] Ejecutar `pnpm typecheck`, `pnpm lint` y `pnpm build` desde `package.json` (owner: integration-owner; depende de T100, T101); prueba mínima: los tres comandos exitosos, sin corregir hallazgos aquí.
+- [ ] T112 [DOC] Ejecutar todos los smoke flows de `specs/001-compare-llm-responses/quickstart.md` (depende de T102–T111); prueba mínima: aceptación manual documentada, discrepancias como tareas concretas.
 
 ---
 
@@ -266,7 +278,7 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
 
 ### Critical chains
 
-- DB: `T007 → T008/T009 → T010 → T105`.
+- DB: `T007 → T008/T009 → T010 → T100 → T107`.
 - Backend base: `T011 → T012 → T022`; `T019 → T020`.
 - Providers: `T028–T032 → T043–T046 → T047 → T050`.
 - SSE: `T026 → T027`; `T035 → T049 → T053/T054 → T056 → T063`.
@@ -274,7 +286,10 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
 - US2: `T065 → T072/T073`; `T066 → T074/T076`.
 - US3: `T077–T081 → T084–T091`.
 - US4: `T092/T093 → T094 → T095`.
-- Recovery: `T096 → T097`; UX: `T103 → T104`.
+- Recovery: `T096 → T097 → T100`; frontend: `T095 → T101`;
+  UX: `T101 → T105 → T106`.
+- Audits: `T054/T073/T086/T097/T099 → T100` y
+  `T063/T076/T091/T095 → T101`; ambos bloquean T108–T112.
 
 ## Parallel opportunities
 
@@ -283,7 +298,8 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
 - US1: T028–T040; cuatro adapters T043–T046; componentes T057–T062.
 - US2: T064–T068; backend context y frontend components en archivos separados.
 - US3: T077–T083; T087–T090.
-- Final: T096, T098, T100–T103, T105–T107.
+- Final: T096, T098, T100–T105, T107–T109; T100 y T101 pueden ejecutarse en
+  paralelo después de sus dependencias de producción.
 
 ## Parallel examples
 
@@ -324,6 +340,8 @@ Flow:  T094 → T095
 | UI | `frontend-builder` | `packages/ui` primitives only |
 | BE | `backend-builder` | API, orchestration, SSE and LLM adapters |
 | DB | `backend-builder` | Liquibase/schema validation |
+| FE-AUDIT | `frontend-auditor` | read-only frontend/UI boundary review and agent report |
+| BE-AUDIT | `backend-auditor` | read-only backend/DB boundary review and agent report |
 | UNIT | `unit-test-runner` | isolated unit and contract-unit tests |
 | INTEGRATION | `integration-test-runner` | browserless real-component boundaries |
 | E2E | `e2e-test-runner` | Playwright browser journeys |
@@ -332,7 +350,8 @@ Flow:  T094 → T095
 | DOC | integration owner | env samples/quickstart validation |
 | SHARED | named owner | cross-boundary integration/checks |
 
-Builders do not create, modify, or execute tests. Auditors remain read-only.
+Builders do not create, modify, or execute tests. Auditors remain read-only,
+do not execute tests, and report findings without changing repository files.
 
 ## Independent test criteria
 
@@ -359,7 +378,7 @@ Builders do not create, modify, or execute tests. Auditors remain read-only.
 2. US2: multiturno con contexto aislado/protegido.
 3. US3: recuperación y gestión del historial.
 4. US4: nuevo contexto vacío local.
-5. Phase 7: recovery, aceptación automatizada y Product/UX.
+5. Phase 7: recovery, auditorías read-only, aceptación automatizada y Product/UX.
 
 ## Notes
 
@@ -372,3 +391,5 @@ Builders do not create, modify, or execute tests. Auditors remain read-only.
 - Medición de contexto es exacta o `upper_bound` demostrable, efímera y técnica;
   no crea presupuesto ni contabilidad por modelo.
 - No se crean ranking, dashboards, métricas persistentes o políticas nuevas.
+- Un hallazgo de auditoría nunca se corrige dentro de la tarea de auditoría;
+  genera trabajo builder separado y una nueva revisión.
