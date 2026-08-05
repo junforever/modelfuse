@@ -71,11 +71,9 @@ colas ni infraestructura genérica de idempotencia.
 
 - [ ] T014 [P] [UNIT] Probar credenciales requeridas, timeouts, ventana, ratio `(0,1]`, límites por deployment y sidebar en `apps/backend/src/infrastructure/config/__tests__/env.test.ts`; tipo: unit, debe fallar antes de T015.
 - [ ] T015 [BE] Implementar configuración Zod segura en `apps/backend/src/infrastructure/config/env.ts` (depende de T014); prueba mínima: unit T014.
-- [ ] T016 [P] [BE] Definir contratos REST/SSE de conversación, turno, slots, eventos y errores, incluyendo `eventSequence` entero por `turnId`, `updatedAt`, `attemptNo` cuando aplique y el último sequence representado por el snapshot, en `apps/backend/src/types/conversations.ts` y `apps/backend/src/types/sse.ts`; prueba mínima: typecheck y contract tests de T041.
-- [ ] T017 [P] [BE] Definir `LlmProvider`, `InputTokenMeasurement`, resultado normalizado, `provider_transient_error` y la única función canónica `isRecoverableLlmError(code)` en `apps/backend/src/types/llm.ts` y `apps/backend/src/services/llm/llmErrors.ts`; los adapters no reciben libertad para fijar `recoverable`; prueba mínima: typecheck y contract tests T035–T038.
+- [ ] T016 [P] [BE] Definir contratos REST/SSE de conversación, turno, slots, eventos y errores, incluyendo `eventSequence` entero por `turnId`, `updatedAt`, `attemptNo` cuando aplique y el último sequence representado por el snapshot, en `apps/backend/src/types/conversations.ts` y `apps/backend/src/types/sse.ts`; prueba mínima: typecheck, con cobertura de integración posterior en T041.
 - [ ] T018 [P] [UNIT] Probar UUIDs, prompt, IDs, slots y cursores inválidos, además de Rename vacío, 80/81 grapheme clusters después de `trim`, emoji simple, emoji ZWJ, letras con marcas combinadas, mezcla ASCII/Unicode, comillas, `<`, `>` y HTML literal conservados sin normalización adicional en `apps/backend/src/middleware/validation/__tests__/conversationSchemas.test.ts`; tipo: unit, debe fallar antes de T019.
 - [ ] T019 [BE] Implementar conteo/truncado con `Intl.Segmenter` y `granularity: "grapheme"` en `apps/backend/src/utils/titleGraphemes.ts`, integrarlo en los schemas Zod y mantener el middleware de error saneado en `apps/backend/src/middleware/validation/conversationSchemas.ts`, `validateRequest.ts` y `apps/backend/src/types/apiError.ts` (depende de T018); prueba mínima: unit T018.
-- [ ] T020 [P] [BE] Crear helper transaccional PostgreSQL en `apps/backend/src/infrastructure/postgres/transaction.ts`; prueba mínima: integration de commit/rollback en T040.
 - [ ] T021 [P] [UNIT] Probar el mapper PostgreSQL→contrato sin secretos ni mediciones en `apps/backend/src/infrastructure/postgres/mappers/__tests__/conversationMapper.test.ts`; tipo: unit, debe fallar antes de T022.
 - [ ] T022 [P] [BE] Crear mapper PostgreSQL→contrato sin secretos ni mediciones en `apps/backend/src/infrastructure/postgres/mappers/conversationMapper.ts` (depende de T021); prueba mínima: unit T021.
 - [ ] T023 [P] [UNIT] Probar cálculo de turno y busy desde cuatro slots en `apps/backend/src/services/conversations/__tests__/turnState.test.ts`; tipo: unit, debe fallar antes de T024.
@@ -130,12 +128,14 @@ Continue-without irreversible sin fallback de transporte.
 
 ### Backend implementation
 
-- [ ] T052 [P] [US1] [BE] Implementar mediante `transaction.ts` create/replay atómico, persistencia literal del título ya derivado y cuatro slots en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts` (depende de T020, T040); prueba mínima: integration T040.
+- [ ] T017 [P] [US1] [BE] Definir `LlmProvider`, `InputTokenMeasurement`, resultado normalizado, `provider_transient_error` y la única función canónica `isRecoverableLlmError(code)` en `apps/backend/src/types/llm.ts` y `apps/backend/src/services/llm/llmErrors.ts`; los adapters no reciben libertad para fijar `recoverable` (depende de T035–T038); prueba mínima: typecheck y contract T035–T038.
+- [ ] T020 [P] [US1] [BE] Crear helper transaccional PostgreSQL en `apps/backend/src/infrastructure/postgres/transaction.ts` (depende de T040); prueba mínima: integration T040.
+- [ ] T052 [P] [US1] [BE] Implementar mediante `transaction.ts` create/replay atómico, persistencia literal del título ya derivado y cuatro slots en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts` (depende de T020); prueba mínima: integration T040.
 - [ ] T053 [P] [US1] [BE] Implementar transiciones CAS, `attempt_no`, recálculo y busy derivado en `apps/backend/src/infrastructure/postgres/repositories/turnRepository.ts`; prueba mínima: integration T042.
-- [ ] T054 [P] [US1] [BE] Implementar `OpenAiProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/OpenAiProvider.ts`; prueba mínima: contract T034/T035.
-- [ ] T055 [P] [US1] [BE] Implementar `GoogleProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/GoogleProvider.ts`; prueba mínima: contract T034/T036.
-- [ ] T056 [P] [US1] [BE] Implementar `MiniMaxProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/MiniMaxProvider.ts`; prueba mínima: contract T034/T037.
-- [ ] T057 [P] [US1] [BE] Implementar `QwenProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/QwenProvider.ts`; prueba mínima: contract T034/T038.
+- [ ] T054 [P] [US1] [BE] Implementar `OpenAiProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/OpenAiProvider.ts` (depende de T017); prueba mínima: contract T034/T035.
+- [ ] T055 [P] [US1] [BE] Implementar `GoogleProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/GoogleProvider.ts` (depende de T017); prueba mínima: contract T034/T036.
+- [ ] T056 [P] [US1] [BE] Implementar `MiniMaxProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/MiniMaxProvider.ts` (depende de T017); prueba mínima: contract T034/T037.
+- [ ] T057 [P] [US1] [BE] Implementar `QwenProvider` y medición exacta/cota demostrable en `apps/backend/src/infrastructure/llm/providers/QwenProvider.ts` (depende de T017); prueba mínima: contract T034/T038.
 - [ ] T058 [US1] [BE] Construir registro literal de cuatro adapters en `apps/backend/src/infrastructure/llm/providerRegistry.ts` (depende de T054–T057, T047); prueba mínima: unit T047.
 - [ ] T059 [P] [US1] [BE] Implementar protección técnica pura: umbral, compactación y `INVALID_PROMPT_SIZE` en `apps/backend/src/services/conversations/contextProtection.ts`; prueba mínima: unit T039.
 - [ ] T060 [P] [US1] [BE] Implementar publicador en proceso tipado que, después de cada commit, asigne `eventSequence` entero estrictamente creciente por `turnId`, exponga el último sequence representado para el snapshot, entregue en orden y haga cleanup en `apps/backend/src/services/conversations/turnEventPublisher.ts` (depende de T048); prueba mínima: unit T048, sin persistencia, `Last-Event-ID` ni replay durable.
@@ -299,9 +299,10 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
 
 - Setup: `T002 → T003 → T004`; `T001/T002 → T005 → T006`.
 - DB: `T010 → T011/T012 → T013 → T112 → T119`.
-- Backend base: `T014 → T015 → T026`; `T020/T040 → T052`; `T021 → T022`; `T023 → T024`.
+- Backend base: `T014 → T015 → T026`; `T021 → T022`; `T023 → T024`.
+- Backend create: `T040 → T020 → T052 → T063`.
 - Frontend base: `T028 → T029`; `T030 → T031`.
-- Providers: `T034–T038 → T054–T057`; `T047/T054–T057 → T058 → T061`.
+- Providers: `T035–T038 → T017 → T054–T057`; `T034 → T054–T057`; `T047/T054–T057 → T058 → T061`.
 - SSE: `T032 → T033`; `T048 → T060`; `T041/T060 → T064/T065 → T067 → T074`.
 - Frontend US1: `T049 → T066`; `T050 → T068`; `T051 → T072`.
 - Context: `T039 → T059`; `T076 → T081 → T082 → T083`; `T075 → T082 → T083`; `T079 → T087`.
@@ -392,9 +393,9 @@ documentación sin repetir esas pruebas.
 
 ### MVP first
 
-1. Completar T001–T033.
+1. Completar Phase 1 y Phase 2.
 2. Escribir T034–T051 y confirmar que fallan.
-3. Implementar T052–T074.
+3. Implementar T017, T020 y T052–T074.
 4. Validar US1 independientemente.
 
 ### Incremental delivery
