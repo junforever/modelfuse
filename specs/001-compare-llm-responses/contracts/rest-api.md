@@ -167,6 +167,12 @@ Request:
 {"title": "texto libre de 1 a 80 caracteres después de trim"}
 ```
 
+`trim` es la única transformación de negocio. El backend valida el resultado y
+lo persiste literalmente, sin eliminar, reemplazar ni escapar caracteres
+especiales; la consulta de persistencia debe ser parametrizada. El escape
+corresponde exclusivamente a la capa de renderizado, que muestra el título como
+texto y nunca como HTML.
+
 Response: `200 ConversationSummary`.
 
 Título inválido: `422 VALIDATION_ERROR`.

@@ -284,6 +284,10 @@ toda semántica ModelFuse vive en `apps/frontend`.
 
 ### Data-backed UI states
 
+- El título sigue tres límites separados: el backend aplica únicamente `trim` y
+  valida longitud 1–80; PostgreSQL lo persiste literalmente mediante consultas
+  parametrizadas; React lo renderiza como texto, sin HTML crudo ni escape
+  almacenado. No se eliminan ni reemplazan caracteres especiales.
 - Sidebar e historial distinguen carga inicial, vacío confirmado, error y
   contenido cargado; nunca representan carga como vacío.
 - Una carga incremental fallida conserva conversaciones o turnos visibles y
@@ -399,7 +403,8 @@ producción.
   nombres de evento, resultados finales, cierre terminal y cleanup al desconectar;
 - estado SSE coincide con PostgreSQL y nunca anuncia una transacción fallida;
 - retry concurrente y los tres 409; Continue-without irreversible;
-- delete busy, rename busy, historia/sidebar y recovery sin providers;
+- delete busy, rename busy con persistencia literal de comillas, `<`, `>`,
+  acentos, emojis y HTML, historia/sidebar y recovery sin providers;
 - SC-002 al 100% del fixture de recuperación.
 
 ### Performance acceptance
@@ -433,7 +438,8 @@ producción.
 - sidebar/historial distinguen loading, empty, error y success; un fallo
   incremental conserva contenido y permite reintento manual;
 - Rename/Delete cubren pending/disabled, error sin perder diálogo/datos, success
-  canónico y restauración de foco;
+  canónico y restauración de foco; los títulos con comillas, `<`, `>`, acentos,
+  emojis y HTML literal se muestran como texto y nunca como markup;
 - tabs, dialogs y colapso.
 
 ### E2E
