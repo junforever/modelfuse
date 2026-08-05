@@ -74,7 +74,7 @@ feature queda lista para implementación.
 - [x] Las tareas unitarias, de integración y E2E se asignan exclusivamente a
       `unit-test-runner`, `integration-test-runner` y `e2e-test-runner`; builders
       implementan código de producto y auditores permanecen read-only.
-- [x] La validación de rendimiento SC-010 se asigna exclusivamente a
+- [x] Las validaciones cuantitativas SC-001 y SC-010 se asignan exclusivamente a
       `performance-test-runner`; no se transfiere a builders, auditores ni a un
       runner fuera de su alcance.
 - [x] No existen excepciones constitucionales.
@@ -397,8 +397,12 @@ producción.
 
 ### Performance acceptance
 
-- SC-010 pertenece exclusivamente a `performance-test-runner`; unit, integration
-  y E2E no autoran ni ejecutan esta validación.
+- SC-001 y SC-010 pertenecen exclusivamente a `performance-test-runner`; unit,
+  integration y E2E no autoran ni ejecutan estas validaciones cuantitativas.
+- SC-001 usa PostgreSQL local y providers fake deterministas, considera exitosa
+  solo la consulta cuyos cuatro slots obtienen una respuesta o estado terminal
+  explícito dentro de 60 segundos, registra total, éxitos, porcentaje y
+  `pass`/`fail`, y falla por debajo del 95%.
 - En el entorno local controlado con PostgreSQL y providers fake deterministas,
   mide el p95 de `POST /conversations` y del primer bloque de historial contra el
   umbral de un segundo definido en el spec.
