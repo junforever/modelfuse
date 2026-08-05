@@ -132,12 +132,20 @@ pnpm dev
 7. Forzar retry base exitoso: Qwen previo queda stale y una nueva consolidación lo
    reemplaza.
 8. Forzar Qwen fallido: bases permanecen visibles y solo Qwen ofrece retry cuando
-   la conversación deja de estar busy.
+   el error es recuperable y la conversación deja de estar busy.
 9. Ejecutar Continue-without sobre base fallida: el dialog debe advertir que es
    permanente; tras confirmar persiste la ausencia sin llamada de provider ni
    estado activo nuevo.
 10. Intentar retry del mismo slot: debe responder
     `RESPONSE_NOT_RETRYABLE`; Qwen debe omitirlo también en reconsolidaciones.
+11. Forzar `timeout`, `connectivity`, `rate_limited` y
+    `provider_transient_error`: todos deben persistir `recoverable=true` y mostrar
+    Retry conforme a busy.
+12. Forzar `authentication`, `content_blocked`, `invalid_prompt_size`,
+    `invalid_response` y `provider_error`: deben persistir `recoverable=false`,
+    ocultar Retry y conservar Continue-without solo en slots base fallidos.
+13. Ejecutar recovery sobre un slot `pending`/`running`: debe quedar
+    `failed/interrupted`, `recoverable=true` y elegible para Retry manual.
 
 ## 9. Context and history smoke flow
 
@@ -159,6 +167,14 @@ pnpm dev
 10. Durante busy, verificar Delete disabled con explicación y Rename habilitado.
 11. Llamar `DELETE` directamente durante busy y esperar
     `409 CONVERSATION_BUSY`; después de terminar, confirmar cascade.
+12. En Rename, probar ASCII, emoji simple, un emoji familiar unido con ZWJ, una
+    letra con marca combinada y una mezcla ASCII/Unicode; el contador debe variar
+    por grapheme visible y coincidir con la validación backend.
+13. Confirmar que 80 grapheme clusters se aceptan y persisten literalmente, que
+    81 se rechazan sin cambiar el título anterior y que el texto se muestra sin
+    interpretarse como HTML.
+14. Crear una conversación cuyo primer prompt supere 80 graphemes y verificar que
+    el título termina en el grapheme 80 sin dividir emoji ZWJ ni marcas combinadas.
 
 ## 10. SSE smoke flow
 
@@ -243,7 +259,9 @@ pnpm --filter backend test:consolidation-eval
 - `RESPONSE_RETRY_IN_PROGRESS`: el mismo slot ya tiene un retry activo.
 - `RESPONSE_NOT_RETRYABLE`: el slot no es fallido recuperable o ya tiene
   Continue-without permanente.
-- Credencial rechazada/timeout: solo falla su slot; no hay retry automático.
+- Credencial rechazada: `authentication`, no recuperable y sin Retry; timeout:
+  recuperable y con Retry manual. Ambos afectan solo su slot y nunca disparan
+  retry automático.
 - `INVALID_PROMPT_SIZE`: la protección no logró un payload válido; solo falla ese
   slot.
 - Contexto acotado: UI muestra evidencia; DB conserva historial completo.

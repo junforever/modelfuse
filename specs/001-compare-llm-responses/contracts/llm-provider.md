@@ -116,6 +116,7 @@ type LlmErrorCode =
   | 'content_blocked'
   | 'invalid_prompt_size'
   | 'invalid_response'
+  | 'provider_transient_error'
   | 'provider_error';
 
 type LlmProviderError = {
@@ -127,14 +128,38 @@ type LlmProviderError = {
 };
 ```
 
+La clasificación es normativa y total:
+
+| `LlmErrorCode` | `recoverable` |
+|---|---:|
+| `authentication` | `false` |
+| `rate_limited` | `true` |
+| `timeout` | `true` |
+| `connectivity` | `true` |
+| `content_blocked` | `false` |
+| `invalid_prompt_size` | `false` |
+| `invalid_response` | `false` |
+| `provider_transient_error` | `true` |
+| `provider_error` | `false` |
+
+Los adapters traducen la condición upstream únicamente a `LlmErrorCode`. El
+helper común `isRecoverableLlmError(code)` completa `recoverable`; ningún adapter
+puede elegir o sobrescribir el booleano. Un 5xx, saturación u otra falla temporal
+no cubierta por un código más específico se normaliza como
+`provider_transient_error`; una falla permanente no cubierta se normaliza como
+`provider_error`.
+
 - Bodies, headers, stacks y credenciales no salen del adapter.
-- Credencial rechazada se normaliza como `authentication`.
+- Credencial rechazada se normaliza como `authentication` y no ofrece Retry.
 - Timeout cancela Axios y afecta solo su slot.
-- Rate limit, timeout y conectividad pueden ser recuperables.
+- Rate limit, timeout y conectividad son recuperables según la tabla canónica.
 - `invalid_prompt_size` se produce antes de `generate()` si ContextBuilder no
   puede construir un payload válido; se persiste/proyecta como
   `INVALID_PROMPT_SIZE`, es seguro y afecta solo su slot.
-- `recoverable` habilita elección manual; no programa un retry.
+- `recoverable` habilita Retry manual; no programa un retry. Continue-without se
+  rige por el estado `failed` del slot base y no altera esta clasificación.
+- `interrupted` es un error seguro de orquestación, no un `LlmErrorCode`; recovery
+  siempre lo persiste con `recoverable=true`.
 
 ## Registry
 
@@ -208,6 +233,8 @@ Cada adapter demuestra:
 
 - mapping de system/user/assistant;
 - normalización de contenido/métricas informadas;
+- traducción de condiciones upstream a los códigos comunes y aplicación de la
+  misma matriz canónica de recuperabilidad;
 - credencial rechazada;
 - timeout/cancelación;
 - medición técnica y límite configurado del deployment;

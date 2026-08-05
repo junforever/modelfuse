@@ -67,7 +67,8 @@ Rules:
 
 - `content` es requerido cuando `status=completed`.
 - `error` solo contiene código/mensaje seguro.
-- `recoverable=true` habilita una acción manual; nunca dispara retry automático.
+- `recoverable` refleja exclusivamente la clasificación canónica del contrato
+  LLM; `true` habilita Retry manual y nunca dispara retry automático.
 - `continuedWithout=true` solo aplica a un slot base fallido y lo excluye
   permanentemente de retry en ese turno.
 - `isStale=true` identifica una consolidación Qwen obsoleta y nunca vigente.
@@ -109,6 +110,8 @@ Rules:
 ### POST /conversations
 
 Crea conversación, título, primer turno y cuatro slots atómicamente.
+El título inicial aplica `trim` al prompt y toma sus primeros 80 grapheme
+clusters Unicode completos.
 
 Request:
 
@@ -164,14 +167,16 @@ Missing: `404 CONVERSATION_NOT_FOUND`.
 Request:
 
 ```json
-{"title": "texto libre de 1 a 80 caracteres después de trim"}
+{"title": "texto libre de 1 a 80 grapheme clusters Unicode después de trim"}
 ```
 
-`trim` es la única transformación de negocio. El backend valida el resultado y
-lo persiste literalmente, sin eliminar, reemplazar ni escapar caracteres
-especiales; la consulta de persistencia debe ser parametrizada. El escape
-corresponde exclusivamente a la capa de renderizado, que muestra el título como
-texto y nunca como HTML.
+`trim` es la única transformación de negocio; no se aplica normalización Unicode
+adicional. El backend segmenta con `Intl.Segmenter` y `granularity: "grapheme"`,
+valida el resultado y lo persiste literalmente, sin eliminar, reemplazar ni
+escapar caracteres especiales; la consulta de persistencia debe ser
+parametrizada. El contador frontend y el truncado inicial usan la misma unidad.
+El escape corresponde exclusivamente a la capa de renderizado, que muestra el
+título como texto y nunca como HTML.
 
 Response: `200 ConversationSummary`.
 
@@ -318,7 +323,7 @@ Missing o mismatch antes de abrir: `404 TURN_NOT_FOUND`.
 
 ### POST /conversations/:conversationId/turns/:turnId/responses/:slot/retry
 
-Para slots base, solo acepta `failed`, recuperable y
+Solo acepta un slot `failed`, `recoverable=true` y, para slots base,
 `continuedWithout=false`. Qwen conserva el retry individual definido por FR-011
 y nunca ejecuta bases.
 
@@ -355,9 +360,9 @@ Persiste la decisión, no invoca providers ni crea trabajo `pending`/`running`.
 Es irreversible en v1: el slot deja de ser elegible para retry y Qwen lo omite
 permanentemente en cualquier consolidación del turno. Qwen no admite esta acción.
 
-## First Recoverable Failure UI Contract
+## Failure UI Contract
 
-Cuando un slot base falla por primera vez:
+Cuando un slot base falla por primera vez con `recoverable=true`:
 
 1. `slot_update` proyecta `failed`, `recoverable=true`;
 2. UI muestra Retry y Continue-without sin esperar otro intento;
@@ -366,6 +371,10 @@ Cuando un slot base falla por primera vez:
 5. cuando busy queda false, Retry se habilita si el slot sigue siendo elegible;
 6. antes de Continue-without, UI confirma que la decisión es permanente y que el
    slot no podrá reintentarse.
+
+Cuando falla con `recoverable=false`, la UI no muestra Retry y conserva
+Continue-without. Esta acción depende de `status=failed`, no cambia
+`recoverable` y permanece irreversible.
 
 ## Busy UI Contract
 

@@ -199,16 +199,24 @@ normalizado completo disponible.
 
 ## Retry, Continue-without and Delete
 
+- `apps/backend/src/services/llm/llmErrors.ts` posee la única función
+  `LlmErrorCode → recoverable`. Los adapters solo normalizan el código:
+  `authentication`, `content_blocked`, `invalid_prompt_size`,
+  `invalid_response` y `provider_error` son no recuperables;
+  `rate_limited`, `timeout`, `connectivity` y `provider_transient_error` son
+  recuperables. Recovery produce `interrupted` fuera de `LlmErrorCode` y lo
+  persiste siempre recuperable.
 - Backend decide elegibilidad y transiciones. Retry es manual, por slot, sin
-  backoff ni intento automático.
+  backoff ni intento automático, y solo se admite cuando el slot fallido proyecta
+  `recoverable=true` conforme a esa función.
 - Un turno activo distinto produce `409 CONVERSATION_BUSY`; el mismo slot activo,
   `409 RESPONSE_RETRY_IN_PROGRESS`; un slot no elegible o con Continue-without,
   `409 RESPONSE_NOT_RETRYABLE`.
 - Retry base fallido no invoca Qwen ni invalida la consolidación vigente. Retry
   base exitoso marca Qwen `stale` y ejecuta una reconsolidación. Retry Qwen no
   ejecuta bases.
-- Continue-without marca irreversiblemente un slot base `failed`, no emite trabajo
-  y permanece disponible durante busy.
+- Continue-without marca irreversiblemente cualquier slot base `failed`, no emite
+  trabajo, no cambia `recoverable` y permanece disponible durante busy.
 - Delete responde `409 CONVERSATION_BUSY` durante trabajo; fuera de busy elimina
   en cascade. Rename permanece permitido.
 - Frontend solo proyecta estado: botones disabled, errores seguros, aviso busy y
@@ -284,10 +292,15 @@ toda semántica ModelFuse vive en `apps/frontend`.
 
 ### Data-backed UI states
 
-- El título sigue tres límites separados: el backend aplica únicamente `trim` y
-  valida longitud 1–80; PostgreSQL lo persiste literalmente mediante consultas
-  parametrizadas; React lo renderiza como texto, sin HTML crudo ni escape
-  almacenado. No se eliminan ni reemplazan caracteres especiales.
+- El título sigue tres límites separados: backend y frontend segmentan mediante
+  `Intl.Segmenter` con `granularity: "grapheme"`; el backend aplica únicamente
+  `trim`, sin normalización Unicode adicional, valida 1–80 grapheme clusters y
+  trunca el título inicial en esa misma unidad sin dividir secuencias; PostgreSQL
+  usa `text` y lo persiste literalmente mediante consultas parametrizadas; React
+  lo renderiza como texto, sin HTML crudo ni escape almacenado. No se eliminan ni
+  reemplazan caracteres especiales. Un corpus contractual común cubre ASCII,
+  emoji simple/ZWJ, marcas combinadas, mezcla Unicode y límites 80/81 para evitar
+  divergencias entre contador, validación y truncado.
 - Sidebar e historial distinguen carga inicial, vacío confirmado, error y
   contenido cargado; nunca representan carga como vacío.
 - Una carga incremental fallida conserva conversaciones o turnos visibles y
@@ -390,6 +403,8 @@ producción.
 - `busy_update` explícito, incluso cuando coincide temporalmente con
   `turn_update`;
 - busy, retry/Continue-without, terminales y recovery deterministas.
+- matriz canónica completa de `LlmErrorCode → recoverable`, idéntica para los
+  cuatro adapters, más `interrupted=true` en recovery.
 
 ### Backend integration
 
@@ -404,7 +419,8 @@ producción.
 - estado SSE coincide con PostgreSQL y nunca anuncia una transacción fallida;
 - retry concurrente y los tres 409; Continue-without irreversible;
 - delete busy, rename busy con persistencia literal de comillas, `<`, `>`,
-  acentos, emojis y HTML, historia/sidebar y recovery sin providers;
+  acentos, emojis y HTML, además de conteo grapheme consistente en 80/81,
+  historia/sidebar y recovery sin providers;
 - SC-002 al 100% del fixture de recuperación.
 
 ### Performance acceptance
@@ -433,13 +449,15 @@ producción.
 - Enviar/Retry/Delete disabled por `busy_update`; navegación, Rename y
   Continue-without disponibles según spec;
 - primera falla muestra Retry/Continue-without; copy permanente;
+- una falla base no recuperable oculta Retry pero conserva Continue-without;
 - reload/reopen crea stream nuevo; error visible y reconexión solo SSE;
 - ninguna llamada periódica ni fallback alternativo;
 - sidebar/historial distinguen loading, empty, error y success; un fallo
   incremental conserva contenido y permite reintento manual;
 - Rename/Delete cubren pending/disabled, error sin perder diálogo/datos, success
-  canónico y restauración de foco; los títulos con comillas, `<`, `>`, acentos,
-  emojis y HTML literal se muestran como texto y nunca como markup;
+  canónico y restauración de foco; contador y límite usan grapheme clusters en
+  ASCII, emoji simple/ZWJ, marcas combinadas, mezcla Unicode y límites 80/81; los
+  títulos con HTML literal se muestran como texto y nunca como markup;
 - tabs, dialogs y colapso.
 
 ### E2E

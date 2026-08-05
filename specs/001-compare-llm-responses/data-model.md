@@ -13,7 +13,7 @@ erDiagram
     conversations {
         uuid id PK
         uuid create_client_request_id UK
-        varchar title
+        text title
         timestamptz created_at
         timestamptz updated_at
     }
@@ -59,7 +59,7 @@ entidad usando `crypto.randomUUID()`; no se requiere extensión PostgreSQL.
 |---|---|---|
 | `id` | `uuid` | PK |
 | `create_client_request_id` | `uuid` | Requerido, único global |
-| `title` | `varchar(80)` | Trim, 1–80 caracteres |
+| `title` | `text` | Trim, 1–80 grapheme clusters Unicode validados por backend; persistencia literal |
 | `created_at` | `timestamptz` | Requerido, default `now()` |
 | `updated_at` | `timestamptz` | Requerido |
 
@@ -71,10 +71,12 @@ Indexes:
 Lifecycle:
 
 - Se crea únicamente junto con un primer turno válido.
-- El título inicial es `prompt.trim().slice(0,80)`.
+- El título inicial aplica `trim` y toma los primeros 80 grapheme clusters
+  Unicode completos mediante la misma segmentación usada por Rename.
 - Repetir `create_client_request_id` devuelve esta conversación y su primer turno.
 - Reutilizarlo con un prompt distinto produce `CLIENT_REQUEST_ID_CONFLICT`.
-- Rename aplica trim y actualiza `updated_at`.
+- Rename aplica `trim`, valida 1–80 grapheme clusters Unicode, persiste el texto
+  resultante literalmente y actualiza `updated_at`.
 - Delete bloquea brevemente la conversación, rechaza con `CONVERSATION_BUSY` si
   cualquier turno/slot está `pending`/`running` y, en caso contrario, hace
   cascade a turnos/respuestas.
@@ -158,7 +160,7 @@ representando la política de un turno activo.
 | `content` | `text` | Contenido normalizado; requerido para `completed` |
 | `error_code` | `varchar(64)` | Código seguro |
 | `error_message` | `text` | Mensaje seguro |
-| `error_recoverable` | `boolean` | Habilita acción manual |
+| `error_recoverable` | `boolean` | Derivado de la clasificación canónica; habilita Retry manual |
 | `continued_without_at` | `timestamptz` | Decisión persistida; solo base fallido |
 | `is_stale` | `boolean` | Consolidación Qwen obsoleta durante reemplazo |
 | `attempt_no` | `integer` | Default 0; incrementa al aceptar cada ejecución |
@@ -335,7 +337,7 @@ incorporarse en una reconsolidación del turno.
 Al iniciar sobre la misma DB:
 
 1. seleccionar slots `pending`/`running`;
-2. cambiarlos a `failed/interrupted`, mensaje seguro y recuperable;
+2. cambiarlos a `failed/interrupted`, mensaje seguro y `error_recoverable=true`;
 3. recalcular turnos afectados;
 4. recalcular busy derivado;
 5. mantener orden, atribución, contenido y consulta/retry.

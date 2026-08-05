@@ -229,11 +229,15 @@ mantiene páginas estables ante inserciones.
 
 ## Decision 12: Título y colapso deterministas
 
-**Decision**: Backend genera `prompt.trim().slice(0,80)`. El frontend colapsa
-mensajes históricos según `VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD` usando estado
-local.
+**Decision**: Backend aplica `trim` al prompt y genera el título tomando hasta 80
+grapheme clusters Unicode completos mediante `Intl.Segmenter`; Rename y su
+contador frontend usan la misma unidad, y PostgreSQL persiste el resultado
+literal en una columna `text`. El frontend colapsa mensajes históricos según
+`VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD` usando estado local.
 
-**Rationale**: Son las implementaciones directas de FR-039/FR-042.
+**Rationale**: Evita dividir emoji ZWJ o marcas combinadas y mantiene consistente
+el límite visible entre frontend, backend y persistencia, además de implementar
+directamente FR-039/FR-042.
 
 ## Decision 13: Delete se excluye durante busy
 
