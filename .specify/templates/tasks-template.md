@@ -27,6 +27,10 @@ critical cross-product journeys.
   `unit-test-runner`, `integration-test-runner`, `e2e-test-runner`, and
   `performance-test-runner`. Any other testing discipline must name its own
   specialized owner.
+- Every agent owner named in a concrete generated task MUST match a configured
+  `.codex/agents/*.toml` file; do not invent free-form aliases such as
+  `integration-owner`. Human owners MUST be named explicitly (for example,
+  `Product/UX`).
 - Builders do not author, modify, or execute tests. Auditors remain read-only;
   blocking findings create a separate builder task followed by re-audit.
 - Every production task with an automated minimum-test criterion MUST reference
@@ -186,7 +190,8 @@ re-audit before final validation continues.
 - [ ] TXXX [SHARED] Performance optimization across all stories (owner: [agent])
 - [ ] TXXX [P] [UNIT|INTEGRATION|E2E|PERF] Additional behavior-focused tests in [exact test path] (owner: [test owner])
 - [ ] TXXX [SHARED] Security hardening (owner: [agent])
-- [ ] TXXX [SHARED] Run quickstart.md validation (owner: [validation owner])
+- [ ] TXXX [DOMAIN] Review applicable quickstart.md sections without executing tests (owner: [configured auditor or explicit human owner])
+- [ ] TXXX [DOMAIN] Execute each quickstart.md scenario once in the task owned by its applicable specialized runner or explicitly named human owner
 
 ---
 
