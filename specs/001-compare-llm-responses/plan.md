@@ -342,7 +342,13 @@ constraints ya definidos para idempotencia, ordinal, turno activo, slots, retry 
 Continue-without. SSE y sus estados visuales no añaden tablas, columnas ni
 changesets: se derivan de commits y de una proyección efímera en proceso.
 
-Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La validación de base de datos DEBE ejecutarse sobre una PostgreSQL desechable en este orden: migración desde cero, validación del esquema resultante, rollback hasta el estado anterior y nueva aplicación de los changesets. Este rollback es un quality gate técnico de Liquibase; no constituye recovery de producto ni un rollback automático en producción.
+Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La
+validación de base de datos DEBE ejecutarse sobre una PostgreSQL desechable en
+este orden: migración desde cero, validación del esquema resultante, rollback,
+comprobación del estado anterior, nueva aplicación de los changesets y validación
+final del esquema reaplicado. Este rollback es un quality gate técnico de
+Liquibase; no constituye recovery de producto ni un rollback automático en
+producción.
 
 ## Testing and Quality
 
