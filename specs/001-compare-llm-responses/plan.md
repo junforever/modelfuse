@@ -108,14 +108,17 @@ flowchart LR
 El publicador vive en memoria dentro del monolito y solo notifica cambios
 canónicos ya confirmados; también puede proyectar un `runtimeStage` no autoritativo
 después de persistir el slot `running`. No es fuente de verdad, cola durable ni
-bus externo. Al abrir un stream, el endpoint registra primero el listener y
-acumula temporalmente sus eventos mientras lee y emite el snapshot PostgreSQL
-vigente. Después descarta del buffer los eventos ya representados por el snapshot
-según `updatedAt` y `attemptNo`, entrega los posteriores en orden de publicación y
-continúa en vivo; así una conexión inicial o nueva converge sin perder commits
-ocurridos durante la lectura del snapshot ni requerir replay durable. Los eventos
-son snapshots idempotentes con IDs de origen y timestamps/attempt vigentes, por
-lo que la UI no aplica una actualización anterior sobre otra más nueva.
+bus externo. Después de cada commit, asigna a todo `slot_update`, `turn_update` y
+`busy_update` un `eventSequence` entero estrictamente creciente por `turnId`.
+`updatedAt` y, para slots, `attemptNo` conservan la versión canónica; la secuencia
+desempata cambios distintos con los mismos valores. Al abrir un stream, el
+endpoint registra primero el listener y acumula temporalmente sus eventos mientras
+lee y emite el snapshot PostgreSQL vigente, incluido el último `eventSequence`
+representado. Después descarta del buffer los eventos cuya tupla
+`(updatedAt, attemptNo, eventSequence)` —o `(updatedAt, eventSequence)` cuando no
+aplica intento— sea menor o igual a la del snapshot, drena las restantes en ese
+orden y continúa en vivo. `eventSequence` es efímero y local al proceso: no se
+persiste, no es un ID durable, no habilita `Last-Event-ID` ni replay histórico.
 
 ## Request and Turn Lifecycle
 
@@ -133,9 +136,10 @@ lo que la UI no aplica una actualización anterior sobre otra más nueva.
 5. El frontend abre
    `GET /api/v1/conversations/:conversationId/turns/:turnId/events`.
 6. El stream registra su listener, bufferiza durante la lectura, entrega el
-   snapshot actual, filtra y drena los eventos posteriores no representados por
-   ese snapshot y luego continúa en vivo con eventos canónicos posteriores a cada
-   commit y `runtimeStage` efímeros solo para slots ya persistidos `running`.
+   snapshot actual con su último `eventSequence` representado, descarta por la
+   tupla formal de versión, drena en orden los eventos posteriores y luego
+   continúa en vivo con eventos canónicos posteriores a cada commit y
+   `runtimeStage` efímeros solo para slots ya persistidos `running`.
 7. La UI cierra su `EventSource` al recibir turno terminal y
    `hasWorkInProgress=false`; el servidor también puede cerrar ese stream.
 
@@ -269,8 +273,9 @@ toda semántica ModelFuse vive en `apps/frontend`.
 - Tabs, dialogs, expansión y `runtimeStage` efímero permanecen locales.
 - `slot_update` actualiza solo su slot, `turn_update` el agregado y
   `busy_update` la proyección explícita `hasWorkInProgress`.
-- Actualizaciones con `updatedAt`/`attemptNo` anteriores se ignoran. Duplicados
-  son idempotentes.
+- Actualizaciones con una tupla `updatedAt`/`attemptNo`/`eventSequence` anterior
+  o igual a la última aplicada se ignoran; timestamps iguales y varios cambios
+  del mismo intento se resuelven mediante `eventSequence`.
 - Cuando `busy_update=false` y el turno es terminal, el hook cierra el stream e
   invalida una vez el detalle/turno para confirmar convergencia persistida; no hay
   fetch periódico.
@@ -315,9 +320,10 @@ evento, sin reemplazar validación backend.
 
 El endpoint SSE valida que conversación y turno correspondan, fija headers
 `text/event-stream`, `Cache-Control: no-cache` y `Connection: keep-alive`, se
-suscribe antes de leer el snapshot persistido, drena el buffer de apertura y se
-desuscribe al cerrar la request. El publicador en proceso se inyecta en servicios;
-controllers no observan repositorios ni reglas de dominio.
+suscribe antes de leer el snapshot persistido, incluye el último
+`eventSequence` representado, descarta por la tupla formal, drena el buffer de
+apertura y se desuscribe al cerrar la request. El publicador en proceso se inyecta
+en servicios; controllers no observan repositorios ni reglas de dominio.
 
 ### HTTP surface
 
@@ -388,8 +394,9 @@ producción.
   aislamiento entre conversaciones, y nunca se incorporan historiales base a Qwen;
 - create/replay concurrente y orden replay → busy → create;
 - endpoint SSE valida pertenencia, headers, suscripción previa al snapshot,
-  buffering y drenaje sin pérdida ante un commit concurrente, los tres nombres de
-  evento, resultados finales, cierre terminal y cleanup al desconectar;
+  `eventSequence` monótono, timestamps iguales, varios cambios del mismo intento,
+  buffering y descarte/drenaje sin pérdida ante un commit concurrente, los tres
+  nombres de evento, resultados finales, cierre terminal y cleanup al desconectar;
 - estado SSE coincide con PostgreSQL y nunca anuncia una transacción fallida;
 - retry concurrente y los tres 409; Continue-without irreversible;
 - delete busy, rename busy, historia/sidebar y recovery sin providers;
@@ -416,6 +423,8 @@ producción.
   final única;
 - `slot_update`, `turn_update`, `busy_update` y runtimeStage sin cambiar estados
   canónicos;
+- empates de `updatedAt`/`attemptNo`, duplicados y eventos antiguos resueltos por
+  `eventSequence` sin descartar cambios consecutivos legítimos;
 - Enviar/Retry/Delete disabled por `busy_update`; navegación, Rename y
   Continue-without disponibles según spec;
 - primera falla muestra Retry/Continue-without; copy permanente;
