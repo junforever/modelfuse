@@ -444,12 +444,16 @@ Product/UX entrega un protocolo versionado con tareas concretas, escenarios
 representativos, criterio observable por tarea y escalas subjetivas de claridad,
 confianza, esfuerzo y frustración. Debe cubrir comparación/consolidación, busy,
 retry/Continue-without, contexto acotado, Delete bloqueado, historial y error SSE.
+Antes de ejecutar, el protocolo fija un grupo de al menos diez participantes
+válidos —el mismo grupo puede evaluar SC-003 y SC-004—, junto con sus criterios
+de inclusión y exclusión; la muestra y el denominador no se reconfiguran después
+de iniciar la primera tarea.
 
 La ejecución con participantes registra por separado para SC-003 y SC-004:
-numerador de participantes que completan sin ayuda en el primer intento,
-denominador, porcentaje y resultado `pass`/`fail` frente al 90%, además de
-observaciones y propuestas. Una sesión sin esa evidencia cuantificable no satisface
-los criterios.
+muestra prevista, participantes válidos, exclusiones justificadas, numerador de
+participantes que completan sin ayuda en el primer intento, denominador,
+porcentaje y resultado `pass`/`fail` frente al 90%, además de observaciones y
+propuestas. Una sesión sin esa evidencia cuantificable no satisface los criterios.
 
 ## Requirement Ownership Traceability
 

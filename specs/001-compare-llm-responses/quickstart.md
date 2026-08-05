@@ -200,12 +200,18 @@ No es garantía global de producción ni de providers reales.
 
 ## 13. Product/UX usability acceptance
 
-1. Product/UX documenta tareas, escenarios y criterio observable para comparación,
-   busy, retry/Continue-without, contexto truncado, Delete, historial y error SSE.
-2. El protocolo registra claridad, confianza, esfuerzo y frustración.
-3. La ejecución conserva, por separado para SC-003 y SC-004, numerador,
-   denominador, porcentaje y `pass`/`fail` frente al 90%.
-4. Conservar observaciones y propuestas; una sesión sin esa evidencia no basta.
+1. Product/UX fija antes de ejecutar un grupo de al menos diez participantes
+   válidos; el mismo grupo puede evaluar SC-003 y SC-004.
+2. El protocolo documenta tareas, escenarios y criterio observable para
+   comparación, busy, retry/Continue-without, contexto truncado, Delete,
+   historial y error SSE.
+3. El protocolo define previamente criterios de inclusión/exclusión y no cambia
+   la muestra ni el denominador después de iniciar la primera tarea.
+4. El protocolo registra claridad, confianza, esfuerzo y frustración.
+5. La ejecución conserva por separado para SC-003 y SC-004 la muestra prevista,
+   participantes válidos, exclusiones justificadas, numerador, denominador,
+   porcentaje y `pass`/`fail` frente al 90%.
+6. Conservar observaciones y propuestas; una sesión sin esa evidencia no basta.
 
 ## 14. Validation
 
