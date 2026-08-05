@@ -79,7 +79,7 @@ Como usuario, quiero ver las conversaciones guardadas en una barra lateral izqui
 
 **Why this priority**: La persistencia convierte el historial en trabajo reutilizable y evita perder el contexto entre sesiones.
 
-**Independent Test**: Se puede probar con una conversación de más de seis turnos, reabriéndola para verificar que aparecen inicialmente solo los últimos tres turnos completos y que los anteriores se incorporan en bloques al hacer scroll hacia arriba, sin controles de paginación.
+**Independent Test**: Se puede probar con una conversación de más de seis turnos, reabriéndola para verificar que aparecen inicialmente solo los últimos tres turnos completos y que los anteriores se incorporan en bloques al hacer scroll hacia arriba, sin controles de paginación; además, carga, vacío y error permanecen distinguibles, y Rename/Delete impiden confirmaciones duplicadas sin perder datos ante un fallo.
 
 **Acceptance Scenarios**:
 
@@ -88,12 +88,15 @@ Como usuario, quiero ver las conversaciones guardadas en una barra lateral izqui
 3. **Given** una conversación con historial anterior disponible, **When** el usuario llega al inicio del tramo cargado haciendo scroll hacia arriba, **Then** se antepone el bloque anterior de hasta tres turnos completos sin reemplazar el historial ya visible.
 4. **Given** una conversación abierta, **When** el usuario carga bloques anteriores, **Then** conserva una experiencia de chat continuo sin botones, números de página ni navegación a una vista distinta.
 5. **Given** una conversación recuperada, **When** el usuario envía otro mensaje, **Then** el nuevo turno se agrega a esa misma conversación, queda persistido y el historial anterior continúa disponible mediante scroll ascendente.
-6. **Given** que no existen conversaciones guardadas, **When** el usuario abre la aplicación, **Then** ve un estado vacío claro y puede iniciar una conversación nueva.
+6. **Given** que no existen conversaciones guardadas, **When** finaliza la carga inicial, **Then** el usuario ve un estado vacío claro, distinto de carga o error, y puede iniciar una conversación nueva.
 7. **Given** una conversación guardada, **When** el usuario abre su menú de tres puntos y elige renombrar, **Then** aparece un modal con un campo de hasta 80 caracteres, un contador de caracteres restantes y acciones explícitas para guardar o cancelar.
 8. **Given** un nombre válido en el modal de renombrado, **When** el usuario confirma, **Then** el nuevo nombre se muestra en la barra lateral y permanece después de recargar la aplicación.
 9. **Given** una conversación guardada, **When** el usuario elige eliminar en su menú, **Then** debe confirmar la acción en un modal antes de que la conversación sea eliminada de forma persistente.
 10. **Given** más conversaciones que las visibles en el sidebar, **When** el usuario se desplaza hacia abajo, **Then** se añade la siguiente página sin botones, números ni controles de paginación.
 11. **Given** un mensaje recuperado del historial que supera el umbral configurado, **When** se muestra el turno, **Then** el mensaje aparece colapsado y permite alternar entre “Mostrar más” y “Mostrar menos” sin realizar otra petición.
+12. **Given** que el sidebar o el historial aún se están cargando, **When** el usuario observa la superficie correspondiente, **Then** ve un estado de carga accesible y no un estado vacío o de error.
+13. **Given** que falla la carga inicial o incremental del sidebar o del historial, **When** la interfaz recibe el error, **Then** muestra un mensaje seguro con reintento manual y conserva cualquier conversación o turno ya visible.
+14. **Given** que el usuario confirma Rename o Delete, **When** la operación está pendiente, falla o termina correctamente, **Then** la confirmación no puede duplicarse; un fallo mantiene abierto el diálogo y conserva los datos; y el éxito cierra el diálogo, refleja el resultado y devuelve el foco a una posición válida.
 
 ---
 
@@ -190,6 +193,7 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - **FR-050**: El backend DEBE rechazar con `409 CONVERSATION_BUSY` la eliminación de una conversación que tenga cualquier turno o slot en estado `pending` o `running`, y la UI DEBE deshabilitar Delete mientras la conversación esté busy. Rename DEBE permanecer permitido durante busy porque solo modifica el título y no afecta el trabajo en curso. Fuera de busy, la eliminación conserva la confirmación previa y la semántica de cascade definidas.
 - **FR-051**: Continue-without DEBE ser una decisión persistente e irreversible sobre un slot base `failed`. Al aplicarla, el slot DEBE quedar marcado mediante `continuedWithout`/`continued_without_at`, dejar de ser elegible para retry aunque el error original fuera recuperable y ser omitido permanentemente por Qwen en ese turno. Esta decisión NO DEBE poder revertirse mediante retry en v1. La UI DEBE comunicar explícitamente que Continue-without es permanente para ese turno y que, una vez aplicado, el slot no podrá reintentarse.
 - **FR-052**: REST DEBE mantenerse como vía para crear conversaciones y turnos, leer historial, sidebar y detalle, y ejecutar rename, delete, retry y Continue-without. El seguimiento en tiempo real del turno en curso DEBE realizarse mediante SSE; la gestión de conexión, reconexión y cierre del stream es una decisión técnica de implementación subordinada al comportamiento definido en este spec.
+- **FR-053**: El sidebar, el historial y las acciones Rename/Delete DEBEN presentar de forma explícita y accesible sus estados aplicables de carga, vacío, error, deshabilitado y éxito. La carga NO DEBE mostrarse como vacío; un error incremental DEBE conservar el contenido ya visible y ofrecer reintento manual; una operación pendiente DEBE impedir confirmaciones duplicadas; un error de operación DEBE conservar los datos y el diálogo; y el éxito DEBE resultar observable en el contenido actualizado sin exigir una notificación adicional.
 - **FR-SSE-1**: Tras aceptar mediante REST la creación de una conversación o de un turno, el sistema DEBE permitir que el frontend se suscriba a un stream SSE asociado al turno para recibir actualizaciones en tiempo real.
 - **FR-SSE-2**: Mientras un turno tenga trabajo en curso, el sistema DEBE emitir por SSE eventos `slot_update` y `turn_update` con cambios de estado relevantes, incluidos `pending`, `running`, `completed` y `failed`, y con la respuesta final normalizada del slot cuando esté disponible.
 - **FR-SSE-3**: El sistema DEBE emitir `busy_update` como evento SSE propio para reflejar cambios en `hasWorkInProgress` de la conversación; la interfaz NO DEBE deducir ese valor únicamente a partir de `turn_update`.

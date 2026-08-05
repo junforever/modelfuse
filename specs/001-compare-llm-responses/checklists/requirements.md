@@ -32,4 +32,5 @@
 ## Notes
 
 - Validation passed on the first review; no clarification markers remain.
-
+- Revalidated 2026-08-05 after adding FR-053 and the explicit UI state matrix;
+  all items remain satisfied.

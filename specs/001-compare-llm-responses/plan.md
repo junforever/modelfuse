@@ -277,6 +277,19 @@ toda semántica ModelFuse vive en `apps/frontend`.
 - Un error del stream produce aviso visible. La reconexión conserva SSE y nunca
   degrada a otro mecanismo.
 
+### Data-backed UI states
+
+- Sidebar e historial distinguen carga inicial, vacío confirmado, error y
+  contenido cargado; nunca representan carga como vacío.
+- Una carga incremental fallida conserva conversaciones o turnos visibles y
+  ofrece reintento manual; mientras está pendiente no inicia otra carga igual.
+- Rename/Delete deshabilitan la confirmación pendiente. Un error seguro conserva
+  diálogo y datos; el éxito cierra el diálogo, actualiza el cache canónico y
+  devuelve el foco a un destino válido. El resultado visible basta como estado de
+  éxito, sin exigir toast.
+- La composición de producto reutiliza `Skeleton` y `Alert` de `packages/ui`; no
+  crea una abstracción genérica adicional para estos estados.
+
 ### Busy and actions
 
 FR-045 es la regla canónica backend: busy existe por cualquier turno/slot
@@ -364,6 +377,9 @@ Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La val
 
 ### Backend integration
 
+- selección de contexto contra PostgreSQL: cada base recupera solo su historial,
+  Qwen solo consolidaciones previas vigentes, ambas ventanas conservan orden y
+  aislamiento entre conversaciones, y nunca se incorporan historiales base a Qwen;
 - create/replay concurrente y orden replay → busy → create;
 - endpoint SSE valida pertenencia, headers, suscripción previa al snapshot,
   buffering y drenaje sin pérdida ante un commit concurrente, los tres nombres de
@@ -371,7 +387,18 @@ Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La val
 - estado SSE coincide con PostgreSQL y nunca anuncia una transacción fallida;
 - retry concurrente y los tres 409; Continue-without irreversible;
 - delete busy, rename busy, historia/sidebar y recovery sin providers;
-- SC-002 al 100% del fixture y SC-010 al menos 95% del conjunto controlado.
+- SC-002 al 100% del fixture de recuperación.
+
+### Performance acceptance
+
+- SC-010 pertenece exclusivamente a `performance-test-runner`; unit, integration
+  y E2E no autoran ni ejecutan esta validación.
+- En el entorno local controlado con PostgreSQL y providers fake deterministas,
+  mide el p95 de `POST /conversations` y del primer bloque de historial contra el
+  umbral de un segundo definido en el spec.
+- Las pruebas funcionales demuestran primero la corrección de ambos flujos; la
+  validación de rendimiento no duplica sus aserciones ni modifica producción al
+  encontrar una regresión.
 
 ### Frontend unit/integration
 
@@ -384,7 +411,11 @@ Todos los changesets de v1 DEBEN incluir rollback explícito verificable. La val
 - primera falla muestra Retry/Continue-without; copy permanente;
 - reload/reopen crea stream nuevo; error visible y reconexión solo SSE;
 - ninguna llamada periódica ni fallback alternativo;
-- sidebar, historial, tabs, dialogs y colapso.
+- sidebar/historial distinguen loading, empty, error y success; un fallo
+  incremental conserva contenido y permite reintento manual;
+- Rename/Delete cubren pending/disabled, error sin perder diálogo/datos, success
+  canónico y restauración de foco;
+- tabs, dialogs y colapso.
 
 ### E2E
 
@@ -414,8 +445,8 @@ los criterios.
 
 - Dominio/backend: FR-040, FR-045, FR-047, FR-050 y FR-051 definen primera falla,
   busy, elegibilidad/transiciones HTTP, Delete y Continue-without.
-- UI/tiempo real: FR-048, FR-049 y FR-SSE-3/4/6/7/8 proyectan acciones, busy,
-  runtime stages, conexión/error y alcance exclusivo de SSE.
+- UI/tiempo real: FR-048, FR-049, FR-053 y FR-SSE-3/4/6/7/8 proyectan acciones,
+  busy, estados de datos, conexión/error y alcance exclusivo de SSE.
 - Integración: FR-052 y FR-SSE-1/2/5 unen comandos REST, stream por turno, eventos
   posteriores al commit y cierre terminal.
 
