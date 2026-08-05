@@ -223,7 +223,7 @@ responde 409 hasta quedar terminal.
 - [ ] T100 [P] [US3] [FE] Crear sidebar con fecha, sentinel inferior, autofill y estados accesibles loading/empty/error/success que conserven páginas visibles ante error incremental en `apps/frontend/src/features/conversations/components/ConversationSidebar.tsx`; prueba mínima: frontend T092.
 - [ ] T101 [P] [US3] [FE] Crear helper basado en `Intl.Segmenter` con `granularity: "grapheme"` en `apps/frontend/src/features/conversations/utils/titleGraphemes.ts` y menú/dialogs Rename/Delete accesibles con contador y límite grapheme, confirmación disabled durante pending, error seguro sin cerrar/perder datos, success con cierre y foco válido y títulos renderizados como texto sin interpretar HTML ni almacenar escapes en `apps/frontend/src/features/conversations/components/ConversationMenu.tsx`, `RenameConversationDialog.tsx` y `DeleteConversationDialog.tsx`; prueba mínima: component T093.
 - [ ] T102 [P] [US3] [FE] Crear sentinel superior con loading/error/reintento sin duplicar carga ni perder turnos visibles, compensación y colapso local en `apps/frontend/src/features/conversations/components/HistoryTopSentinel.tsx`, `TurnList.tsx` y `CollapsibleHistoryMessage.tsx`; prueba mínima: frontend T092/T093.
-- [ ] T103 [US3] [SHARED] Integrar selección, estados loading/empty/error/success, historial, mutations, dialogs, foco posterior y reapertura SSE en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationWorkspace.tsx` (owner: frontend-builder; depende de T099–T102); prueba mínima: integration T092/T093 y E2E T094/T095.
+- [ ] T103 [US3] [SHARED] Integrar selección, estados loading/empty/error/success, historial, mutations, dialogs, foco posterior y reapertura SSE en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationWorkspace.tsx` (owner: frontend-builder; depende de T088, T099–T102); prueba mínima: integration T092/T093 y E2E T094/T095.
 
 **Checkpoint**: historial navegable sin paginación visible, estados de datos
 explícitos y gestión sin duplicados que respeta busy.
@@ -239,7 +239,7 @@ el recurso sin contexto previo y conserva conversaciones existentes.
 
 - [ ] T104 [P] [US4] [UNIT] Probar draft repetido, cero persistencia y conservación de lista en `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx`; tipo: frontend unit.
 - [ ] T105 [P] [US4] [E2E] Escribir primer prompt de draft y contexto aislado en `apps/frontend/e2e/new-conversation.spec.ts`; tipo: E2E.
-- [ ] T106 [US4] [FE] Implementar draft/selección local y acción Nueva conversación en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationSidebar.tsx`; prueba mínima: unit T104.
+- [ ] T106 [US4] [FE] Implementar draft/selección local y acción Nueva conversación en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationSidebar.tsx` (depende de T103); prueba mínima: unit T104.
 - [ ] T107 [US4] [FE] Enviar primer prompt por `POST /conversations`, seleccionar ID y conservar historial en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T106); prueba mínima: E2E T105.
 
 **Checkpoint**: no existe endpoint clear ni conversación vacía persistida.
@@ -306,8 +306,8 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
 - Frontend US1: `T049 → T066`; `T050 → T068`; `T051 → T072`.
 - Context: `T034 → T059`; `T076 → T081 → T082 → T083`; `T075 → T082 → T083`; `T079 → T087`.
 - US2: `T077 → T084/T085`; `T078 → T086/T088`.
-- US3: `T089–T093 → T096–T103`.
-- US4: `T104/T105 → T106 → T107`.
+- US3: `T089–T093 → T096–T102`; `T088/T099–T102 → T103`.
+- US4: `T104/T105/T103 → T106 → T107`.
 - Recovery: `T108 → T109 → T112`; frontend: `T107 → T113`;
   UX: `T113 → T117 → T118`.
 - Audits: `T065/T085/T098/T109/T111 → T112` y
