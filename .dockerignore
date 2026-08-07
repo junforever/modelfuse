@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+coverage/
+.git/
+Dockerfile*
+.dockerignore
+.env*
+!.env.sample
+*.log*
+.turbo/
+.vscode/
+.idea/

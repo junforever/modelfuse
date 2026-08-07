@@ -5,7 +5,6 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <include file="conversations/db.changelog-conversations.xml" relativeToChangelogFile="true"/>
-    <include file="messages/db.changelog-messages.xml" relativeToChangelogFile="true"/>
+    <include file="001-create-model-responses.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

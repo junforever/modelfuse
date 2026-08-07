@@ -35,3 +35,8 @@ dist-ssr
 
 # Database Dumps
 db/dumps/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

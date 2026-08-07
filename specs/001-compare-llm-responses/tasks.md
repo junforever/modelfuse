@@ -41,15 +41,15 @@ objetivo, archivos principales y prueba mínima.
 
 **Purpose**: instalar solo dependencias y runners exigidos por los artefactos.
 
-- [ ] T001 [FE] Añadir TanStack Query en `apps/frontend/package.json` y `pnpm-lock.yaml`; prueba mínima: build frontend.
-- [ ] T002 [P] [UNIT] Configurar Testing Library y QueryClient aislado en `apps/frontend/src/test/setup.ts`, `apps/frontend/src/test/query-test-utils.tsx` y `apps/frontend/vitest.config.ts`; tipo: unit infrastructure.
-- [ ] T003 [P] [UNIT] Probar render, teclado y foco de `Tabs`, `Dialog`, `DropdownMenu`, `ScrollArea`, `Skeleton` y `Alert` en `apps/frontend/src/test/ui-primitives.test.tsx` (depende de T002); tipo: component unit, debe fallar antes de T004.
-- [ ] T004 [P] [UI] Añadir/exportar con Shadcn `Tabs`, `Dialog`, `DropdownMenu`, `ScrollArea`, `Skeleton` y `Alert` en `packages/ui/src/components/` (depende de T003); prueba mínima: unit T003.
-- [ ] T005 [INTEGRATION] Probar el montaje con `QueryClientProvider` y QueryClient real en `apps/frontend/src/providers/__tests__/query-provider.integration.test.tsx` (depende de T001, T002); tipo: frontend integration provider/cache, debe fallar antes de T006.
-- [ ] T006 [FE] Montar `QueryClientProvider` en `apps/frontend/src/providers/query-provider.tsx` y `apps/frontend/src/main.tsx` (depende de T001, T005); prueba mínima: integration T005.
-- [ ] T007 [P] [E2E] Añadir Playwright/scripts y configurar providers fake deterministas en `apps/frontend/package.json`, `pnpm-lock.yaml`, `apps/frontend/playwright.config.ts` y `apps/frontend/e2e/fixtures/modelFuse.ts`; tipo: E2E smoke del fixture.
-- [ ] T008 [P] [BE] Documentar las variables backend vigentes de providers, límites, ratio, ventana y sidebar en `apps/backend/.env.sample`; prueba mínima: revisión contra la sección 2 de `specs/001-compare-llm-responses/quickstart.md` sin variables de polling.
-- [ ] T009 [P] [FE] Documentar las variables frontend vigentes de API y colapso en `apps/frontend/.env.sample`; prueba mínima: revisión contra la sección 3 de `specs/001-compare-llm-responses/quickstart.md` sin variables de polling.
+- [X] T001 [FE] Añadir TanStack Query en `apps/frontend/package.json` y `pnpm-lock.yaml`; prueba mínima: build frontend.
+- [X] T002 [P] [UNIT] Configurar Testing Library y QueryClient aislado en `apps/frontend/src/test/setup.ts`, `apps/frontend/src/test/query-test-utils.tsx` y `apps/frontend/vitest.config.ts`; tipo: unit infrastructure.
+- [X] T003 [P] [UNIT] Probar render, teclado y foco de `Tabs`, `Dialog`, `DropdownMenu`, `ScrollArea`, `Skeleton` y `Alert` en `apps/frontend/src/test/ui-primitives.test.tsx` (depende de T002); tipo: component unit, debe fallar antes de T004.
+- [X] T004 [P] [UI] Añadir/exportar con Shadcn `Tabs`, `Dialog`, `DropdownMenu`, `ScrollArea`, `Skeleton` y `Alert` en `packages/ui/src/components/` (depende de T003); prueba mínima: unit T003.
+- [X] T005 [INTEGRATION] Probar el montaje con `QueryClientProvider` y QueryClient real en `apps/frontend/src/providers/__tests__/query-provider.integration.test.tsx` (depende de T001, T002); tipo: frontend integration provider/cache, debe fallar antes de T006.
+- [X] T006 [FE] Montar `QueryClientProvider` en `apps/frontend/src/providers/query-provider.tsx` y `apps/frontend/src/main.tsx` (depende de T001, T005); prueba mínima: integration T005.
+- [X] T007 [P] [E2E] Añadir Playwright/scripts y configurar providers fake deterministas en `apps/frontend/package.json`, `pnpm-lock.yaml`, `apps/frontend/playwright.config.ts` y `apps/frontend/e2e/fixtures/modelFuse.ts`; tipo: E2E smoke del fixture.
+- [X] T008 [P] [BE] Documentar las variables backend vigentes de providers, límites, ratio, ventana y sidebar en `apps/backend/.env.sample`; prueba mínima: revisión contra la sección 2 de `specs/001-compare-llm-responses/quickstart.md` sin variables de polling.
+- [X] T009 [P] [FE] Documentar las variables frontend vigentes de API y colapso en `apps/frontend/.env.sample`; prueba mínima: revisión contra la sección 3 de `specs/001-compare-llm-responses/quickstart.md` sin variables de polling.
 
 **Checkpoint**: no se añaden SDKs LLM preventivos, librerías SSE, retry automático,
 colas ni infraestructura genérica de idempotencia.
@@ -62,10 +62,10 @@ colas ni infraestructura genérica de idempotencia.
 
 ### Database / Liquibase
 
-- [ ] T010 [P] [INTEGRATION] Escribir validación de tres tablas, `conversations.title` como `text`, cascades, checks, uniques, índices parciales y restauración del estado anterior tras rollback en `db/tests/validate-model-fuse-schema.sql`; tipo: integration PostgreSQL, debe fallar antes de T011–T013.
-- [ ] T011 [DB] Crear `conversations` con `title text` —el límite grapheme pertenece al backend— y `turns` con request IDs, ordinal, estados, cascades, índice único parcial de turno activo y rollback explícito en `db/changelogs/conversations/001-create-conversations-and-turns.sql`; prueba mínima: integration T010.
-- [ ] T012 [DB] Crear `model_responses` con cuatro slots, errores, `continued_without_at`, `is_stale`, `attempt_no`, metadata, checks/índices busy y rollback explícito en `db/changelogs/messages/001-create-model-responses.sql` (depende de T011); prueba mínima: integration T010.
-- [ ] T013 [DB] Incluir ambos módulos en `db/changelogs/conversations/db.changelog-conversations.xml`, `db/changelogs/messages/db.changelog-messages.xml` y `db/changelogs/db.changelog-master.xml` (depende de T011, T012); prueba mínima: Liquibase validate y T010.
+- [X] T010 [P] [INTEGRATION] Escribir validación de tres tablas, `conversations.title` como `text`, cascades, checks, uniques, índices parciales y restauración del estado anterior tras rollback en `db/tests/validate-model-fuse-schema.sql`; tipo: integration PostgreSQL, debe fallar antes de T011–T013.
+- [X] T011 [DB] Crear `conversations` con `title text` —el límite grapheme pertenece al backend— y `turns` con request IDs, ordinal, estados, cascades, índice único parcial de turno activo y rollback explícito en `db/changelogs/conversations/001-create-conversations-and-turns.sql`; prueba mínima: integration T010.
+- [X] T012 [DB] Crear `model_responses` con cuatro slots, errores, `continued_without_at`, `is_stale`, `attempt_no`, metadata, checks/índices busy y rollback explícito en `db/changelogs/messages/001-create-model-responses.sql` (depende de T011); prueba mínima: integration T010.
+- [X] T013 [DB] Incluir ambos módulos en `db/changelogs/conversations/db.changelog-conversations.xml`, `db/changelogs/messages/db.changelog-messages.xml` y `db/changelogs/db.changelog-master.xml` (depende de T011, T012); prueba mínima: Liquibase validate y T010.
 
 ### Backend foundation
 
