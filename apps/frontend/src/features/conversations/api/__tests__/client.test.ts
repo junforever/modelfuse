@@ -15,7 +15,7 @@ describe('conversation API client', () => {
   it('forwards AbortSignal cancellation to its Axios transport', async () => {
     const adapter: AxiosAdapter = config =>
       new Promise((_resolve, reject) => {
-        config.signal?.addEventListener(
+        config.signal?.addEventListener?.(
           'abort',
           () => reject(new CanceledError(undefined, config)),
           { once: true }

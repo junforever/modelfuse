@@ -8,9 +8,9 @@ import { requestContextMiddleware } from '#middleware/logger/requestContext';
 import { requestTimeOut } from '#middleware/timeout/requestTimeOut';
 import { haltOnTimedout } from '#middleware/timeout/haltOnTimedout';
 import { globalErrorHandler } from '#middleware/global/globalErrorHandler';
-import { apiRouter } from './routes/apiRouter.js';
+import { createApiRouter, type ApiDependencies } from './routes/apiRouter.js';
 
-export const createApp = (): Express => {
+export const createApp = (dependencies?: ApiDependencies): Express => {
   const app: Express = express();
 
   app.disable('x-powered-by');
@@ -30,7 +30,12 @@ export const createApp = (): Express => {
     })
   );
 
-  app.use(timeout(process.env.REQUEST_TIMEOUT || '15s'));
+  const timeoutMiddleware = timeout(process.env.REQUEST_TIMEOUT || '15s');
+  app.use((request, response, next) =>
+    request.path.endsWith('/events')
+      ? next()
+      : timeoutMiddleware(request, response, next)
+  );
   app.use(haltOnTimedout);
   app.use(requestTimeOut);
 
@@ -42,7 +47,7 @@ export const createApp = (): Express => {
   );
   app.use(jsonValidation);
 
-  app.use('/api/v1', apiRouter);
+  app.use('/api/v1', createApiRouter(dependencies));
 
   app.use(invalidRoutes);
   app.use(globalErrorHandler);

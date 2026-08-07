@@ -1,0 +1,81 @@
+import { useState } from 'react';
+
+import { Button } from '@workspace/ui/components/button';
+
+import type { ModelResponse, ResponseSlot } from '../types/conversation';
+import { ContinueWithoutDialog } from './ContinueWithoutDialog';
+
+interface ResponsePanelProps {
+  readonly response: ModelResponse;
+  readonly modelLabel: string;
+  readonly runtimeStage?: string;
+  readonly hasWorkInProgress: boolean;
+  readonly onRetry: (slot: ResponseSlot) => void;
+  readonly onContinueWithout: (slot: ResponseSlot) => void;
+}
+
+export function ResponsePanel({
+  response,
+  modelLabel,
+  runtimeStage,
+  hasWorkInProgress,
+  onRetry,
+  onContinueWithout,
+}: ResponsePanelProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  if (response.status === 'completed') {
+    return (
+      <div className="grid gap-3">
+        {response.isStale && (
+          <p className="text-sm text-muted-foreground">Consolidación pendiente</p>
+        )}
+        <p className="whitespace-pre-wrap">{response.content}</p>
+      </div>
+    );
+  }
+
+  if (response.status !== 'failed') {
+    return (
+      <p className="text-muted-foreground" role="status">
+        {runtimeStage ?? (response.status === 'pending' ? 'En espera…' : 'Generando respuesta…')}
+      </p>
+    );
+  }
+
+  if (response.continuedWithout) {
+    return <p>Se continuó sin {modelLabel} de forma permanente.</p>;
+  }
+
+  const canContinueWithout = response.slot !== 'qwen';
+
+  return (
+    <div className="grid gap-4">
+      <p className="text-destructive">{response.error?.message ?? 'La respuesta falló.'}</p>
+      <div className="flex flex-wrap gap-2">
+        {response.recoverable && (
+          <Button
+            variant="outline"
+            disabled={hasWorkInProgress}
+            onClick={() => onRetry(response.slot)}
+          >
+            Reintentar {modelLabel}
+          </Button>
+        )}
+        {canContinueWithout && (
+          <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
+            Continuar sin {modelLabel}
+          </Button>
+        )}
+      </div>
+      {canContinueWithout && (
+        <ContinueWithoutDialog
+          modelLabel={modelLabel}
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onConfirm={() => onContinueWithout(response.slot)}
+        />
+      )}
+    </div>
+  );
+}

@@ -31,29 +31,28 @@ export function applyConversationEvent(
   snapshot: TurnEventSnapshot,
   event: TurnEvent
 ): TurnEventSnapshot {
-  const { data } = event;
-
+  // The six field-specific events in an opening snapshot share one sequence.
   if (
-    data.conversationId !== snapshot.conversationId ||
-    data.turnId !== snapshot.turnId ||
-    data.eventSequence <= snapshot.lastEventSequence
+    event.data.conversationId !== snapshot.conversationId ||
+    event.data.turnId !== snapshot.turnId ||
+    event.data.eventSequence < snapshot.lastEventSequence
   ) {
     return snapshot;
   }
 
   if (event.event === 'slot_update') {
     const currentResponse = snapshot.turn.responses.find(
-      response => response.slot === data.response.slot
+      response => response.slot === event.data.response.slot
     );
 
     if (
       !currentResponse ||
       !isNewerVersion(
-        data.response.updatedAt,
+        event.data.response.updatedAt,
         currentResponse.updatedAt,
-        data.eventSequence,
+        event.data.eventSequence,
         snapshot.lastEventSequence,
-        data.response.attemptNo,
+        event.data.response.attemptNo,
         currentResponse.attemptNo
       )
     ) {
@@ -64,19 +63,19 @@ export function applyConversationEvent(
       ...snapshot,
       turn: {
         ...snapshot.turn,
-        responses: replaceResponse(snapshot.turn.responses, data.response),
+        responses: replaceResponse(snapshot.turn.responses, event.data.response),
       },
-      lastEventSequence: data.eventSequence,
+      lastEventSequence: event.data.eventSequence,
     };
   }
 
   if (event.event === 'turn_update') {
     if (
-      data.turn.id !== snapshot.turn.id ||
+      event.data.turn.id !== snapshot.turn.id ||
       !isNewerVersion(
-        data.turn.updatedAt,
+        event.data.turn.updatedAt,
         snapshot.turn.updatedAt,
-        data.eventSequence,
+        event.data.eventSequence,
         snapshot.lastEventSequence
       )
     ) {
@@ -87,18 +86,18 @@ export function applyConversationEvent(
       ...snapshot,
       turn: {
         ...snapshot.turn,
-        status: data.turn.status,
-        updatedAt: data.turn.updatedAt,
+        status: event.data.turn.status,
+        updatedAt: event.data.turn.updatedAt,
       },
-      lastEventSequence: data.eventSequence,
+      lastEventSequence: event.data.eventSequence,
     };
   }
 
   if (
     !isNewerVersion(
-      data.updatedAt,
+      event.data.updatedAt,
       snapshot.updatedAt,
-      data.eventSequence,
+      event.data.eventSequence,
       snapshot.lastEventSequence
     )
   ) {
@@ -107,8 +106,8 @@ export function applyConversationEvent(
 
   return {
     ...snapshot,
-    hasWorkInProgress: data.hasWorkInProgress,
-    updatedAt: data.updatedAt,
-    lastEventSequence: data.eventSequence,
+    hasWorkInProgress: event.data.hasWorkInProgress,
+    updatedAt: event.data.updatedAt,
+    lastEventSequence: event.data.eventSequence,
   };
 }

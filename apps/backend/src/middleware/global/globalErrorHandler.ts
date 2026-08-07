@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { logger } from '#utils/logger';
 import type { ApiError } from '../../types/apiError.js';
+import { ConversationError } from '../../services/conversations/conversationErrors.js';
 /**
  * Global error handling middleware for Express applications.
  *
@@ -52,11 +53,12 @@ export function globalErrorHandler(
     requestId: req.requestId,
   });
 
+  const expected = err instanceof ConversationError ? err : undefined;
   const response: ApiError = {
-    code: 'INTERNAL_ERROR',
-    message: 'An unexpected error occurred. Please try again later.',
+    code: expected?.code ?? 'INTERNAL_ERROR',
+    message: expected?.message ?? 'An unexpected error occurred. Please try again later.',
     requestId: req.requestId,
   };
 
-  res.status(500).json(response);
+  res.status(expected?.status ?? 500).json(response);
 }

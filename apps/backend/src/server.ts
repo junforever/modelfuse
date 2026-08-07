@@ -2,6 +2,7 @@ import type { Server } from 'node:http';
 
 import { createApp } from './app.js';
 import { parseEnv } from './infrastructure/config/env.js';
+import type { ApiDependencies } from './routes/apiRouter.js';
 
 function resolvePort(port: number | undefined): number {
   const resolvedPort = port ?? Number(process.env.PORT ?? 3001);
@@ -14,11 +15,13 @@ function resolvePort(port: number | undefined): number {
 }
 
 export async function startServer(port?: number): Promise<Server> {
+  let dependencies: ApiDependencies | undefined;
   if (process.env.NODE_ENV !== 'test') {
-    parseEnv(process.env);
+    const environment = parseEnv(process.env);
+    dependencies = await createProductionDependencies(environment.LLM_CONTEXT_THRESHOLD_RATIO);
   }
 
-  const server = createApp().listen(resolvePort(port));
+  const server = createApp(dependencies).listen(resolvePort(port));
 
   return new Promise<Server>((resolve, reject) => {
     const onError = (error: Error): void => {
@@ -33,6 +36,34 @@ export async function startServer(port?: number): Promise<Server> {
     server.once('error', onError);
     server.once('listening', onListening);
   });
+}
+
+async function createProductionDependencies(contextThresholdRatio: number): Promise<ApiDependencies> {
+  const [poolModule, registryModule, repositoryModule, turnRepositoryModule, publisherModule, orchestratorModule, serviceModule] =
+    await Promise.all([
+      import('./infrastructure/postgres/postgresPool.js'),
+      import('./infrastructure/llm/providerRegistry.js'),
+      import('./infrastructure/postgres/repositories/conversationRepository.js'),
+      import('./infrastructure/postgres/repositories/turnRepository.js'),
+      import('./services/conversations/turnEventPublisher.js'),
+      import('./services/conversations/TurnOrchestrator.js'),
+      import('./services/conversations/ConversationService.js'),
+    ]);
+  const conversationRepository = new repositoryModule.ConversationRepository(poolModule.postgresPool);
+  const turnRepository = new turnRepositoryModule.TurnRepository(poolModule.postgresPool);
+  const turnEventPublisher = new publisherModule.TurnEventPublisher();
+  const orchestrator = new orchestratorModule.TurnOrchestrator({
+    providerRegistry: registryModule.providerRegistry,
+    turnRepository,
+    publisher: turnEventPublisher,
+    contextThresholdRatio,
+  });
+  const conversationService = new serviceModule.ConversationService({
+    conversationRepository,
+    turnRepository,
+    orchestrator,
+  });
+  return { conversationService, turnEventPublisher };
 }
 
 export async function stopServer(server: Server): Promise<void> {

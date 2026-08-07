@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import { applyConversationEvent } from '../conversation-cache';
+import type {
+  ModelResponse,
+  ResponseSlot,
+} from '../../types/conversation';
+import type { TurnEvent, TurnEventSnapshot } from '../../types/sse';
 
 const conversationId = '123e4567-e89b-42d3-a456-426614174000';
 const turnId = '223e4567-e89b-42d3-a456-426614174000';
 const updatedAt = '2026-07-26T20:00:01.000Z';
 
-function response(slot: 'openai' | 'google' | 'minimax' | 'qwen') {
+function response<Slot extends ResponseSlot>(slot: Slot): ModelResponse<Slot> {
   return {
     slot,
     role: slot === 'qwen' ? 'consolidator' : 'base',
@@ -24,10 +29,10 @@ function response(slot: 'openai' | 'google' | 'minimax' | 'qwen') {
     completedAt: null,
     createdAt: updatedAt,
     updatedAt,
-  };
+  } as ModelResponse<Slot>;
 }
 
-function snapshot() {
+function snapshot(): TurnEventSnapshot {
   return {
     conversationId,
     turnId,
@@ -44,10 +49,12 @@ function snapshot() {
     hasWorkInProgress: true,
     updatedAt,
     lastEventSequence: 10,
-  } as const;
+  };
 }
 
-function slotUpdate(overrides: { eventSequence: number; updatedAt?: string; attemptNo?: number }) {
+function slotUpdate(
+  overrides: { eventSequence: number; updatedAt?: string; attemptNo?: number }
+): Extract<TurnEvent, { event: 'slot_update' }> {
   return {
     event: 'slot_update',
     data: {
@@ -64,7 +71,7 @@ function slotUpdate(overrides: { eventSequence: number; updatedAt?: string; atte
       },
       runtimeStage: 'must stay local',
     },
-  } as const;
+  };
 }
 
 describe('conversation SSE cache updates', () => {

@@ -1,0 +1,123 @@
+import axios from 'axios';
+
+import { isRecoverableLlmError } from '../../../services/llm/llmErrors.js';
+import type {
+  InputTokenMeasurement,
+  LlmErrorCode,
+  LlmMessage,
+  LlmMetrics,
+  LlmProvider,
+  LlmProviderConfig,
+  LlmProviderError,
+  LlmRequest,
+  LlmResult,
+} from '../../../types/llm.js';
+
+interface QwenResponse {
+  output?: { choices?: Array<{ message?: { content?: unknown } }> };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
+}
+
+export class QwenProvider implements LlmProvider {
+  readonly slot = 'qwen' as const;
+  readonly provider = 'qwen';
+  readonly model: string;
+  readonly context;
+
+  constructor(private readonly config: LlmProviderConfig) {
+    this.model = config.model;
+    this.context = {
+      limitTokens: config.contextLimitTokens,
+      measureInputTokens: (messages: LlmMessage[]) => this.measure(messages),
+    };
+  }
+
+  async generate(request: LlmRequest): Promise<LlmResult> {
+    const startedAt = new Date().toISOString();
+    let data: QwenResponse;
+
+    try {
+      ({ data } = await axios.request<QwenResponse>({
+        method: 'POST',
+        url: this.config.endpoint,
+        timeout: this.config.timeoutMs,
+        signal: request.signal,
+        headers: { Authorization: `Bearer ${this.config.apiKey}` },
+        data: {
+          model: this.model,
+          input: { messages: request.messages },
+          parameters: { result_format: 'message' },
+        },
+      }));
+    } catch (error) {
+      throw this.failure(this.classify(error));
+    }
+
+    const content = data.output?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string' || content.trim() === '') {
+      throw this.failure('invalid_response');
+    }
+
+    const metrics: LlmMetrics | undefined = data.usage
+      ? {
+          inputTokens: data.usage.input_tokens,
+          outputTokens: data.usage.output_tokens,
+          totalTokens: data.usage.total_tokens,
+        }
+      : undefined;
+
+    return {
+      content: content.trim(),
+      provider: this.provider,
+      model: this.model,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      ...(metrics ? { metrics } : {}),
+    };
+  }
+
+  private measure(messages: LlmMessage[]): InputTokenMeasurement {
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        model: this.model,
+        input: { messages },
+        parameters: { result_format: 'message' },
+      }),
+    ).length;
+    return {
+      kind: 'upper_bound',
+      tokens: bytes,
+      basis: 'qwen deployment JSON UTF-8 byte upper bound',
+    };
+  }
+
+  private classify(error: unknown): LlmErrorCode {
+    if (!axios.isAxiosError(error)) return 'provider_error';
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') return 'timeout';
+
+    const status = error.response?.status;
+    if (status === undefined) return 'connectivity';
+    if (status === 401 || status === 403) return 'authentication';
+    if (status === 429) return 'rate_limited';
+    if (status === 413) return 'invalid_prompt_size';
+
+    const body = error.response?.data as { code?: unknown } | undefined;
+    if (body?.code === 'DataInspectionFailed') return 'content_blocked';
+    if (status >= 500) return 'provider_transient_error';
+    return 'provider_error';
+  }
+
+  private failure(code: LlmErrorCode): LlmProviderError {
+    return {
+      code,
+      safeMessage: 'Qwen request failed.',
+      provider: this.provider,
+      model: this.model,
+      recoverable: isRecoverableLlmError(code),
+    };
+  }
+}

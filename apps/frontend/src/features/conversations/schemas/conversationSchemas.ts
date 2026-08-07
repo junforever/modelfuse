@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import type { TurnSnapshotResponse } from '../types/conversation';
+import type {
+  ApiError,
+  ConversationSummary,
+  ConversationTurnResponse,
+  TurnSnapshotResponse,
+} from '../types/conversation';
 import type { TurnEvent, TurnEventSnapshot } from '../types/sse';
 
 const uuidSchema = z.uuid();
@@ -77,6 +82,25 @@ const turnSchema = z.object({
   ]),
   createdAt: dateTimeSchema,
   updatedAt: dateTimeSchema,
+});
+const conversationSummarySchema: z.ZodType<ConversationSummary> = z.object({
+  id: uuidSchema,
+  title: z.string(),
+  hasWorkInProgress: z.boolean(),
+  createdAt: dateTimeSchema,
+  updatedAt: dateTimeSchema,
+});
+
+export const apiErrorSchema: z.ZodType<ApiError> = z.object({
+  code: z.string(),
+  message: z.string(),
+  requestId: z.string(),
+  fieldErrors: z.record(z.string(), z.array(z.string())).optional(),
+});
+
+export const conversationTurnResponseSchema: z.ZodType<ConversationTurnResponse> = z.object({
+  conversation: conversationSummarySchema,
+  turn: turnSchema,
 });
 
 export const turnSnapshotResponseSchema: z.ZodType<TurnSnapshotResponse> = z.object({
