@@ -1,6 +1,6 @@
-import { createResponse } from '#utils/responseHandler';
 import { logger } from '#utils/logger';
 import { type NextFunction, type Request, type Response } from 'express';
+import type { ApiError } from '../../types/apiError.js';
 
 /**
  * JSON validation middleware for Express.
@@ -26,27 +26,27 @@ import { type NextFunction, type Request, type Response } from 'express';
  */
 
 export const jsonValidation = (
-  err: SyntaxError,
+  err: unknown,
   req: Request,
   res: Response,
-  _next: NextFunction
-) => {
+  next: NextFunction
+): void => {
   if (err instanceof SyntaxError && 'body' in err) {
     logger.warn({
       message: 'Invalid JSON in request body',
       operation: 'json_validation',
       requestId: req.requestId,
-      error: { message: err.message },
     });
 
-    return createResponse(res, {
-      code: 400,
-      success: false,
-      message: 'Invalid JSON format.',
-      responseCode: 'INVALID_JSON_FORMAT',
-    });
+    const response: ApiError = {
+      code: 'INVALID_JSON',
+      message: 'Request body contains invalid JSON.',
+      requestId: req.requestId,
+    };
+
+    res.status(400).json(response);
+    return;
   }
 
-  // Other errors are passed to the global error handler
-  return _next(err);
+  next(err);
 };

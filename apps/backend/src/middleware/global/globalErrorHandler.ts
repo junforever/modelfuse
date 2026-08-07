@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { logger } from '#utils/logger';
-import { createResponse } from '#utils/responseHandler';
+import type { ApiError } from '../../types/apiError.js';
 /**
  * Global error handling middleware for Express applications.
  *
@@ -33,40 +33,30 @@ import { createResponse } from '#utils/responseHandler';
  */
 
 export function globalErrorHandler(
-  err: Error,
+  err: unknown,
   req: Request,
   res: Response,
-  _next: NextFunction
+  next: NextFunction
 ): void {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
   const log = req.log || logger;
 
-  // Structured error log - with all available context
   log.error({
     message: 'Unhandled error in request',
     operation: 'global_error_handler',
-    error: {
-      message: err.message,
-      type: err.name,
-      stack: err.stack,
-    },
     method: req.method,
-    route: req.route?.path || req.path,
-    statusCode: res.statusCode,
     requestId: req.requestId,
-    //FIXME: agregar la definición de user al Request
-    userId: req.user?.id,
-    tenantId: (req as any).tenantId,
-    body: req.body ? '[REDACTED]' : undefined, // Never log raw bodies
-    query: req.query,
   });
 
-  // Response to client: NEVER stack trace, NEVER internal details
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-
-  createResponse(res, {
-    code: statusCode,
-    success: false,
+  const response: ApiError = {
+    code: 'INTERNAL_ERROR',
     message: 'An unexpected error occurred. Please try again later.',
-    responseCode: 'UNEXPECTED_ERROR',
-  });
+    requestId: req.requestId,
+  };
+
+  res.status(500).json(response);
 }

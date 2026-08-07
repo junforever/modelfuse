@@ -1,23 +1,23 @@
 import cors from 'cors';
 import timeout from 'connect-timeout';
+import express, { type Express } from 'express';
+
 import { invalidRoutes } from '#middleware/routes/invalidRoutes';
 import { jsonValidation } from '#middleware/body/jsonValidation';
 import { requestContextMiddleware } from '#middleware/logger/requestContext';
 import { requestTimeOut } from '#middleware/timeout/requestTimeOut';
 import { haltOnTimedout } from '#middleware/timeout/haltOnTimedout';
-import express, { type Express } from 'express';
-import { type Server } from 'http';
 import { globalErrorHandler } from '#middleware/global/globalErrorHandler';
+import { apiRouter } from './routes/apiRouter.js';
 
 export const createApp = (): Express => {
   const app: Express = express();
 
-  /* Middlewares */
-
-  // Disable x-powered-by
   app.disable('x-powered-by');
 
-  // CORS
+  // The request ID must exist even when body parsing fails.
+  app.use(requestContextMiddleware);
+
   app.use(
     cors({
       origin:
@@ -30,44 +30,22 @@ export const createApp = (): Express => {
     })
   );
 
-  // Request timeout
   app.use(timeout(process.env.REQUEST_TIMEOUT || '15s'));
   app.use(haltOnTimedout);
   app.use(requestTimeOut);
 
-  // Max request body size
   app.use(
     express.json({
       limit: process.env.REQUEST_MAX_BODY_SIZE || '1mb',
       strict: true,
     })
   );
-
-  // JSON validation
   app.use(jsonValidation);
 
-  // Request context logger
-  app.use(requestContextMiddleware);
+  app.use('/api/v1', apiRouter);
 
-  // Invalid routes
   app.use(invalidRoutes);
-
-  // Global error handler
   app.use(globalErrorHandler);
 
   return app;
-};
-
-export const gracefulShutdown = (server: Server, signal: string) => {
-  console.log(`\n🛑 Recieved ${signal}: closing server...`);
-  server.close(() => {
-    console.log('✅ Server closed correctly.');
-    process.exit(0);
-  });
-
-  // If server doesn't close after 5s, force exit
-  setTimeout(() => {
-    console.error('⚠️ Forced server shutdown after 5 seconds.');
-    process.exit(1);
-  }, 5000).unref();
 };
