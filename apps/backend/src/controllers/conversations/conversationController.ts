@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import type { CreateConversationBody } from '../../middleware/validation/conversationSchemas.js';
+import type {
+  CreateConversationBody,
+  CreateTurnBody,
+} from '../../middleware/validation/conversationSchemas.js';
 import type { ValidatedRequest } from '../../middleware/validation/validateRequest.js';
 import type { ConversationService } from '../../services/conversations/ConversationService.js';
 import type { ResponseSlot } from '../../types/conversations.js';
@@ -23,6 +26,15 @@ export function createConversationController(service: ConversationService) {
       try {
         const body = (request as ValidatedRequest).validatedBody as CreateConversationBody;
         response.status(202).json(await service.createConversation(body));
+      } catch (error) {
+        next(error);
+      }
+    },
+    createTurn: async (request: Request, response: Response, next: NextFunction) => {
+      try {
+        const { conversationId } = (request as ValidatedRequest).validatedParams as ConversationParams;
+        const body = (request as ValidatedRequest).validatedBody as CreateTurnBody;
+        response.status(202).json(await service.createTurn(conversationId, body));
       } catch (error) {
         next(error);
       }

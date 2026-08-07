@@ -171,23 +171,23 @@ precede a busy y protección técnica cubre cabe/compacta/falla sin subestimar.
 
 ### Tests for User Story 2
 
-- [ ] T075 [P] [US2] [UNIT] Probar composición base/Qwen a partir de proyecciones de repositorio controladas, ventana, compactación, re-medición y `INVALID_PROMPT_SIZE` en `apps/backend/src/services/conversations/__tests__/ContextBuilder.test.ts`; tipo: unit.
-- [ ] T076 [P] [US2] [INTEGRATION] Probar `contextRepository` contra PostgreSQL real con fixtures de dos conversaciones y varios turnos: cada base recupera en orden los prompts de la ventana y solo respuestas `completed` de su slot; Qwen recupera solo prompts y consolidaciones previas vigentes; ambas consultas excluyen contenido assistant fallido, consolidaciones `stale`, historiales de otros slots y datos de otra conversación en `apps/backend/src/infrastructure/postgres/repositories/__tests__/contextRepository.integration.test.ts` (depende de T013); tipo: integration PostgreSQL, debe fallar antes de T081.
-- [ ] T077 [P] [US2] [INTEGRATION] Probar replay→busy→create, ordinal y liberación terminal en `apps/backend/src/routes/conversations/__tests__/conversationContinuation.integration.test.ts`; tipo: integration.
-- [ ] T078 [P] [US2] [INTEGRATION] Probar createTurn, UUID estable, navegación, cache por IDs y nueva suscripción SSE en `apps/frontend/src/features/conversations/__tests__/conversation-continuation.test.tsx`; tipo: frontend integration.
-- [ ] T079 [P] [US2] [UNIT] Probar timeline multiturno y aviso de contexto acotado sin contenido/mediciones/límites en `apps/frontend/src/features/conversations/__tests__/TurnList.test.tsx` y `apps/frontend/src/features/conversations/__tests__/ContextWindowNotice.test.tsx`; tipo: component unit, debe fallar antes de T087.
-- [ ] T080 [P] [US2] [E2E] Escribir E2E multiturno de aislamiento, busy por conversación y protección de contexto en `apps/frontend/e2e/conversation-continuation.spec.ts`; tipo: E2E.
+- [X] T075 [P] [US2] [UNIT] Probar composición base/Qwen a partir de proyecciones de repositorio controladas, ventana, compactación, re-medición y `INVALID_PROMPT_SIZE` en `apps/backend/src/services/conversations/__tests__/ContextBuilder.test.ts`; tipo: unit.
+- [X] T076 [P] [US2] [INTEGRATION] Probar `contextRepository` contra PostgreSQL real con fixtures de dos conversaciones y varios turnos: cada base recupera en orden los prompts de la ventana y solo respuestas `completed` de su slot; Qwen recupera solo prompts y consolidaciones previas vigentes; ambas consultas excluyen contenido assistant fallido, consolidaciones `stale`, historiales de otros slots y datos de otra conversación en `apps/backend/src/infrastructure/postgres/repositories/__tests__/contextRepository.integration.test.ts` (depende de T013); tipo: integration PostgreSQL, debe fallar antes de T081.
+- [X] T077 [P] [US2] [INTEGRATION] Probar replay→busy→create, ordinal y liberación terminal en `apps/backend/src/routes/conversations/__tests__/conversationContinuation.integration.test.ts`; tipo: integration.
+- [X] T078 [P] [US2] [INTEGRATION] Probar createTurn, UUID estable, navegación, cache por IDs y nueva suscripción SSE en `apps/frontend/src/features/conversations/__tests__/conversation-continuation.test.tsx`; tipo: frontend integration.
+- [X] T079 [P] [US2] [UNIT] Probar timeline multiturno y aviso de contexto acotado sin contenido/mediciones/límites en `apps/frontend/src/features/conversations/__tests__/TurnList.test.tsx` y `apps/frontend/src/features/conversations/__tests__/ContextWindowNotice.test.tsx`; tipo: component unit, debe fallar antes de T087.
+- [X] T080 [P] [US2] [E2E] Escribir E2E multiturno de aislamiento, busy por conversación y protección de contexto en `apps/frontend/e2e/conversation-continuation.spec.ts`; tipo: E2E.
 
 ### Implementation for User Story 2
 
-- [ ] T081 [P] [US2] [BE] Implementar consultas aisladas base/Qwen en `apps/backend/src/infrastructure/postgres/repositories/contextRepository.ts` (depende de T076); prueba mínima: integration T076.
-- [ ] T082 [US2] [BE] Implementar composición por turnos sobre `contextProtection` en `apps/backend/src/services/conversations/ContextBuilder.ts` (depende de T059, T081); prueba mínima: unit T075.
-- [ ] T083 [US2] [BE] Integrar `ContextBuilder` antes de cada adapter y omitir Continue-without en Qwen en `apps/backend/src/services/conversations/TurnOrchestrator.ts` (depende de T082); prueba mínima: unit T075 y E2E T080.
-- [ ] T084 [US2] [BE] Implementar lock, replay, conflicto, busy y ordinal para turno posterior en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts` (depende de T052, T053); prueba mínima: integration T077.
-- [ ] T085 [US2] [BE] Exponer `POST /conversations/:id/turns` en `apps/backend/src/services/conversations/ConversationService.ts`, `conversationController.ts` y `conversationRoutes.ts` (depende de T083, T084); prueba mínima: integration T077.
-- [ ] T086 [P] [US2] [FE] Añadir createTurn idempotente en `apps/frontend/src/features/conversations/api/conversationsApi.ts` y `hooks/useConversationExecution.ts`; prueba mínima: frontend T078.
-- [ ] T087 [P] [US2] [FE] Crear timeline multiturno y aviso contextual en `apps/frontend/src/features/conversations/components/TurnList.tsx` y `ContextWindowNotice.tsx`; prueba mínima: component T079.
-- [ ] T088 [US2] [FE] Integrar follow-up, timeline, cache por conversación y SSE del turno activo en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T086, T087); prueba mínima: frontend T078 y E2E T080.
+- [X] T081 [P] [US2] [BE] Implementar consultas aisladas base/Qwen en `apps/backend/src/infrastructure/postgres/repositories/contextRepository.ts` (depende de T076); prueba mínima: integration T076.
+- [X] T082 [US2] [BE] Implementar composición por turnos sobre `contextProtection` en `apps/backend/src/services/conversations/ContextBuilder.ts` (depende de T059, T081); prueba mínima: unit T075.
+- [X] T083 [US2] [BE] Integrar `ContextBuilder` antes de cada adapter y omitir Continue-without en Qwen en `apps/backend/src/services/conversations/TurnOrchestrator.ts` (depende de T082); prueba mínima: unit T075 y E2E T080.
+- [X] T084 [US2] [BE] Implementar lock, replay, conflicto, busy y ordinal para turno posterior en `apps/backend/src/infrastructure/postgres/repositories/conversationRepository.ts` (depende de T052, T053); prueba mínima: integration T077.
+- [X] T085 [US2] [BE] Exponer `POST /conversations/:id/turns` en `apps/backend/src/services/conversations/ConversationService.ts`, `conversationController.ts` y `conversationRoutes.ts` (depende de T083, T084); prueba mínima: integration T077.
+- [X] T086 [P] [US2] [FE] Añadir createTurn idempotente en `apps/frontend/src/features/conversations/api/conversationsApi.ts` y `hooks/useConversationExecution.ts`; prueba mínima: frontend T078.
+- [X] T087 [P] [US2] [FE] Crear timeline multiturno y aviso contextual en `apps/frontend/src/features/conversations/components/TurnList.tsx` y `ContextWindowNotice.tsx`; prueba mínima: component T079.
+- [X] T088 [US2] [FE] Integrar follow-up, timeline, cache por conversación y SSE del turno activo en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T086, T087); prueba mínima: frontend T078 y E2E T080.
 
 **Checkpoint**: multiturno aislado y protegido, sin presupuesto de producto ni
 bloqueo global.

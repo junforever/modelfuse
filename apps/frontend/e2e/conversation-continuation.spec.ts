@@ -1,0 +1,134 @@
+import { randomUUID } from 'node:crypto';
+
+import type { Page, Response } from '@playwright/test';
+
+import type { ConversationTurnResponse } from '../src/features/conversations/types/conversation';
+import { expect, fakeModelResponses, test } from './fixtures/modelFuse';
+import { E2E_BACKEND_ORIGIN } from './support/scenarios';
+
+const TAB_NAMES = {
+  openai: 'OpenAI',
+  google: 'Google',
+  minimax: 'MiniMax',
+  qwen: 'Qwen',
+} as const;
+
+function waitForTurnStream(page: Page): Promise<Response> {
+  return page.waitForResponse(response =>
+    /\/api\/v1\/conversations\/[^/]+\/turns\/[^/]+\/events$/.test(new URL(response.url()).pathname)
+  );
+}
+
+async function submitPrompt(page: Page, prompt: string, path: RegExp) {
+  const responsePromise = page.waitForResponse(
+    response =>
+      response.request().method() === 'POST' && path.test(new URL(response.url()).pathname)
+  );
+  const streamPromise = waitForTurnStream(page);
+
+  await page.getByRole('textbox', { name: 'Prompt' }).fill(prompt);
+  await page.getByRole('button', { name: 'Enviar' }).click();
+
+  const response = await responsePromise;
+  expect(response.status()).toBe(202);
+  return {
+    result: (await response.json()) as ConversationTurnResponse,
+    stream: await streamPromise,
+  };
+}
+
+test('continues one conversation with isolated slots, scoped busy state, and bounded context', async ({
+  page,
+  request,
+  scenarioPrompts,
+}) => {
+  await page.goto('/');
+
+  const initial = await submitPrompt(page, scenarioPrompts.comparison, /\/api\/v1\/conversations$/);
+  await initial.stream.finished();
+  await expect(page.getByRole('button', { name: 'Enviar' })).toBeEnabled();
+
+  const continuation = await submitPrompt(
+    page,
+    scenarioPrompts.continuationBusy,
+    /\/api\/v1\/conversations\/[^/]+\/turns$/
+  );
+  expect(continuation.result.conversation.id).toBe(initial.result.conversation.id);
+  expect(continuation.result.turn.ordinal).toBe(2);
+
+  let otherConversationId: string | undefined;
+  try {
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Procesando respuestas' })
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Enviar' })).toBeDisabled();
+
+    const busyResponse = await request.post(
+      `${E2E_BACKEND_ORIGIN}/api/v1/conversations/${initial.result.conversation.id}/turns`,
+      {
+        data: {
+          clientRequestId: randomUUID(),
+          prompt: 'A distinct follow-up must be rejected while this conversation is busy.',
+        },
+      }
+    );
+    expect(busyResponse.status()).toBe(409);
+    expect((await busyResponse.json()) as { code: string }).toMatchObject({
+      code: 'CONVERSATION_BUSY',
+    });
+
+    const otherConversation = await request.post(`${E2E_BACKEND_ORIGIN}/api/v1/conversations`, {
+      data: {
+        clientRequestId: randomUUID(),
+        prompt: scenarioPrompts.comparison,
+      },
+    });
+    expect(otherConversation.status()).toBe(202);
+    const otherResult = (await otherConversation.json()) as ConversationTurnResponse;
+    otherConversationId = otherResult.conversation.id;
+    expect(otherConversationId).not.toBe(initial.result.conversation.id);
+  } finally {
+    const release = await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
+      params: { prompt: scenarioPrompts.continuationBusy },
+    });
+    expect(release.status()).toBe(204);
+    if (otherConversationId) {
+      const cleanup = await request.delete(
+        `${E2E_BACKEND_ORIGIN}/__e2e/conversations/${otherConversationId}`
+      );
+      expect(cleanup.status()).toBe(204);
+    }
+  }
+
+  await continuation.stream.finished();
+  await expect(page.getByRole('button', { name: 'Enviar' })).toBeEnabled();
+
+  const secondTurn = page.getByRole('article', { name: 'Turno 2' });
+  await expect(page.getByRole('article', { name: 'Turno 1' })).toBeVisible();
+  await expect(secondTurn).toContainText(scenarioPrompts.continuationBusy);
+  for (const response of fakeModelResponses) {
+    const tabName = TAB_NAMES[response.slot];
+    await secondTurn.getByRole('tab', { name: tabName, exact: true }).click();
+    const panel = secondTurn.getByRole('tabpanel', { name: tabName });
+    await expect(panel).toContainText(response.content);
+    for (const other of fakeModelResponses.filter(candidate => candidate.slot !== response.slot)) {
+      await expect(panel).not.toContainText(other.content);
+    }
+  }
+
+  const protectedTurn = await submitPrompt(
+    page,
+    scenarioPrompts.contextProtection,
+    /\/api\/v1\/conversations\/[^/]+\/turns$/
+  );
+  expect(protectedTurn.result.turn.ordinal).toBe(3);
+  await protectedTurn.stream.finished();
+
+  const thirdTurn = page.getByRole('article', { name: 'Turno 3' });
+  await expect(thirdTurn).toContainText(scenarioPrompts.contextProtection);
+  const contextNotice = thirdTurn
+    .getByRole('status')
+    .filter({ hasText: /ventana acotada del contexto/i });
+  await expect(contextNotice).toBeVisible();
+  await expect(contextNotice).not.toContainText(/tokens?|80%|turn-window|\b[1-9]\d*\b/i);
+});

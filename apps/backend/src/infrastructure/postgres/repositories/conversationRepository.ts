@@ -27,6 +27,8 @@ export type CreateResult =
   | { kind: 'replay'; conversationId: string; turnId: string }
   | { kind: 'conflict' };
 
+export type CreateTurnResult = CreateResult | { kind: 'conversation_not_found' | 'busy' };
+
 interface ExistingTurnRow {
   id: string;
   conversation_id: string;
@@ -70,6 +72,55 @@ export class ConversationRepository {
         ordinal: 1,
         ...input,
       });
+      return { kind: 'created', conversationId, turnId };
+    });
+  }
+
+  createTurn(conversationId: string, input: CreateInput): Promise<CreateTurnResult> {
+    return withTransaction(this.pool, async client => {
+      const conversation = await client.query<{ id: string }>(
+        'SELECT id FROM conversations WHERE id = $1 FOR UPDATE',
+        [conversationId],
+      );
+      if (conversation.rowCount === 0) return { kind: 'conversation_not_found' };
+
+      const existing = await client.query<ExistingTurnRow>(
+        `SELECT id, conversation_id, user_content
+           FROM turns
+          WHERE conversation_id = $1 AND client_request_id = $2`,
+        [conversationId, input.clientRequestId],
+      );
+      const replay = existing.rows[0];
+      if (replay) {
+        return replay.user_content === input.prompt
+          ? { kind: 'replay', conversationId, turnId: replay.id }
+          : { kind: 'conflict' };
+      }
+
+      const work = await client.query<{ busy: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM turns
+            WHERE conversation_id = $1 AND status IN ('pending', 'running')
+         ) OR EXISTS (
+           SELECT 1 FROM model_responses response
+           JOIN turns turn_row ON turn_row.id = response.turn_id
+            WHERE turn_row.conversation_id = $1
+              AND response.status IN ('pending', 'running')
+         ) AS busy`,
+        [conversationId],
+      );
+      if (work.rows[0]?.busy === true) return { kind: 'busy' };
+
+      const ordinalResult = await client.query<{ ordinal: number }>(
+        'SELECT COALESCE(MAX(ordinal), 0) + 1 AS ordinal FROM turns WHERE conversation_id = $1',
+        [conversationId],
+      );
+      const ordinal = ordinalResult.rows[0]?.ordinal;
+      if (!ordinal) throw new Error('Unable to assign turn ordinal');
+
+      const turnId = randomUUID();
+      await this.insertTurn(client, { conversationId, turnId, ordinal, ...input });
+      await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId]);
       return { kind: 'created', conversationId, turnId };
     });
   }

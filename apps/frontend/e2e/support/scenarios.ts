@@ -25,4 +25,14 @@ export const fakeModelScenarios = {
     marker: '[e2e:openai-fails]',
     prompt: '[e2e:openai-fails] Continue without the unavailable response.',
   },
+  continuationBusy: {
+    marker: '[e2e:continuation-busy]',
+    prompt: '[e2e:continuation-busy] Keep this follow-up active until explicitly released.',
+  },
+  contextProtection: {
+    marker: '[e2e:context-protection]',
+    prompt:
+      '[e2e:context-protection] Use the bounded context safely. ' +
+      'Preserve only the relevant recent details while answering this follow-up.',
+  },
 } as const;

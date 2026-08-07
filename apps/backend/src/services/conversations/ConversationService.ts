@@ -6,6 +6,7 @@ import type {
 import type {
   ConversationTurnResponse,
   CreateConversationRequest,
+  CreateTurnRequest,
   ResponseSlot,
   TurnSnapshotResponse,
 } from '../../types/conversations.js';
@@ -35,6 +36,31 @@ export class ConversationService {
     const snapshot = await this.requireSnapshot(created.conversationId, created.turnId);
     if (created.kind === 'created') this.launch(snapshot, false);
     return snapshot;
+  }
+
+  async createTurn(
+    conversationId: string,
+    input: CreateTurnRequest,
+  ): Promise<ConversationTurnResponse> {
+    const created = await this.dependencies.conversationRepository.createTurn(conversationId, {
+      clientRequestId: input.clientRequestId,
+      prompt: input.prompt.trim(),
+      responses: this.dependencies.orchestrator.responseDefinitions,
+    });
+    switch (created.kind) {
+      case 'conversation_not_found':
+        throw new ConversationError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found.');
+      case 'busy':
+        throw new ConversationError(409, 'CONVERSATION_BUSY', 'The conversation has work in progress.');
+      case 'conflict':
+        throw new ConversationError(409, 'CLIENT_REQUEST_ID_CONFLICT', 'The request ID belongs to a different prompt.');
+      case 'created':
+      case 'replay': {
+        const snapshot = await this.requireSnapshot(created.conversationId, created.turnId);
+        if (created.kind === 'created') this.launch(snapshot, false);
+        return snapshot;
+      }
+    }
   }
 
   async getTurn(conversationId: string, turnId: string): Promise<TurnSnapshotResponse> {
@@ -129,6 +155,7 @@ export class ConversationService {
       conversationId: snapshot.conversation.id,
       turnId: snapshot.turn.id,
       prompt: snapshot.turn.prompt,
+      currentOrdinal: snapshot.turn.ordinal,
       signal: new AbortController().signal,
     };
     const execution = retry && slot

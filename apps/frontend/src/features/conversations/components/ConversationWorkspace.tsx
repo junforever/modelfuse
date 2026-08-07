@@ -5,27 +5,32 @@ import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/al
 import { parseFrontendEnv } from '../../../config/env';
 import {
   continueWithoutResponse,
-  createConversation,
   getTurnSnapshot,
   retryResponse,
 } from '../api/conversationsApi';
 import { createApiClient } from '../api/client';
+import { useConversationExecution } from '../hooks/useConversationExecution';
 import { useTurnEvents } from '../hooks/useTurnEvents';
 import { conversationKeys } from '../queries/conversation-keys';
 import type {
   ApiError,
   ConversationTurnResponse,
-  CreateConversationRequest,
   ResponseSlot,
+  Turn,
 } from '../types/conversation';
 import type { TurnEventSnapshot } from '../types/sse';
 import { ConversationProcessingNotice } from './ConversationProcessingNotice';
 import { PromptComposer } from './PromptComposer';
-import { TurnCard } from './TurnCard';
+import { TurnList } from './TurnList';
 
 interface Selection {
   readonly conversationId: string;
   readonly turnId: string;
+}
+
+interface Timeline {
+  readonly conversationId: string;
+  readonly turnIds: readonly string[];
 }
 
 function errorMessage(error: unknown): string {
@@ -48,16 +53,18 @@ function toSnapshot(
   };
 }
 
-function ActiveTurn({
+function ActiveTimeline({
   snapshot,
+  turns,
   actionsDisabled,
   onRetry,
   onContinueWithout,
 }: {
   readonly snapshot: TurnEventSnapshot;
+  readonly turns: readonly Turn[];
   readonly actionsDisabled: boolean;
-  readonly onRetry: (slot: ResponseSlot) => void;
-  readonly onContinueWithout: (slot: ResponseSlot) => void;
+  readonly onRetry: (turnId: string, slot: ResponseSlot) => void;
+  readonly onContinueWithout: (turnId: string, slot: ResponseSlot) => void;
 }) {
   const { runtimeStages, error } = useTurnEvents({
     conversationId: snapshot.conversationId,
@@ -67,8 +74,9 @@ function ActiveTurn({
   return (
     <div className="grid gap-4">
       <ConversationProcessingNotice isBusy={snapshot.hasWorkInProgress} sseError={error} />
-      <TurnCard
-        turn={snapshot.turn}
+      <TurnList
+        turns={turns}
+        activeTurnId={snapshot.turnId}
         hasWorkInProgress={snapshot.hasWorkInProgress || actionsDisabled}
         runtimeStages={runtimeStages}
         onRetry={onRetry}
@@ -84,6 +92,7 @@ export function ConversationWorkspace() {
     createApiClient({ baseURL: parseFrontendEnv(import.meta.env).apiBaseUrl })
   );
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [streamGeneration, setStreamGeneration] = useState(0);
 
   const turnQuery = useQuery<TurnEventSnapshot>({
@@ -123,20 +132,26 @@ export function ConversationWorkspace() {
       result.conversation
     );
     queryClient.setQueryData(turnKey, toSnapshot(result, previous?.lastEventSequence ?? 0));
+    setTimeline(current => {
+      if (current?.conversationId !== nextSelection.conversationId) {
+        return { conversationId: nextSelection.conversationId, turnIds: [nextSelection.turnId] };
+      }
+      return current.turnIds.includes(nextSelection.turnId)
+        ? current
+        : { ...current, turnIds: [...current.turnIds, nextSelection.turnId] };
+    });
     setSelection(nextSelection);
   }
 
-  const createMutation = useMutation({
-    mutationFn: (payload: CreateConversationRequest) => createConversation(apiClient, payload),
-    onSuccess: result => {
-      cacheResult(result);
-      setStreamGeneration(generation => generation + 1);
-    },
+  const execution = useConversationExecution({
+    apiClient,
+    conversationId: selection?.conversationId ?? null,
+    onSuccess: cacheResult,
   });
   const retryMutation = useMutation({
-    mutationFn: (slot: ResponseSlot) => {
+    mutationFn: ({ turnId, slot }: { turnId: string; slot: ResponseSlot }) => {
       if (!selection) throw new Error('No hay un turno seleccionado');
-      return retryResponse(apiClient, selection.conversationId, selection.turnId, slot);
+      return retryResponse(apiClient, selection.conversationId, turnId, slot);
     },
     onSuccess: result => {
       cacheResult(result);
@@ -144,18 +159,25 @@ export function ConversationWorkspace() {
     },
   });
   const continueMutation = useMutation({
-    mutationFn: (slot: ResponseSlot) => {
+    mutationFn: ({ turnId, slot }: { turnId: string; slot: ResponseSlot }) => {
       if (!selection) throw new Error('No hay un turno seleccionado');
-      return continueWithoutResponse(apiClient, selection.conversationId, selection.turnId, slot);
+      return continueWithoutResponse(apiClient, selection.conversationId, turnId, slot);
     },
     onSuccess: cacheResult,
   });
 
-  const mutationError = createMutation.error ?? retryMutation.error ?? continueMutation.error;
+  const mutationError = execution.error ?? retryMutation.error ?? continueMutation.error;
   const snapshot = turnQuery.data;
   const isBusy = snapshot?.hasWorkInProgress ?? false;
   const isPending =
-    createMutation.isPending || retryMutation.isPending || continueMutation.isPending;
+    execution.isPending || retryMutation.isPending || continueMutation.isPending;
+  const turns =
+    timeline?.turnIds.flatMap(turnId => {
+      const cached = queryClient.getQueryData<TurnEventSnapshot>(
+        conversationKeys.turn(timeline.conversationId, turnId)
+      );
+      return cached ? [cached.turn] : [];
+    }) ?? [];
 
   return (
     <section aria-labelledby="workspace-title" className="mx-auto grid w-full max-w-5xl gap-6">
@@ -183,20 +205,21 @@ export function ConversationWorkspace() {
       )}
 
       {snapshot && (
-        <ActiveTurn
+        <ActiveTimeline
           key={`${snapshot.conversationId}:${snapshot.turnId}:${streamGeneration}`}
           snapshot={snapshot}
+          turns={turns}
           actionsDisabled={isPending}
-          onRetry={slot => retryMutation.mutate(slot)}
-          onContinueWithout={slot => continueMutation.mutate(slot)}
+          onRetry={(turnId, slot) => retryMutation.mutate({ turnId, slot })}
+          onContinueWithout={(turnId, slot) => continueMutation.mutate({ turnId, slot })}
         />
       )}
 
       <PromptComposer
-        key={selection?.conversationId ?? 'draft'}
+        key={selection?.turnId ?? 'draft'}
         isBusy={isBusy}
         isPending={isPending}
-        onSubmit={payload => createMutation.mutate(payload)}
+        onSubmit={execution.execute}
       />
     </section>
   );

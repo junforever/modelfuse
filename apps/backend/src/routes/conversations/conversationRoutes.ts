@@ -4,6 +4,8 @@ import { createConversationController } from '../../controllers/conversations/co
 import { createTurnEventsController } from '../../controllers/conversations/turnEventsController.js';
 import {
   createConversationBodySchema,
+  createTurnBodySchema,
+  conversationIdParamsSchema,
   responseSlotParamsSchema,
   turnIdParamsSchema,
 } from '../../middleware/validation/conversationSchemas.js';
@@ -22,6 +24,11 @@ export function createConversationRoutes(dependencies: {
     '/',
     validateRequest({ body: createConversationBodySchema }),
     controller.createConversation,
+  );
+  router.post(
+    '/:conversationId/turns',
+    validateRequest({ params: conversationIdParamsSchema, body: createTurnBodySchema }),
+    controller.createTurn,
   );
   router.get(
     '/:conversationId/turns/:turnId',

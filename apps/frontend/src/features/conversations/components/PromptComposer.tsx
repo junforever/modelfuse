@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
@@ -13,13 +13,19 @@ interface PromptComposerProps {
 
 export function PromptComposer({ isBusy, isPending, onSubmit }: PromptComposerProps) {
   const [prompt, setPrompt] = useState('');
+  const submitLocked = useRef(false);
   const trimmedPrompt = prompt.trim();
   const submitDisabled = !trimmedPrompt || isBusy || isPending;
 
+  useEffect(() => {
+    if (!isPending) submitLocked.current = false;
+  }, [isPending]);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitDisabled) return;
+    if (submitDisabled || submitLocked.current) return;
 
+    submitLocked.current = true;
     onSubmit({ clientRequestId: crypto.randomUUID(), prompt: trimmedPrompt });
   }
 

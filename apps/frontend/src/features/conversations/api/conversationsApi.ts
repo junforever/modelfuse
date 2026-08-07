@@ -10,6 +10,7 @@ import type {
   ApiError,
   ConversationTurnResponse,
   CreateConversationRequest,
+  CreateTurnRequest,
   ResponseSlot,
   TurnSnapshotResponse,
 } from '../types/conversation';
@@ -36,6 +37,17 @@ export function createConversation(
   payload: CreateConversationRequest
 ): Promise<ConversationTurnResponse> {
   return validated(client.post('/conversations', payload), conversationTurnResponseSchema);
+}
+
+export function createTurn(
+  client: AxiosInstance,
+  conversationId: string,
+  payload: CreateTurnRequest
+): Promise<ConversationTurnResponse> {
+  return validated(
+    client.post(`/conversations/${conversationId}/turns`, payload),
+    conversationTurnResponseSchema
+  );
 }
 
 export function getTurnSnapshot(

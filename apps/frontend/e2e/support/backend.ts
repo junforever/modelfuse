@@ -3,7 +3,9 @@ import process from 'node:process';
 
 import { createApp } from '../../../backend/src/app.js';
 import { ConversationRepository } from '../../../backend/src/infrastructure/postgres/repositories/conversationRepository.js';
+import { ContextRepository } from '../../../backend/src/infrastructure/postgres/repositories/contextRepository.js';
 import { TurnRepository } from '../../../backend/src/infrastructure/postgres/repositories/turnRepository.js';
+import { ContextBuilder } from '../../../backend/src/services/conversations/ContextBuilder.js';
 import { ConversationService } from '../../../backend/src/services/conversations/ConversationService.js';
 import { TurnEventPublisher } from '../../../backend/src/services/conversations/turnEventPublisher.js';
 import { TurnOrchestrator } from '../../../backend/src/services/conversations/TurnOrchestrator.js';
@@ -39,12 +41,39 @@ const responseContent = Object.fromEntries(
   fakeModelResponses.map(response => [response.slot, response.content])
 ) as Record<ResponseSlot, string>;
 
+const continuationGates = new Map<
+  string,
+  { readonly promise: Promise<void>; readonly release: () => void }
+>();
+
+function continuationGate(prompt: string) {
+  let gate = continuationGates.get(prompt);
+  if (gate) return gate;
+
+  let release = () => {};
+  const promise = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  gate = { promise, release };
+  continuationGates.set(prompt, gate);
+  return gate;
+}
+
 class ScenarioLlmProvider implements LlmProvider {
   readonly provider: string;
   readonly model: string;
   readonly context = {
-    limitTokens: 10_000,
-    measureInputTokens: () => ({ kind: 'exact' as const, tokens: 1 }),
+    limitTokens: 320,
+    measureInputTokens: (messages: LlmRequest['messages']) =>
+      messages.some(message =>
+        message.content.includes(fakeModelScenarios.contextProtection.marker)
+      )
+        ? {
+            kind: 'upper_bound' as const,
+            tokens: messages.reduce((total, message) => total + message.content.length, 0),
+            basis: 'E2E fake: one token per UTF-16 code unit',
+          }
+        : { kind: 'exact' as const, tokens: 1 },
   };
 
   private readonly callsByPrompt = new Map<string, number>();
@@ -56,6 +85,10 @@ class ScenarioLlmProvider implements LlmProvider {
 
   async generate(request: LlmRequest): Promise<LlmResult> {
     const prompt = request.messages.at(-1)?.content ?? '';
+
+    if (prompt.includes(fakeModelScenarios.continuationBusy.marker)) {
+      await continuationGate(prompt).promise;
+    }
 
     if (this.slot === 'openai' && prompt.includes(fakeModelScenarios.retry.marker)) {
       const attempt = (this.callsByPrompt.get(prompt) ?? 0) + 1;
@@ -107,6 +140,7 @@ const pool = createIntegrationPool();
 await assertModelFuseSchema(pool);
 
 const conversationRepository = new ConversationRepository(pool);
+const contextRepository = new ContextRepository(pool);
 const turnRepository = new TurnRepository(pool);
 const publisher = new TurnEventPublisher();
 const providerRegistry: Record<ResponseSlot, LlmProvider> = {
@@ -119,6 +153,7 @@ const orchestrator = new TurnOrchestrator({
   turnRepository,
   providerRegistry,
   publisher,
+  contextBuilder: new ContextBuilder({ contextRepository, maxTurns: 10, thresholdRatio: 0.8 }),
 });
 const conversationService = new ConversationService({
   conversationRepository,
@@ -131,6 +166,20 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${HOST}:${PORT}`);
 
   if (request.method === 'GET' && url.pathname === '/__e2e/health') {
+    response.statusCode = 204;
+    response.end();
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/__e2e/release-continuation') {
+    const prompt = url.searchParams.get('prompt');
+    if (!prompt || !prompt.includes(`[run:${runId}:`)) {
+      response.statusCode = 400;
+      response.end();
+      return;
+    }
+
+    continuationGate(prompt).release();
     response.statusCode = 204;
     response.end();
     return;

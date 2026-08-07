@@ -1,4 +1,5 @@
 import type { ResponseSlot, Turn } from '../types/conversation';
+import { ContextWindowNotice } from './ContextWindowNotice';
 import { ResponseTabs } from './ResponseTabs';
 
 interface TurnCardProps {
@@ -17,6 +18,8 @@ export function TurnCard({
   onContinueWithout,
 }: TurnCardProps) {
   const headingId = `turn-${turn.id}-heading`;
+  const contextWindow = turn.responses.find(response => response.metadata?.contextWindow?.truncated)
+    ?.metadata?.contextWindow;
 
   return (
     <article aria-labelledby={headingId} className="grid gap-4 rounded-2xl border bg-card p-4">
@@ -26,6 +29,7 @@ export function TurnCard({
         </h2>
         <p className="text-base whitespace-pre-wrap text-card-foreground">{turn.prompt}</p>
       </header>
+      <ContextWindowNotice contextWindow={contextWindow} />
       <ResponseTabs
         responses={turn.responses}
         runtimeStages={runtimeStages}

@@ -18,7 +18,10 @@ export async function startServer(port?: number): Promise<Server> {
   let dependencies: ApiDependencies | undefined;
   if (process.env.NODE_ENV !== 'test') {
     const environment = parseEnv(process.env);
-    dependencies = await createProductionDependencies(environment.LLM_CONTEXT_THRESHOLD_RATIO);
+    dependencies = await createProductionDependencies(
+      environment.CONVERSATION_CONTEXT_MAX_TURNS,
+      environment.LLM_CONTEXT_THRESHOLD_RATIO,
+    );
   }
 
   const server = createApp(dependencies).listen(resolvePort(port));
@@ -38,25 +41,35 @@ export async function startServer(port?: number): Promise<Server> {
   });
 }
 
-async function createProductionDependencies(contextThresholdRatio: number): Promise<ApiDependencies> {
-  const [poolModule, registryModule, repositoryModule, turnRepositoryModule, publisherModule, orchestratorModule, serviceModule] =
+async function createProductionDependencies(
+  contextMaxTurns: number,
+  contextThresholdRatio: number,
+): Promise<ApiDependencies> {
+  const [poolModule, registryModule, repositoryModule, contextRepositoryModule, turnRepositoryModule, publisherModule, contextBuilderModule, orchestratorModule, serviceModule] =
     await Promise.all([
       import('./infrastructure/postgres/postgresPool.js'),
       import('./infrastructure/llm/providerRegistry.js'),
       import('./infrastructure/postgres/repositories/conversationRepository.js'),
+      import('./infrastructure/postgres/repositories/contextRepository.js'),
       import('./infrastructure/postgres/repositories/turnRepository.js'),
       import('./services/conversations/turnEventPublisher.js'),
+      import('./services/conversations/ContextBuilder.js'),
       import('./services/conversations/TurnOrchestrator.js'),
       import('./services/conversations/ConversationService.js'),
     ]);
   const conversationRepository = new repositoryModule.ConversationRepository(poolModule.postgresPool);
+  const contextRepository = new contextRepositoryModule.ContextRepository(poolModule.postgresPool);
   const turnRepository = new turnRepositoryModule.TurnRepository(poolModule.postgresPool);
   const turnEventPublisher = new publisherModule.TurnEventPublisher();
   const orchestrator = new orchestratorModule.TurnOrchestrator({
     providerRegistry: registryModule.providerRegistry,
     turnRepository,
     publisher: turnEventPublisher,
-    contextThresholdRatio,
+    contextBuilder: new contextBuilderModule.ContextBuilder({
+      contextRepository,
+      maxTurns: contextMaxTurns,
+      thresholdRatio: contextThresholdRatio,
+    }),
   });
   const conversationService = new serviceModule.ConversationService({
     conversationRepository,

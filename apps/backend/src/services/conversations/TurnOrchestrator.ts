@@ -15,6 +15,7 @@ import type {
 } from '../../types/llm.js';
 import { isRecoverableLlmError } from '../llm/llmErrors.js';
 import { protectContext } from './contextProtection.js';
+import type { ContextBuilder } from './ContextBuilder.js';
 import type { UnsequencedTurnEvent } from './turnEventPublisher.js';
 
 const BASE_SLOTS = ['openai', 'google', 'minimax'] as const;
@@ -40,6 +41,7 @@ interface ExecuteTurnInput {
   conversationId: string;
   turnId: string;
   prompt: string;
+  currentOrdinal?: number;
   signal: AbortSignal;
 }
 
@@ -58,6 +60,7 @@ export class TurnOrchestrator {
       providerRegistry: Record<ResponseSlot, LlmProvider>;
       turnRepository: TurnRepositoryPort;
       publisher: PublisherPort;
+      contextBuilder?: ContextBuilder;
       contextThresholdRatio?: number;
     },
   ) {}
@@ -80,13 +83,16 @@ export class TurnOrchestrator {
 
   async executeTurn(input: ExecuteTurnInput): Promise<void> {
     const baseExecutions = BASE_SLOTS.map(slot =>
-      this.executeSlot({ ...input, slot, messages: this.baseMessages(input.prompt) }),
+      this.executeSlot({ ...input, slot }),
     );
     const baseResults = await Promise.all(baseExecutions);
     await this.executeSlot({
       ...input,
       slot: 'qwen',
-      messages: this.qwenMessages(input.prompt, baseResults),
+      currentBaseResponses: baseResults.map(response => ({
+        slot: response.slot,
+        content: response.result?.content ?? null,
+      })),
     });
   }
 
@@ -94,21 +100,20 @@ export class TurnOrchestrator {
     if (input.slot === 'qwen') {
       await this.executeSlot({
         ...input,
-        messages: this.qwenMessages(input.prompt, await this.availableBases(input.turnId)),
+        currentBaseResponses: await this.availableBases(input.turnId),
       });
       return;
     }
 
     const retried = await this.executeSlot({
       ...input,
-      messages: this.baseMessages(input.prompt),
       reconsolidateOnSuccess: true,
     });
     if (!retried.result) return;
     await this.executeSlot({
       ...input,
       slot: 'qwen',
-      messages: this.qwenMessages(input.prompt, await this.availableBases(input.turnId)),
+      currentBaseResponses: await this.availableBases(input.turnId),
     });
   }
 
@@ -152,20 +157,12 @@ export class TurnOrchestrator {
   private async executeSlot(
     input: ExecuteTurnInput & {
       slot: ResponseSlot;
-      messages: LlmMessage[];
+      currentBaseResponses?: readonly Pick<ModelResponse, 'slot' | 'content'>[];
       reconsolidateOnSuccess?: boolean;
     },
   ): Promise<SlotExecutionResult> {
     const provider = this.dependencies.providerRegistry[input.slot];
-    const protectedContext = protectContext({
-      systemMessage: input.messages[0] ?? { role: 'system', content: 'Answer the user.' },
-      historicalTurns: [],
-      auxiliaryMessages: input.messages.slice(1, -1),
-      currentPrompt: input.messages.at(-1) ?? { role: 'user', content: input.prompt },
-      currentOrdinal: 1,
-      context: provider.context,
-      thresholdRatio: this.dependencies.contextThresholdRatio ?? CONTEXT_THRESHOLD_RATIO,
-    });
+    const protectedContext = await this.buildContext(input, provider);
     const started = await this.dependencies.turnRepository.startResponseAttempt?.({
       conversationId: input.conversationId,
       turnId: input.turnId,
@@ -245,31 +242,52 @@ export class TurnOrchestrator {
     }
   }
 
-  private baseMessages(prompt: string): LlmMessage[] {
-    return [
-      { role: 'system', content: 'Provide a complete, accurate answer to the user prompt.' },
-      { role: 'user', content: prompt },
-    ];
-  }
-
-  private qwenMessages(
-    prompt: string,
-    responses: readonly SlotExecutionResult[] | readonly ModelResponse[],
-  ): LlmMessage[] {
-    const available = responses.flatMap(response => {
-      const slot = response.slot;
-      const content = 'result' in response ? response.result?.content : response.content;
-      return content ? [{ role: 'user' as const, content: `${slot}:\n${content}` }] : [];
-    });
-    return [
-      { role: 'system', content: 'Consolidate the available model answers into one final answer.' },
-      ...available,
-      { role: 'user', content: prompt },
-    ];
-  }
-
   private async availableBases(turnId: string): Promise<ModelResponse[]> {
     return (await this.dependencies.turnRepository.getAvailableBaseResponses?.(turnId)) ?? [];
+  }
+
+  private buildContext(
+    input: ExecuteTurnInput & {
+      slot: ResponseSlot;
+      currentBaseResponses?: readonly Pick<ModelResponse, 'slot' | 'content'>[];
+    },
+    provider: LlmProvider,
+  ) {
+    if (this.dependencies.contextBuilder) {
+      return this.dependencies.contextBuilder.build({
+        conversationId: input.conversationId,
+        slot: input.slot,
+        currentOrdinal: input.currentOrdinal ?? 1,
+        prompt: input.prompt,
+        currentBaseResponses: input.currentBaseResponses?.filter(
+          (response): response is Pick<ModelResponse<'openai' | 'google' | 'minimax'>, 'slot' | 'content'> =>
+            response.slot !== 'qwen',
+        ),
+        context: provider.context,
+      });
+    }
+
+    const auxiliaryMessages: LlmMessage[] = input.slot === 'qwen'
+      ? (input.currentBaseResponses ?? []).flatMap(response =>
+          response.content
+            ? [{ role: 'user' as const, content: `${response.slot}:\n${response.content}` }]
+            : [],
+        )
+      : [];
+    return Promise.resolve(protectContext({
+      systemMessage: {
+        role: 'system',
+        content: input.slot === 'qwen'
+          ? 'Consolidate the available model answers into one final answer.'
+          : 'Provide a complete, accurate answer to the user prompt.',
+      },
+      historicalTurns: [],
+      auxiliaryMessages,
+      currentPrompt: { role: 'user', content: input.prompt },
+      currentOrdinal: input.currentOrdinal ?? 1,
+      context: provider.context,
+      thresholdRatio: this.dependencies.contextThresholdRatio ?? CONTEXT_THRESHOLD_RATIO,
+    }));
   }
 
   private normalizeFailure(error: unknown, provider: LlmProvider): LlmProviderError {

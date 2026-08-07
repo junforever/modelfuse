@@ -27,6 +27,8 @@ export const test = base.extend<ModelFuseFixtures>({
       comparison: `${fakeModelScenarios.comparison.prompt} ${owner}`,
       retry: `${fakeModelScenarios.retry.prompt} ${owner}`,
       continueWithout: `${fakeModelScenarios.continueWithout.prompt} ${owner}`,
+      continuationBusy: `${fakeModelScenarios.continuationBusy.prompt} ${owner}`,
+      contextProtection: `${fakeModelScenarios.contextProtection.prompt} ${owner}`,
     });
   },
   page: async ({ page, request }, provide) => {
