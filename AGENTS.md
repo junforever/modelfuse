@@ -25,3 +25,14 @@ For every implementation run based on a feature `tasks.md` file:
   directly implement or modify product code or tests.
 - If the required owner agent is missing or unavailable, stop and report the
   blocker instead of implementing the task directly or assigning another owner.
+
+## Mandatory sub-agent shutdown check
+
+- At the end of every implementation run, query the status of all delegated
+  sub-agents before returning the final response.
+- If any sub-agent is still `running`, interrupt it and verify that it is no
+  longer executing.
+- Do not treat a sub-agent as active merely because it remains listed in the
+  task tree with status `completed`; only `running` agents require shutdown.
+- Report the final check outcome, including any agent that was interrupted or
+  any external blocker that prevented shutdown confirmation.
