@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button } from '@workspace/ui/components/button';
 
 import type { ModelResponse, ResponseSlot } from '../types/conversation';
+import { CollapsibleHistoryMessage } from './CollapsibleHistoryMessage';
 import { ContinueWithoutDialog } from './ContinueWithoutDialog';
 
 interface ResponsePanelProps {
@@ -10,6 +11,7 @@ interface ResponsePanelProps {
   readonly modelLabel: string;
   readonly runtimeStage?: string;
   readonly hasWorkInProgress: boolean;
+  readonly collapseThreshold?: number;
   readonly onRetry: (slot: ResponseSlot) => void;
   readonly onContinueWithout: (slot: ResponseSlot) => void;
 }
@@ -19,6 +21,7 @@ export function ResponsePanel({
   modelLabel,
   runtimeStage,
   hasWorkInProgress,
+  collapseThreshold,
   onRetry,
   onContinueWithout,
 }: ResponsePanelProps) {
@@ -30,7 +33,7 @@ export function ResponsePanel({
         {response.isStale && (
           <p className="text-sm text-muted-foreground">Consolidación pendiente</p>
         )}
-        <p className="whitespace-pre-wrap">{response.content}</p>
+        <CollapsibleHistoryMessage content={response.content ?? ''} threshold={collapseThreshold} />
       </div>
     );
   }

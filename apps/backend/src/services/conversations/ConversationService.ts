@@ -1,15 +1,19 @@
 import type { ConversationRepository } from '../../infrastructure/postgres/repositories/conversationRepository.js';
 import type {
-  StoredTurnSnapshot,
-  TurnRepository,
-} from '../../infrastructure/postgres/repositories/turnRepository.js';
-import type {
+  ConversationDetail,
+  ConversationPage,
   ConversationTurnResponse,
   CreateConversationRequest,
   CreateTurnRequest,
+  RenameConversationRequest,
   ResponseSlot,
+  TurnPage,
   TurnSnapshotResponse,
 } from '../../types/conversations.js';
+import type {
+  StoredTurnSnapshot,
+  TurnRepository,
+} from '../../infrastructure/postgres/repositories/turnRepository.js';
 import type { TurnEventSnapshot } from '../../types/sse.js';
 import { truncateTitleGraphemes } from '../../utils/titleGraphemes.js';
 import { ConversationError } from './conversationErrors.js';
@@ -21,6 +25,7 @@ export class ConversationService {
       conversationRepository: ConversationRepository;
       turnRepository: TurnRepository;
       orchestrator: TurnOrchestrator;
+      sidebarPageSize?: number;
     },
   ) {}
 
@@ -60,6 +65,50 @@ export class ConversationService {
         if (created.kind === 'created') this.launch(snapshot, false);
         return snapshot;
       }
+    }
+  }
+
+  listConversations(cursor?: string): Promise<ConversationPage> {
+    return this.dependencies.conversationRepository.listConversations(
+      this.dependencies.sidebarPageSize ?? 20,
+      cursor,
+    );
+  }
+
+  async getConversation(conversationId: string): Promise<ConversationDetail> {
+    const conversation = await this.dependencies.conversationRepository.getConversation(conversationId);
+    if (!conversation) {
+      throw new ConversationError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found.');
+    }
+    return conversation;
+  }
+
+  async listTurns(conversationId: string, before?: string): Promise<TurnPage> {
+    await this.getConversation(conversationId);
+    return this.dependencies.conversationRepository.listTurns(conversationId, before);
+  }
+
+  async renameConversation(
+    conversationId: string,
+    input: RenameConversationRequest,
+  ): Promise<ConversationDetail> {
+    const conversation = await this.dependencies.conversationRepository.renameConversation(
+      conversationId,
+      input.title,
+    );
+    if (!conversation) {
+      throw new ConversationError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found.');
+    }
+    return conversation;
+  }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    const result = await this.dependencies.conversationRepository.deleteConversation(conversationId);
+    if (result === 'not_found') {
+      throw new ConversationError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found.');
+    }
+    if (result === 'busy') {
+      throw new ConversationError(409, 'CONVERSATION_BUSY', 'The conversation has work in progress.');
     }
   }
 

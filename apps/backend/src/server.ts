@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 
 import { createApp } from './app.js';
-import { parseEnv } from './infrastructure/config/env.js';
+import { parseEnv, type Environment } from './infrastructure/config/env.js';
 import type { ApiDependencies } from './routes/apiRouter.js';
 
 function resolvePort(port: number | undefined): number {
@@ -18,10 +18,7 @@ export async function startServer(port?: number): Promise<Server> {
   let dependencies: ApiDependencies | undefined;
   if (process.env.NODE_ENV !== 'test') {
     const environment = parseEnv(process.env);
-    dependencies = await createProductionDependencies(
-      environment.CONVERSATION_CONTEXT_MAX_TURNS,
-      environment.LLM_CONTEXT_THRESHOLD_RATIO,
-    );
+    dependencies = await createProductionDependencies(environment);
   }
 
   const server = createApp(dependencies).listen(resolvePort(port));
@@ -41,10 +38,7 @@ export async function startServer(port?: number): Promise<Server> {
   });
 }
 
-async function createProductionDependencies(
-  contextMaxTurns: number,
-  contextThresholdRatio: number,
-): Promise<ApiDependencies> {
+async function createProductionDependencies(environment: Environment): Promise<ApiDependencies> {
   const [poolModule, registryModule, repositoryModule, contextRepositoryModule, turnRepositoryModule, publisherModule, contextBuilderModule, orchestratorModule, serviceModule] =
     await Promise.all([
       import('./infrastructure/postgres/postgresPool.js'),
@@ -67,14 +61,15 @@ async function createProductionDependencies(
     publisher: turnEventPublisher,
     contextBuilder: new contextBuilderModule.ContextBuilder({
       contextRepository,
-      maxTurns: contextMaxTurns,
-      thresholdRatio: contextThresholdRatio,
+      maxTurns: environment.CONVERSATION_CONTEXT_MAX_TURNS,
+      thresholdRatio: environment.LLM_CONTEXT_THRESHOLD_RATIO,
     }),
   });
   const conversationService = new serviceModule.ConversationService({
     conversationRepository,
     turnRepository,
     orchestrator,
+    sidebarPageSize: environment.CONVERSATION_SIDEBAR_PAGE_SIZE,
   });
   return { conversationService, turnEventPublisher };
 }

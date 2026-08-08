@@ -1,4 +1,5 @@
 import type { ResponseSlot, Turn } from '../types/conversation';
+import { CollapsibleHistoryMessage } from './CollapsibleHistoryMessage';
 import { ContextWindowNotice } from './ContextWindowNotice';
 import { ResponseTabs } from './ResponseTabs';
 
@@ -6,6 +7,7 @@ interface TurnCardProps {
   readonly turn: Turn;
   readonly hasWorkInProgress: boolean;
   readonly runtimeStages: Partial<Record<ResponseSlot, string>>;
+  readonly collapseThreshold?: number;
   readonly onRetry: (slot: ResponseSlot) => void;
   readonly onContinueWithout: (slot: ResponseSlot) => void;
 }
@@ -14,6 +16,7 @@ export function TurnCard({
   turn,
   hasWorkInProgress,
   runtimeStages,
+  collapseThreshold,
   onRetry,
   onContinueWithout,
 }: TurnCardProps) {
@@ -27,12 +30,15 @@ export function TurnCard({
         <h2 id={headingId} className="text-sm font-medium text-muted-foreground">
           Turno {turn.ordinal}
         </h2>
-        <p className="text-base whitespace-pre-wrap text-card-foreground">{turn.prompt}</p>
+        <div className="text-base text-card-foreground">
+          <CollapsibleHistoryMessage content={turn.prompt} threshold={collapseThreshold} />
+        </div>
       </header>
       <ContextWindowNotice contextWindow={contextWindow} />
       <ResponseTabs
         responses={turn.responses}
         runtimeStages={runtimeStages}
+        collapseThreshold={collapseThreshold}
         hasWorkInProgress={hasWorkInProgress}
         onRetry={onRetry}
         onContinueWithout={onContinueWithout}

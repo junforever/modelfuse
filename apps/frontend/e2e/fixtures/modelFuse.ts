@@ -59,7 +59,7 @@ export const test = base.extend<ModelFuseFixtures>({
       const cleanup = await request.delete(
         `${E2E_BACKEND_ORIGIN}/__e2e/conversations/${conversationId}`
       );
-      if (cleanup.status() !== 204) {
+      if (![204, 404].includes(cleanup.status())) {
         throw new Error(`E2E cleanup rejected owned conversation ${conversationId}`);
       }
     }

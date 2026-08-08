@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { logger } from '#utils/logger';
 import type { ApiError } from '../../types/apiError.js';
 import { ConversationError } from '../../services/conversations/conversationErrors.js';
+import { InvalidCursorError } from '../../utils/cursor.js';
 /**
  * Global error handling middleware for Express applications.
  *
@@ -54,11 +55,14 @@ export function globalErrorHandler(
   });
 
   const expected = err instanceof ConversationError ? err : undefined;
+  const invalidCursor = err instanceof InvalidCursorError;
   const response: ApiError = {
-    code: expected?.code ?? 'INTERNAL_ERROR',
-    message: expected?.message ?? 'An unexpected error occurred. Please try again later.',
+    code: invalidCursor ? 'INVALID_CURSOR' : expected?.code ?? 'INTERNAL_ERROR',
+    message: invalidCursor
+      ? 'The cursor is invalid.'
+      : expected?.message ?? 'An unexpected error occurred. Please try again later.',
     requestId: req.requestId,
   };
 
-  res.status(expected?.status ?? 500).json(response);
+  res.status(invalidCursor ? 400 : expected?.status ?? 500).json(response);
 }

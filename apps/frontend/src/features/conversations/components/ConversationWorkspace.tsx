@@ -1,7 +1,13 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
 
+import { AppShell } from '../../../components/layout/AppShell';
 import { parseFrontendEnv } from '../../../config/env';
 import {
   continueWithoutResponse,
@@ -10,16 +16,20 @@ import {
 } from '../api/conversationsApi';
 import { createApiClient } from '../api/client';
 import { useConversationExecution } from '../hooks/useConversationExecution';
+import { useConversationQueries } from '../hooks/useConversationQueries';
 import { useTurnEvents } from '../hooks/useTurnEvents';
 import { conversationKeys } from '../queries/conversation-keys';
 import type {
   ApiError,
+  ConversationPage,
   ConversationTurnResponse,
   ResponseSlot,
   Turn,
 } from '../types/conversation';
 import type { TurnEventSnapshot } from '../types/sse';
 import { ConversationProcessingNotice } from './ConversationProcessingNotice';
+import { ConversationSidebar } from './ConversationSidebar';
+import { HistoryTopSentinel } from './HistoryTopSentinel';
 import { PromptComposer } from './PromptComposer';
 import { TurnList } from './TurnList';
 
@@ -31,6 +41,10 @@ interface Selection {
 interface Timeline {
   readonly conversationId: string;
   readonly turnIds: readonly string[];
+}
+
+interface ConversationWorkspaceProps {
+  readonly withHistory?: boolean;
 }
 
 function errorMessage(error: unknown): string {
@@ -57,12 +71,18 @@ function ActiveTimeline({
   snapshot,
   turns,
   actionsDisabled,
+  collapseThreshold,
+  historyRef,
+  historyTopSentinel,
   onRetry,
   onContinueWithout,
 }: {
   readonly snapshot: TurnEventSnapshot;
   readonly turns: readonly Turn[];
   readonly actionsDisabled: boolean;
+  readonly collapseThreshold?: number;
+  readonly historyRef: React.RefObject<HTMLDivElement | null>;
+  readonly historyTopSentinel?: ReactNode;
   readonly onRetry: (turnId: string, slot: ResponseSlot) => void;
   readonly onContinueWithout: (turnId: string, slot: ResponseSlot) => void;
 }) {
@@ -74,50 +94,134 @@ function ActiveTimeline({
   return (
     <div className="grid gap-4">
       <ConversationProcessingNotice isBusy={snapshot.hasWorkInProgress} sseError={error} />
-      <TurnList
-        turns={turns}
-        activeTurnId={snapshot.turnId}
-        hasWorkInProgress={snapshot.hasWorkInProgress || actionsDisabled}
-        runtimeStages={runtimeStages}
-        onRetry={onRetry}
-        onContinueWithout={onContinueWithout}
-      />
+      <div
+        ref={historyRef}
+        role="region"
+        aria-label="Historial de conversación"
+        className="max-h-[65vh] overflow-y-auto"
+      >
+        <TurnList
+          turns={turns}
+          activeTurnId={snapshot.turnId}
+          hasWorkInProgress={snapshot.hasWorkInProgress || actionsDisabled}
+          runtimeStages={runtimeStages}
+          collapseThreshold={collapseThreshold}
+          historyTopSentinel={historyTopSentinel}
+          onRetry={onRetry}
+          onContinueWithout={onContinueWithout}
+        />
+      </div>
     </div>
   );
 }
 
-export function ConversationWorkspace() {
+export function ConversationWorkspace({
+  withHistory = false,
+}: ConversationWorkspaceProps = {}) {
   const queryClient = useQueryClient();
+  const historyRef = useRef<HTMLDivElement>(null);
   const [apiClient] = useState(() =>
     createApiClient({ baseURL: parseFrontendEnv(import.meta.env).apiBaseUrl })
   );
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [streamGeneration, setStreamGeneration] = useState(0);
+  const environment = parseFrontendEnv(import.meta.env);
+  const management = useConversationQueries(
+    apiClient,
+    selectedConversationId,
+    withHistory
+  );
+  const latestHistoricalTurn = withHistory ? management.history.turns.at(-1) : undefined;
+  const activeSelection =
+    selection ??
+    (selectedConversationId && latestHistoricalTurn
+      ? { conversationId: selectedConversationId, turnId: latestHistoricalTurn.id }
+      : null);
+
+  useEffect(() => {
+    const detail = management.detail.data;
+    const historicalTurns = management.history.turns;
+    if (!withHistory || !selectedConversationId || !detail || historicalTurns.length === 0) return;
+
+    for (const turn of historicalTurns) {
+      const key = conversationKeys.turn(selectedConversationId, turn.id);
+      if (!queryClient.getQueryData(key)) {
+        queryClient.setQueryData<TurnEventSnapshot>(key, {
+          conversationId: selectedConversationId,
+          turnId: turn.id,
+          turn,
+          hasWorkInProgress: detail.hasWorkInProgress,
+          updatedAt: detail.updatedAt,
+          lastEventSequence: 0,
+        });
+      }
+    }
+
+  }, [
+    management.detail.data,
+    management.history.turns,
+    queryClient,
+    selectedConversationId,
+    withHistory,
+  ]);
 
   const turnQuery = useQuery<TurnEventSnapshot>({
-    queryKey: selection
-      ? conversationKeys.turn(selection.conversationId, selection.turnId)
+    queryKey: activeSelection
+      ? conversationKeys.turn(activeSelection.conversationId, activeSelection.turnId)
       : ['conversations', 'workspace', 'draft'],
     queryFn: async () => {
-      if (!selection) throw new Error('No hay un turno seleccionado');
+      if (!activeSelection) throw new Error('No hay un turno seleccionado');
 
-      const result = await getTurnSnapshot(apiClient, selection.conversationId, selection.turnId);
+      const result = await getTurnSnapshot(
+        apiClient,
+        activeSelection.conversationId,
+        activeSelection.turnId
+      );
       const previous = queryClient.getQueryData<TurnEventSnapshot>(
-        conversationKeys.turn(selection.conversationId, selection.turnId)
+        conversationKeys.turn(activeSelection.conversationId, activeSelection.turnId)
       );
       return {
-        conversationId: selection.conversationId,
-        turnId: selection.turnId,
+        conversationId: activeSelection.conversationId,
+        turnId: activeSelection.turnId,
         turn: result.turn,
         hasWorkInProgress: result.conversation.hasWorkInProgress,
         updatedAt: result.turn.updatedAt,
         lastEventSequence: previous?.lastEventSequence ?? 0,
       };
     },
-    enabled: selection !== null,
+    enabled: activeSelection !== null && (!withHistory || selection !== null),
     staleTime: Number.POSITIVE_INFINITY,
   });
+
+  function updateSidebar(result: ConversationTurnResponse) {
+    queryClient.setQueryData<InfiniteData<ConversationPage>>(
+      conversationKeys.list(null),
+      current => {
+        if (!current) {
+          return {
+            pages: [{ items: [result.conversation], nextCursor: null }],
+            pageParams: [null],
+          };
+        }
+
+        return {
+          ...current,
+          pages: current.pages.map((page, index) => ({
+            ...page,
+            items:
+              index === 0
+                ? [
+                    result.conversation,
+                    ...page.items.filter(item => item.id !== result.conversation.id),
+                  ]
+                : page.items.filter(item => item.id !== result.conversation.id),
+          })),
+        };
+      }
+    );
+  }
 
   function cacheResult(result: ConversationTurnResponse) {
     const nextSelection = {
@@ -132,6 +236,7 @@ export function ConversationWorkspace() {
       result.conversation
     );
     queryClient.setQueryData(turnKey, toSnapshot(result, previous?.lastEventSequence ?? 0));
+    updateSidebar(result);
     setTimeline(current => {
       if (current?.conversationId !== nextSelection.conversationId) {
         return { conversationId: nextSelection.conversationId, turnIds: [nextSelection.turnId] };
@@ -140,18 +245,19 @@ export function ConversationWorkspace() {
         ? current
         : { ...current, turnIds: [...current.turnIds, nextSelection.turnId] };
     });
+    setSelectedConversationId(nextSelection.conversationId);
     setSelection(nextSelection);
   }
 
   const execution = useConversationExecution({
     apiClient,
-    conversationId: selection?.conversationId ?? null,
+    conversationId: activeSelection?.conversationId ?? null,
     onSuccess: cacheResult,
   });
   const retryMutation = useMutation({
     mutationFn: ({ turnId, slot }: { turnId: string; slot: ResponseSlot }) => {
-      if (!selection) throw new Error('No hay un turno seleccionado');
-      return retryResponse(apiClient, selection.conversationId, turnId, slot);
+      if (!activeSelection) throw new Error('No hay un turno seleccionado');
+      return retryResponse(apiClient, activeSelection.conversationId, turnId, slot);
     },
     onSuccess: result => {
       cacheResult(result);
@@ -160,26 +266,67 @@ export function ConversationWorkspace() {
   });
   const continueMutation = useMutation({
     mutationFn: ({ turnId, slot }: { turnId: string; slot: ResponseSlot }) => {
-      if (!selection) throw new Error('No hay un turno seleccionado');
-      return continueWithoutResponse(apiClient, selection.conversationId, turnId, slot);
+      if (!activeSelection) throw new Error('No hay un turno seleccionado');
+      return continueWithoutResponse(apiClient, activeSelection.conversationId, turnId, slot);
     },
     onSuccess: cacheResult,
   });
 
   const mutationError = execution.error ?? retryMutation.error ?? continueMutation.error;
   const snapshot = turnQuery.data;
-  const isBusy = snapshot?.hasWorkInProgress ?? false;
-  const isPending =
-    execution.isPending || retryMutation.isPending || continueMutation.isPending;
-  const turns =
+  const isBusy = snapshot?.hasWorkInProgress ?? management.detail.data?.hasWorkInProgress ?? false;
+  const isPending = execution.isPending || retryMutation.isPending || continueMutation.isPending;
+  const localTurns =
     timeline?.turnIds.flatMap(turnId => {
       const cached = queryClient.getQueryData<TurnEventSnapshot>(
         conversationKeys.turn(timeline.conversationId, turnId)
       );
       return cached ? [cached.turn] : [];
     }) ?? [];
+  const historyTurnIds = new Set(management.history.turns.map(turn => turn.id));
+  const turns = (withHistory && selectedConversationId
+    ? [
+        ...management.history.turns,
+        ...localTurns.filter(turn => !historyTurnIds.has(turn.id)),
+      ]
+    : localTurns
+  ).map(turn => {
+    if (!selectedConversationId) return turn;
+    return (
+      queryClient.getQueryData<TurnEventSnapshot>(
+        conversationKeys.turn(selectedConversationId, turn.id)
+      )?.turn ?? turn
+    );
+  });
+  const sidebarConversations = management.conversations.items.map(conversation =>
+    conversation.id === management.detail.data?.id ? management.detail.data : conversation
+  );
+  const historyInitialError =
+    selectedConversationId !== null &&
+    (management.detail.isError || management.history.isError) &&
+    management.history.turns.length === 0;
+  const historyLoading =
+    selectedConversationId !== null &&
+    !historyInitialError &&
+    (management.detail.isPending || management.history.isPending ||
+      (management.history.turns.length > 0 && !snapshot));
+  const historyEmpty =
+    selectedConversationId !== null &&
+    management.detail.isSuccess &&
+    management.history.isSuccess &&
+    management.history.turns.length === 0;
+  const historyTopSentinel = withHistory && selectedConversationId ? (
+    <HistoryTopSentinel
+      containerRef={historyRef}
+      hasOlder={management.history.hasNextPage}
+      isError={management.history.isFetchNextPageError}
+      isLoading={management.history.isFetchingNextPage}
+      onLoadOlder={management.history.loadOlder}
+      pageCount={management.history.pageCount}
+    />
+  ) : undefined;
 
-  return (
+  const workspace = (
     <section aria-labelledby="workspace-title" className="mx-auto grid w-full max-w-5xl gap-6">
       <header className="grid gap-1">
         <h1 id="workspace-title" className="text-2xl font-semibold tracking-tight">
@@ -204,23 +351,94 @@ export function ConversationWorkspace() {
         </Alert>
       )}
 
+      {withHistory && historyLoading && (
+        <p role="status" aria-label="Cargando historial" className="text-sm text-muted-foreground">
+          Cargando historial…
+        </p>
+      )}
+      {withHistory && historyInitialError && (
+        <Alert variant="destructive">
+          <AlertTitle>No se pudo cargar el historial</AlertTitle>
+          <AlertDescription className="grid gap-2">
+            Inténtalo de nuevo.
+            <button
+              type="button"
+              className="w-fit underline underline-offset-4"
+              onClick={() => {
+                void management.detail.refetch();
+                void management.history.refetch();
+              }}
+            >
+              Reintentar historial
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {withHistory && historyEmpty && (
+        <p className="text-sm text-muted-foreground">No hay turnos en esta conversación.</p>
+      )}
+
       {snapshot && (
         <ActiveTimeline
           key={`${snapshot.conversationId}:${snapshot.turnId}:${streamGeneration}`}
           snapshot={snapshot}
           turns={turns}
           actionsDisabled={isPending}
+          collapseThreshold={withHistory ? environment.historyCollapseCharThreshold : undefined}
+          historyRef={historyRef}
+          historyTopSentinel={historyTopSentinel}
           onRetry={(turnId, slot) => retryMutation.mutate({ turnId, slot })}
           onContinueWithout={(turnId, slot) => continueMutation.mutate({ turnId, slot })}
         />
       )}
 
       <PromptComposer
-        key={selection?.turnId ?? 'draft'}
+        key={activeSelection?.turnId ?? 'draft'}
         isBusy={isBusy}
         isPending={isPending}
         onSubmit={execution.execute}
       />
     </section>
+  );
+
+  if (!withHistory) return workspace;
+
+  return (
+    <AppShell
+      sidebar={
+        <ConversationSidebar
+          conversations={sidebarConversations}
+          selectedConversationId={selectedConversationId}
+          isLoading={management.conversations.isPending}
+          isError={management.conversations.isError}
+          hasMore={management.conversations.hasNextPage}
+          isLoadingMore={management.conversations.isFetchingNextPage}
+          incrementalError={management.conversations.isFetchNextPageError}
+          onLoadMore={management.conversations.loadMore}
+          onRetry={() => {
+            if (management.conversations.isFetchNextPageError) {
+              void management.conversations.loadMore();
+            } else {
+              void management.conversations.refetch();
+            }
+          }}
+          onSelect={conversationId => {
+            setSelectedConversationId(conversationId);
+            setSelection(null);
+            setTimeline(null);
+          }}
+          onRename={(id, title) => management.rename.mutateAsync({ id, title })}
+          onDelete={id => management.remove.mutateAsync(id)}
+          onDeleted={id => {
+            if (id !== selectedConversationId) return;
+            setSelectedConversationId(null);
+            setSelection(null);
+            setTimeline(null);
+          }}
+        />
+      }
+    >
+      {workspace}
+    </AppShell>
   );
 }

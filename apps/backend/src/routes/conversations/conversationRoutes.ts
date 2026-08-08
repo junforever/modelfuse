@@ -6,6 +6,9 @@ import {
   createConversationBodySchema,
   createTurnBodySchema,
   conversationIdParamsSchema,
+  listConversationsQuerySchema,
+  listTurnsQuerySchema,
+  renameConversationBodySchema,
   responseSlotParamsSchema,
   turnIdParamsSchema,
 } from '../../middleware/validation/conversationSchemas.js';
@@ -20,10 +23,35 @@ export function createConversationRoutes(dependencies: {
   const router = Router();
   const controller = createConversationController(dependencies.conversationService);
 
+  router.get(
+    '/',
+    validateRequest({ query: listConversationsQuerySchema }),
+    controller.listConversations,
+  );
   router.post(
     '/',
     validateRequest({ body: createConversationBodySchema }),
     controller.createConversation,
+  );
+  router.get(
+    '/:conversationId',
+    validateRequest({ params: conversationIdParamsSchema }),
+    controller.getConversation,
+  );
+  router.patch(
+    '/:conversationId',
+    validateRequest({ params: conversationIdParamsSchema, body: renameConversationBodySchema }),
+    controller.renameConversation,
+  );
+  router.delete(
+    '/:conversationId',
+    validateRequest({ params: conversationIdParamsSchema }),
+    controller.deleteConversation,
+  );
+  router.get(
+    '/:conversationId/turns',
+    validateRequest({ params: conversationIdParamsSchema, query: listTurnsQuerySchema }),
+    controller.listTurns,
   );
   router.post(
     '/:conversationId/turns',

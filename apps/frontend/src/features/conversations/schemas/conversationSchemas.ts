@@ -2,8 +2,10 @@ import { z } from 'zod';
 
 import type {
   ApiError,
+  ConversationPage,
   ConversationSummary,
   ConversationTurnResponse,
+  TurnPage,
   TurnSnapshotResponse,
 } from '../types/conversation';
 import type { TurnEvent, TurnEventSnapshot } from '../types/sse';
@@ -83,12 +85,23 @@ const turnSchema = z.object({
   createdAt: dateTimeSchema,
   updatedAt: dateTimeSchema,
 });
-const conversationSummarySchema: z.ZodType<ConversationSummary> = z.object({
+export const conversationSummarySchema: z.ZodType<ConversationSummary> = z.object({
   id: uuidSchema,
   title: z.string(),
   hasWorkInProgress: z.boolean(),
   createdAt: dateTimeSchema,
   updatedAt: dateTimeSchema,
+});
+
+export const conversationPageSchema: z.ZodType<ConversationPage> = z.object({
+  items: z.array(conversationSummarySchema),
+  nextCursor: z.string().nullable(),
+});
+
+export const turnPageSchema: z.ZodType<TurnPage> = z.object({
+  items: z.array(turnSchema),
+  olderCursor: z.string().nullable(),
+  hasOlder: z.boolean(),
 });
 
 export const apiErrorSchema: z.ZodType<ApiError> = z.object({

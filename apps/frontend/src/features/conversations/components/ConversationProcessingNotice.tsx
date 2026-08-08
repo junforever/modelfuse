@@ -23,8 +23,8 @@ export function ConversationProcessingNotice({
       )}
       {sseError && (
         <Alert variant="destructive">
-          <AlertTitle>Error de conexión en tiempo real</AlertTitle>
-          <AlertDescription>{sseError}</AlertDescription>
+          <AlertTitle>Error de actualización en tiempo real</AlertTitle>
+          <AlertDescription>{sseError}. Intenta de nuevo más tarde.</AlertDescription>
         </Alert>
       )}
     </div>

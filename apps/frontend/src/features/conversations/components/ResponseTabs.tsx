@@ -14,6 +14,7 @@ interface ResponseTabsProps {
   readonly responses: TurnResponses;
   readonly runtimeStages: Partial<Record<ResponseSlot, string>>;
   readonly hasWorkInProgress: boolean;
+  readonly collapseThreshold?: number;
   readonly onRetry: (slot: ResponseSlot) => void;
   readonly onContinueWithout: (slot: ResponseSlot) => void;
 }
@@ -22,6 +23,7 @@ export function ResponseTabs({
   responses,
   runtimeStages,
   hasWorkInProgress,
+  collapseThreshold,
   onRetry,
   onContinueWithout,
 }: ResponseTabsProps) {
@@ -41,6 +43,7 @@ export function ResponseTabs({
             modelLabel={MODEL_LABELS[response.slot]}
             runtimeStage={runtimeStages[response.slot]}
             hasWorkInProgress={hasWorkInProgress}
+            collapseThreshold={collapseThreshold}
             onRetry={onRetry}
             onContinueWithout={onContinueWithout}
           />
