@@ -21,12 +21,7 @@ postgresPool.on('error', error =>
   logger.error({
     message: 'Postgres pool error',
     operation: 'postgres_pool',
-    error: {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    },
-    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+    errorType: error.name,
   })
 );
 
@@ -34,7 +29,6 @@ postgresPool.on('connect', () =>
   logger.info({
     message: 'Successfully connected to Postgres',
     operation: 'postgres_pool_connect',
-    connectionString: process.env.POSTGRES_CONNECTION_STRING,
   })
 );
 
@@ -42,6 +36,5 @@ postgresPool.on('remove', () =>
   logger.info({
     message: 'Postgres pool client removed',
     operation: 'postgres_pool_remove',
-    connectionString: process.env.POSTGRES_CONNECTION_STRING,
   })
 );

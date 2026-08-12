@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import { createApp } from './app.js';
 import { parseEnv, type Environment } from './infrastructure/config/env.js';
 import type { ApiDependencies } from './routes/apiRouter.js';
+import { recoverInterruptedTurns } from './services/conversations/recoverInterruptedTurns.js';
 
 function resolvePort(port: number | undefined): number {
   const resolvedPort = port ?? Number(process.env.PORT ?? 3001);
@@ -71,6 +72,7 @@ async function createProductionDependencies(environment: Environment): Promise<A
     orchestrator,
     sidebarPageSize: environment.CONVERSATION_SIDEBAR_PAGE_SIZE,
   });
+  await recoverInterruptedTurns(poolModule.postgresPool);
   return { conversationService, turnEventPublisher };
 }
 

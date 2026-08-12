@@ -35,6 +35,12 @@ export function createTurnEventsController(
       if (closed) return;
       closed = true;
       unsubscribe();
+      request.log.info({
+        message: 'SSE connection closed',
+        operation: 'sse_closed',
+        conversationId,
+        turnId,
+      });
     };
     const close = (): void => {
       cleanup();
@@ -66,6 +72,12 @@ export function createTurnEventsController(
         Connection: 'keep-alive',
       });
       response.flushHeaders();
+      request.log.info({
+        message: 'SSE connection established',
+        operation: 'sse_connected',
+        conversationId,
+        turnId,
+      });
 
       for (const event of snapshotEvents(snapshot)) writeEvent(response, event);
       latestTerminal = isTerminal(snapshot.turn.status);

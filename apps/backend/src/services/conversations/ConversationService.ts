@@ -15,6 +15,7 @@ import type {
   TurnRepository,
 } from '../../infrastructure/postgres/repositories/turnRepository.js';
 import type { TurnEventSnapshot } from '../../types/sse.js';
+import { logger } from '../../utils/logger.js';
 import { truncateTitleGraphemes } from '../../utils/titleGraphemes.js';
 import { ConversationError } from './conversationErrors.js';
 import type { TurnOrchestrator } from './TurnOrchestrator.js';
@@ -39,7 +40,11 @@ export class ConversationService {
     });
     this.assertCreated(created);
     const snapshot = await this.requireSnapshot(created.conversationId, created.turnId);
-    if (created.kind === 'created') this.launch(snapshot, false);
+    if (created.kind === 'created') {
+      this.launch(snapshot, false);
+    } else {
+      this.logReplay(snapshot);
+    }
     return snapshot;
   }
 
@@ -56,6 +61,12 @@ export class ConversationService {
       case 'conversation_not_found':
         throw new ConversationError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found.');
       case 'busy':
+        logger.info({
+          message: 'Conversation rejected new work while busy',
+          operation: 'conversation_busy',
+          conversationId,
+          hasWorkInProgress: true,
+        });
         throw new ConversationError(409, 'CONVERSATION_BUSY', 'The conversation has work in progress.');
       case 'conflict':
         throw new ConversationError(409, 'CLIENT_REQUEST_ID_CONFLICT', 'The request ID belongs to a different prompt.');
@@ -63,6 +74,7 @@ export class ConversationService {
       case 'replay': {
         const snapshot = await this.requireSnapshot(created.conversationId, created.turnId);
         if (created.kind === 'created') this.launch(snapshot, false);
+        else this.logReplay(snapshot);
         return snapshot;
       }
     }
@@ -108,6 +120,12 @@ export class ConversationService {
       throw new ConversationError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found.');
     }
     if (result === 'busy') {
+      logger.info({
+        message: 'Conversation deletion rejected while busy',
+        operation: 'conversation_busy',
+        conversationId,
+        hasWorkInProgress: true,
+      });
       throw new ConversationError(409, 'CONVERSATION_BUSY', 'The conversation has work in progress.');
     }
   }
@@ -147,6 +165,14 @@ export class ConversationService {
       case 'response_not_found':
         throw new ConversationError(404, 'RESPONSE_NOT_FOUND', 'Response not found.');
       case 'conversation_busy':
+        logger.info({
+          message: 'Response retry rejected while conversation is busy',
+          operation: 'conversation_busy',
+          conversationId,
+          turnId,
+          slot,
+          hasWorkInProgress: true,
+        });
         throw new ConversationError(409, 'CONVERSATION_BUSY', 'The conversation has work in progress.');
       case 'retry_in_progress':
         throw new ConversationError(409, 'RESPONSE_RETRY_IN_PROGRESS', 'The response retry is already in progress.');
@@ -197,6 +223,17 @@ export class ConversationService {
     if (result.kind === 'conflict') {
       throw new ConversationError(409, 'CLIENT_REQUEST_ID_CONFLICT', 'The request ID belongs to a different prompt.');
     }
+  }
+
+  private logReplay(snapshot: StoredTurnSnapshot): void {
+    logger.info({
+      message: 'Existing turn replayed',
+      operation: 'turn_replayed',
+      conversationId: snapshot.conversation.id,
+      turnId: snapshot.turn.id,
+      replay: true,
+      hasWorkInProgress: snapshot.conversation.hasWorkInProgress,
+    });
   }
 
   private launch(snapshot: StoredTurnSnapshot, retry: boolean, slot?: ResponseSlot): void {

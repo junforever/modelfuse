@@ -13,6 +13,7 @@ import type {
   LlmProviderError,
   LlmResult,
 } from '../../types/llm.js';
+import { logger } from '../../utils/logger.js';
 import { isRecoverableLlmError } from '../llm/llmErrors.js';
 import { protectContext } from './contextProtection.js';
 import type { ContextBuilder } from './ContextBuilder.js';
@@ -186,6 +187,7 @@ export class TurnOrchestrator {
         startedAt: attemptStartedAt,
         completedAt: new Date().toISOString(),
       });
+      this.logAttemptCompleted(input, provider, 0, 'failed', protectedContext.error.code);
       return { slot: input.slot, result: null };
     }
 
@@ -209,8 +211,10 @@ export class TurnOrchestrator {
         completedAt: result.completedAt,
         reconsolidateQwen: input.reconsolidateOnSuccess,
       });
+      this.logAttemptCompleted(input, provider, durationMs, 'completed');
       return { slot: input.slot, result };
     } catch (error) {
+      const failedAt = Date.now();
       const failure = this.normalizeFailure(error, provider);
       await this.persist(input, {
         attemptNo,
@@ -222,6 +226,13 @@ export class TurnOrchestrator {
         startedAt: attemptStartedAt,
         completedAt: new Date().toISOString(),
       });
+      this.logAttemptCompleted(
+        input,
+        provider,
+        Math.max(0, failedAt - Date.parse(attemptStartedAt)),
+        'failed',
+        failure.code,
+      );
       return { slot: input.slot, result: null };
     }
   }
@@ -307,6 +318,27 @@ export class TurnOrchestrator {
       model: provider.model,
       recoverable: false,
     };
+  }
+
+  private logAttemptCompleted(
+    input: ExecuteTurnInput & { slot: ResponseSlot },
+    provider: LlmProvider,
+    durationMs: number,
+    status: 'completed' | 'failed',
+    errorCode?: string,
+  ): void {
+    logger.info({
+      message: 'LLM attempt completed',
+      operation: 'llm_attempt_completed',
+      conversationId: input.conversationId,
+      turnId: input.turnId,
+      slot: input.slot,
+      provider: provider.provider,
+      model: provider.model,
+      durationMs: Number.isFinite(durationMs) ? durationMs : 0,
+      status,
+      ...(errorCode ? { errorCode } : {}),
+    });
   }
 
   private isProviderError(error: unknown): error is LlmProviderError {
