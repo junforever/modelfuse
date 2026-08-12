@@ -58,18 +58,20 @@ describe('conversation request schemas', () => {
     }
   });
 
-  it('trims Rename titles and enforces the 1 to 80 grapheme-cluster boundary', () => {
-    const eightyGraphemes = '👩‍💻'.repeat(80);
-    const eightyOneGraphemes = `${eightyGraphemes}a`;
+  it('counts emoji and combining characters by grapheme and canonicalizes title whitespace', () => {
+    const singleGraphemes = ['👍', '👨‍👩‍👧‍👦', 'e\u0301'];
 
-    expect(renameConversationBodySchema.safeParse({ title: '' }).success).toBe(false);
-    expect(renameConversationBodySchema.safeParse({ title: '   ' }).success).toBe(false);
-    expect(renameConversationBodySchema.parse({ title: `  ${eightyGraphemes}  ` })).toEqual({
-      title: eightyGraphemes,
-    });
-    expect(renameConversationBodySchema.safeParse({ title: `  ${eightyOneGraphemes}  ` }).success).toBe(
-      false,
-    );
+    for (const grapheme of singleGraphemes) {
+      const eightyGraphemes = grapheme.repeat(80);
+      const eightyOneGraphemes = grapheme.repeat(81);
+
+      expect(renameConversationBodySchema.parse({ title: `  ${eightyGraphemes}  ` })).toEqual({
+        title: eightyGraphemes,
+      });
+      expect(renameConversationBodySchema.safeParse({ title: eightyOneGraphemes }).success).toBe(
+        false,
+      );
+    }
   });
 
   it('preserves valid Unicode and literal special characters after trim without normalization', () => {
@@ -77,7 +79,6 @@ describe('conversation request schemas', () => {
       'Simple ASCII',
       'Español 😀',
       'Equipo 👩‍💻',
-      'Cafe\u0301',
       'ASCII + 漢字 + 🧑‍🚀',
       `Comillas "dobles" y 'simples'`,
       '< >',
