@@ -13,6 +13,7 @@ export type RuntimeStages = Partial<Record<ResponseSlot, string>>;
 interface UseTurnEventsOptions {
   readonly conversationId: string;
   readonly turnId: string;
+  readonly enabled?: boolean;
 }
 
 interface UseTurnEventsResult {
@@ -26,12 +27,15 @@ const streamErrorMessage = 'No se pudo actualizar en tiempo real';
 export function useTurnEvents({
   conversationId,
   turnId,
+  enabled = true,
 }: UseTurnEventsOptions): UseTurnEventsResult {
   const queryClient = useQueryClient();
   const [runtimeStages, setRuntimeStages] = useState<RuntimeStages>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
+
     const abortController = new AbortController();
     const { apiBaseUrl } = parseFrontendEnv(import.meta.env);
     const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl : `${apiBaseUrl}/`;
@@ -83,7 +87,9 @@ export function useTurnEvents({
             return next;
           });
 
-          if (!applied || !snapshot) return;
+          if (!snapshot) return;
+          convergeIfTerminal(snapshot);
+          if (!applied) return;
           setError(null);
 
           if (turnEvent.event === 'slot_update') {
@@ -112,8 +118,6 @@ export function useTurnEvents({
                   : undefined
             );
           }
-
-          convergeIfTerminal(snapshot);
         } catch {
           setError(streamErrorMessage);
         }
@@ -139,7 +143,7 @@ export function useTurnEvents({
       source.close();
       setRuntimeStages({});
     };
-  }, [conversationId, queryClient, turnId]);
+  }, [conversationId, enabled, queryClient, turnId]);
 
   return { runtimeStages, error };
 }

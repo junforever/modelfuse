@@ -61,4 +61,17 @@ describe('TurnEventPublisher', () => {
       expect(delivered.data.response.content).toBe('before unsubscribe');
     }
   });
+
+  it('continues delivering an event when another listener throws', () => {
+    const publisher = new TurnEventPublisher();
+    const healthyListener = vi.fn<(event: TurnEvent) => void>();
+    publisher.subscribe('turn-a', () => {
+      throw new Error('disconnected listener');
+    });
+    publisher.subscribe('turn-a', healthyListener);
+
+    expect(() => publisher.publish(slotUpdate('turn-a', 'terminal value'))).not.toThrow();
+    expect(healthyListener).toHaveBeenCalledOnce();
+    expect(healthyListener.mock.calls[0]?.[0].data.eventSequence).toBe(1);
+  });
 });

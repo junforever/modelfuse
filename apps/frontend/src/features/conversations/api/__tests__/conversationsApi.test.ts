@@ -103,17 +103,31 @@ describe('conversations API contract', () => {
     ]);
   });
 
-  it('rejects a malformed success payload instead of returning invalid server state', async () => {
+  it('maps a malformed success payload to one stable safe client error', async () => {
     const malformed = {
       ...conversationTurn,
-      turn: { ...conversationTurn.turn, responses: conversationTurn.turn.responses.slice(0, 3) },
+      turn: {
+        ...conversationTurn.turn,
+        responses: conversationTurn.turn.responses.slice(0, 3),
+        schemaCanary: 'schema-detail-must-not-leak',
+      },
     };
     const adapter: AxiosAdapter = async config => response(config, malformed, 202);
     const client = createApiClient({ baseURL: '/api/v1', adapter });
 
-    await expect(
-      createConversation(client, { clientRequestId, prompt: 'Primer prompt' })
-    ).rejects.toMatchObject({ name: 'ZodError' });
+    let failure: unknown;
+    try {
+      await createConversation(client, { clientRequestId, prompt: 'Primer prompt' });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toEqual({
+      code: 'INTERNAL_ERROR',
+      message: 'No se pudo completar la solicitud',
+      requestId: 'unavailable',
+    });
+    expect(JSON.stringify(failure)).not.toMatch(/responses|schema|ZodError/i);
   });
 
   it('exposes only the validated safe API error returned by the server', async () => {

@@ -24,6 +24,11 @@ export interface StoredTurnSnapshot {
   turn: Turn;
 }
 
+export interface ReconciledTurn {
+  snapshot: StoredTurnSnapshot;
+  slots: ResponseSlot[];
+}
+
 export interface PersistResponseAttemptInput {
   turnId: string;
   slot: ResponseSlot;
@@ -60,7 +65,11 @@ export class TurnRepository {
   constructor(private readonly pool: Pool) {}
 
   getTurnSnapshot(conversationId: string, turnId: string): Promise<StoredTurnSnapshot | null> {
-    return this.readSnapshot(this.pool, conversationId, turnId);
+    return withTransaction(
+      this.pool,
+      client => this.readSnapshot(client, conversationId, turnId),
+      { isolationLevel: 'REPEATABLE READ', readOnly: true },
+    );
   }
 
   startResponseAttempt(input: {
@@ -96,9 +105,9 @@ export class TurnRepository {
     return withTransaction(this.pool, async client => {
       const persisted = await client.query(
         `UPDATE model_responses
-            SET status = $4,
+            SET status = $4::varchar,
                 content = CASE
-                  WHEN $4 = 'completed' THEN $5
+                  WHEN $4::varchar = 'completed' THEN $5::text
                   WHEN slot = 'qwen' AND is_stale THEN content
                   ELSE NULL
                 END,
@@ -108,7 +117,7 @@ export class TurnRepository {
                 metadata = $9::jsonb,
                 started_at = $10,
                 completed_at = $11,
-                is_stale = CASE WHEN slot = 'qwen' AND $4 = 'completed' THEN false ELSE is_stale END,
+                is_stale = CASE WHEN slot = 'qwen' AND $4::varchar = 'completed' THEN false ELSE is_stale END,
                 updated_at = now()
           WHERE turn_id = $1 AND slot = $2 AND attempt_no = $3 AND status = 'running'`,
         [
@@ -154,6 +163,36 @@ export class TurnRepository {
       if (!conversationId) return null;
       await this.recalculateTurnWith(client, turnId);
       return this.requireSnapshot(client, conversationId, turnId);
+    });
+  }
+
+  reconcileInterruptedTurn(conversationId: string, turnId: string): Promise<ReconciledTurn | null> {
+    return withTransaction(this.pool, async client => {
+      const reconciled = await client.query<{ slot: ResponseSlot }>(
+        `UPDATE model_responses mr
+            SET status = 'failed',
+                content = CASE WHEN slot = 'qwen' AND is_stale THEN content ELSE NULL END,
+                error_code = 'interrupted',
+                error_message = 'The response was interrupted before completion.',
+                error_recoverable = true,
+                metadata = '{}'::jsonb,
+                completed_at = now(),
+                updated_at = now()
+           FROM turns t
+          WHERE mr.turn_id = t.id
+            AND t.conversation_id = $1
+            AND mr.turn_id = $2
+            AND mr.status IN ('pending', 'running')
+        RETURNING mr.slot`,
+        [conversationId, turnId],
+      );
+      if (reconciled.rowCount === 0) return null;
+
+      await this.recalculateTurnWith(client, turnId);
+      return {
+        snapshot: await this.requireSnapshot(client, conversationId, turnId),
+        slots: reconciled.rows.map(({ slot }) => slot),
+      };
     });
   }
 

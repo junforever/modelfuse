@@ -118,8 +118,11 @@ export class TurnOrchestrator {
     });
   }
 
-  publishSnapshot(snapshot: StoredTurnSnapshot, slot?: ResponseSlot): void {
-    if (slot) {
+  publishSnapshot(
+    snapshot: StoredTurnSnapshot,
+    slots?: ResponseSlot | readonly ResponseSlot[],
+  ): void {
+    for (const slot of slots ? (Array.isArray(slots) ? slots : [slots]) : []) {
       const response = snapshot.turn.responses.find(candidate => candidate.slot === slot);
       if (response) {
         this.dependencies.publisher.publish({
@@ -247,7 +250,12 @@ export class TurnOrchestrator {
       ...attempt,
     });
     if (snapshot) {
-      this.publishSnapshot(snapshot, input.slot);
+      this.publishSnapshot(
+        snapshot,
+        attempt.reconsolidateQwen === true && attempt.status === 'completed'
+          ? [input.slot, 'qwen']
+          : input.slot,
+      );
     } else {
       await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
     }

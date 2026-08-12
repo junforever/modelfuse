@@ -32,7 +32,13 @@ export class TurnEventPublisher {
     } as TurnEvent;
 
     this.sequences.set(turnId, eventSequence);
-    for (const listener of this.listeners.get(turnId) ?? []) listener(sequencedEvent);
+    for (const listener of this.listeners.get(turnId) ?? []) {
+      try {
+        listener(sequencedEvent);
+      } catch {
+        // A disconnected consumer must not interrupt persistence/orchestration.
+      }
+    }
     return sequencedEvent;
   }
 

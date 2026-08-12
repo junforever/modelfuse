@@ -43,65 +43,97 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     await seedFailedTurn(pool, { slot: 'openai', recoverable: true });
     const providers = createControlledProviders();
     const release = deferred();
+    const releaseQwen = deferred();
     providers.openai.enqueueBlocked(release.promise, 'Recovered OpenAI answer');
-    providers.qwen.enqueueResult('Re-consolidated answer');
+    providers.qwen.enqueueBlocked(releaseQwen.promise, 'Re-consolidated answer');
     const backend = createIntegrationBackend(pool, providers);
     const path = actionPath('openai', 'retry');
+    const events: TurnEvent[] = [];
+    const unsubscribe = backend.publisher.subscribe(TURN_ID, event => events.push(event));
 
-    const [one, two] = await Promise.all([
-      request(backend.app).post(path),
-      request(backend.app).post(path),
-    ]);
-    const accepted = [one, two].find(({ status }) => status === 202);
-    const rejected = [one, two].find(({ status }) => status === 409);
-    expect(accepted).toBeDefined();
-    expect(rejected?.body.code).toBe('RESPONSE_RETRY_IN_PROGRESS');
+    try {
+      const [one, two] = await Promise.all([
+        request(backend.app).post(path),
+        request(backend.app).post(path),
+      ]);
+      const accepted = [one, two].find(({ status }) => status === 202);
+      const rejected = [one, two].find(({ status }) => status === 409);
+      expect(accepted).toBeDefined();
+      expect(rejected?.body.code).toBe('RESPONSE_RETRY_IN_PROGRESS');
 
-    const active = await pool.query<{ status: string; attempt_no: number }>(
-      `SELECT status, attempt_no FROM model_responses
-        WHERE turn_id = $1 AND slot = 'openai'`,
-      [TURN_ID]
-    );
-    expect(active.rows[0]).toMatchObject({ attempt_no: 2 });
-    expect(['pending', 'running']).toContain(active.rows[0].status);
+      const active = await pool.query<{ status: string; attempt_no: number }>(
+        `SELECT status, attempt_no FROM model_responses
+          WHERE turn_id = $1 AND slot = 'openai'`,
+        [TURN_ID]
+      );
+      expect(active.rows[0]).toMatchObject({ attempt_no: 2 });
+      expect(['pending', 'running']).toContain(active.rows[0].status);
 
-    const idle = waitForIdle(backend.publisher, TURN_ID);
-    release.resolve();
-    await idle;
+      const idle = waitForIdle(backend.publisher, TURN_ID);
+      release.resolve();
+      const qwenStarted = await Promise.race([
+        providers.qwen.waitUntilCalled().then(() => true),
+        new Promise<false>(resolve => setTimeout(() => resolve(false), 2_000)),
+      ]);
 
-    const final = await pool.query<{
-      slot: string;
-      status: string;
-      content: string;
-      attempt_no: number;
-      is_stale: boolean;
-    }>(
-      `SELECT slot, status, content, attempt_no, is_stale
-         FROM model_responses
-        WHERE turn_id = $1 AND slot IN ('openai', 'qwen')
-        ORDER BY slot`,
-      [TURN_ID]
-    );
-    expect(final.rows).toEqual([
-      {
-        slot: 'openai',
-        status: 'completed',
-        content: 'Recovered OpenAI answer',
-        attempt_no: 2,
-        is_stale: false,
-      },
-      {
-        slot: 'qwen',
-        status: 'completed',
-        content: 'Re-consolidated answer',
-        attempt_no: 2,
-        is_stale: false,
-      },
-    ]);
-    expect(providers.openai.calls).toHaveLength(1);
-    expect(providers.qwen.calls).toHaveLength(1);
-    expect(providers.google.calls).toHaveLength(0);
-    expect(providers.minimax.calls).toHaveLength(0);
+      const qwenPending = events.findIndex(
+        event =>
+          event.event === 'slot_update' &&
+          event.data.response.slot === 'qwen' &&
+          event.data.response.status === 'pending' &&
+          event.data.response.isStale === true
+      );
+      const qwenRunning = events.findIndex(
+        event =>
+          event.event === 'slot_update' &&
+          event.data.response.slot === 'qwen' &&
+          event.data.response.status === 'running'
+      );
+      expect(qwenPending).toBeGreaterThanOrEqual(0);
+      expect(qwenRunning).toBeGreaterThan(qwenPending);
+      expect(qwenStarted).toBe(true);
+
+      releaseQwen.resolve();
+      await idle;
+
+      const final = await pool.query<{
+        slot: string;
+        status: string;
+        content: string;
+        attempt_no: number;
+        is_stale: boolean;
+      }>(
+        `SELECT slot, status, content, attempt_no, is_stale
+           FROM model_responses
+          WHERE turn_id = $1 AND slot IN ('openai', 'qwen')
+          ORDER BY slot`,
+        [TURN_ID]
+      );
+      expect(final.rows).toEqual([
+        {
+          slot: 'openai',
+          status: 'completed',
+          content: 'Recovered OpenAI answer',
+          attempt_no: 2,
+          is_stale: false,
+        },
+        {
+          slot: 'qwen',
+          status: 'completed',
+          content: 'Re-consolidated answer',
+          attempt_no: 2,
+          is_stale: false,
+        },
+      ]);
+      expect(providers.openai.calls).toHaveLength(1);
+      expect(providers.qwen.calls).toHaveLength(1);
+      expect(providers.google.calls).toHaveLength(0);
+      expect(providers.minimax.calls).toHaveLength(0);
+    } finally {
+      unsubscribe();
+      release.resolve();
+      releaseQwen.resolve();
+    }
   });
 
   it('returns the three distinct 409 retry guards from committed state', async () => {

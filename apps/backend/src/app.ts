@@ -8,10 +8,21 @@ import { requestContextMiddleware } from '#middleware/logger/requestContext';
 import { requestTimeOut } from '#middleware/timeout/requestTimeOut';
 import { haltOnTimedout } from '#middleware/timeout/haltOnTimedout';
 import { globalErrorHandler } from '#middleware/global/globalErrorHandler';
+import {
+  parseAppEnv,
+  type AppEnvironment,
+} from './infrastructure/config/env.js';
 import { createApiRouter, type ApiDependencies } from './routes/apiRouter.js';
 
-export const createApp = (dependencies?: ApiDependencies): Express => {
+export const createApp = (
+  dependencies?: ApiDependencies,
+  injectedEnvironment?: AppEnvironment,
+): Express => {
   const app: Express = express();
+  const environment = injectedEnvironment ?? parseAppEnv(process.env);
+  const frontendOrigin = environment.NODE_ENV === 'production'
+    ? environment.FRONTEND_URL
+    : environment.FRONTEND_URL_LOCALHOST;
 
   app.disable('x-powered-by');
 
@@ -20,17 +31,14 @@ export const createApp = (dependencies?: ApiDependencies): Express => {
 
   app.use(
     cors({
-      origin:
-        process.env.NODE_ENV !== 'production'
-          ? process.env.FRONTEND_URL_LOCALHOST
-          : process.env.FRONTEND_URL,
-      credentials: true,
+      origin: frontendOrigin ?? false,
+      credentials: frontendOrigin !== undefined,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
     })
   );
 
-  const timeoutMiddleware = timeout(process.env.REQUEST_TIMEOUT || '15s');
+  const timeoutMiddleware = timeout(environment.REQUEST_TIMEOUT);
   app.use((request, response, next) =>
     request.path.endsWith('/events')
       ? next()
@@ -41,7 +49,7 @@ export const createApp = (dependencies?: ApiDependencies): Express => {
 
   app.use(
     express.json({
-      limit: process.env.REQUEST_MAX_BODY_SIZE || '1mb',
+      limit: environment.REQUEST_MAX_BODY_SIZE,
       strict: true,
     })
   );

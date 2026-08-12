@@ -21,6 +21,8 @@ import { ConversationError } from './conversationErrors.js';
 import type { TurnOrchestrator } from './TurnOrchestrator.js';
 
 export class ConversationService {
+  private readonly activeExecutions = new Set<Promise<void>>();
+
   constructor(
     private readonly dependencies: {
       conversationRepository: ConversationRepository;
@@ -142,6 +144,7 @@ export class ConversationService {
   }
 
   async getTurnSnapshot(conversationId: string, turnId: string): Promise<TurnEventSnapshot> {
+    const lastEventSequence = this.dependencies.orchestrator.getLastEventSequence(turnId);
     const snapshot = await this.requireSnapshot(conversationId, turnId);
     return {
       conversationId: snapshot.conversation.id,
@@ -149,7 +152,7 @@ export class ConversationService {
       turn: snapshot.turn,
       hasWorkInProgress: snapshot.conversation.hasWorkInProgress,
       updatedAt: snapshot.conversation.updatedAt,
-      lastEventSequence: this.dependencies.orchestrator.getLastEventSequence(turnId),
+      lastEventSequence,
     };
   }
 
@@ -247,6 +250,40 @@ export class ConversationService {
     const execution = retry && slot
       ? this.dependencies.orchestrator.executeRetry({ ...input, slot })
       : this.dependencies.orchestrator.executeTurn(input);
-    void execution.catch(() => undefined);
+    let tracked!: Promise<void>;
+    tracked = execution
+      .catch(() => this.reconcileRejectedExecution(snapshot))
+      .finally(() => this.activeExecutions.delete(tracked));
+    this.activeExecutions.add(tracked);
+  }
+
+  async stop(): Promise<void> {
+    await Promise.allSettled([...this.activeExecutions]);
+  }
+
+  private async reconcileRejectedExecution(snapshot: StoredTurnSnapshot): Promise<void> {
+    logger.error({
+      message: 'Background turn execution failed unexpectedly',
+      operation: 'turn_execution_rejected',
+      conversationId: snapshot.conversation.id,
+      turnId: snapshot.turn.id,
+    });
+
+    try {
+      const reconciled = await this.dependencies.turnRepository.reconcileInterruptedTurn?.(
+        snapshot.conversation.id,
+        snapshot.turn.id,
+      );
+      if (reconciled) {
+        this.dependencies.orchestrator.publishSnapshot(reconciled.snapshot, reconciled.slots);
+      }
+    } catch {
+      logger.error({
+        message: 'Background turn reconciliation failed',
+        operation: 'turn_reconciliation_failed',
+        conversationId: snapshot.conversation.id,
+        turnId: snapshot.turn.id,
+      });
+    }
   }
 }

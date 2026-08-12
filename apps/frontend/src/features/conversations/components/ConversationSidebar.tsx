@@ -48,6 +48,7 @@ export function ConversationSidebar({
 }: ConversationSidebarProps) {
   const scrollRef = useRef<HTMLElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const newConversationRef = useRef<HTMLButtonElement>(null);
   const selectionRefs = useRef(new Map<string, HTMLButtonElement>());
   const hasItems = conversations.length > 0;
 
@@ -85,7 +86,9 @@ export function ConversationSidebar({
   function finalFocusAfterDelete(index: number) {
     return () => {
       const next = conversations[index + 1] ?? conversations[index - 1];
-      return next ? (selectionRefs.current.get(next.id) ?? null) : null;
+      return next
+        ? (selectionRefs.current.get(next.id) ?? newConversationRef.current)
+        : newConversationRef.current;
     };
   }
 
@@ -96,7 +99,7 @@ export function ConversationSidebar({
       className="grid max-h-[calc(100vh-8rem)] content-start gap-3 overflow-y-auto"
     >
       <h2 className="text-sm font-semibold">Conversaciones</h2>
-      <Button variant="outline" onClick={onNewConversation}>
+      <Button ref={newConversationRef} variant="outline" onClick={onNewConversation}>
         Nueva conversación
       </Button>
       {isLoading && !hasItems && (

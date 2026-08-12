@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createControlledProviders,
@@ -20,6 +20,7 @@ const CREATE_IDS = [
   '10000000-0000-4000-8000-000000000042',
   '10000000-0000-4000-8000-000000000043',
   '10000000-0000-4000-8000-000000000044',
+  '10000000-0000-4000-8000-000000000045',
 ] as const;
 const SEEDED_CONVERSATION_ID = '20000000-0000-4000-8000-000000000040';
 const SEEDED_TURN_ID = '30000000-0000-4000-8000-000000000040';
@@ -241,6 +242,69 @@ describe('conversation creation REST/PostgreSQL', () => {
       [[CREATE_IDS[3], CREATE_IDS[4]]]
     );
     expect(titles.rows.map(({ title }) => title)).toEqual([eighty, eighty]);
+  });
+
+  it('reconciles every active slot when an unexpected publisher failure escapes after 202', async () => {
+    const providers = createControlledProviders();
+    const releases = [deferred(), deferred(), deferred()];
+    providers.openai.enqueueBlocked(releases[0].promise);
+    providers.google.enqueueBlocked(releases[1].promise);
+    providers.minimax.enqueueBlocked(releases[2].promise);
+    const backend = createIntegrationBackend(pool, providers);
+    const originalPublish = backend.publisher.publish.bind(backend.publisher);
+    const terminal = deferred();
+    let unsubscribe: () => void = () => undefined;
+    let failureListenerInstalled = false;
+
+    vi.spyOn(backend.publisher, 'publish').mockImplementation(event => {
+      if (!failureListenerInstalled) {
+        failureListenerInstalled = true;
+        unsubscribe = backend.publisher.subscribe(event.data.turnId, () => {
+          throw new Error('controlled publisher listener failure');
+        });
+      }
+      if (event.event === 'busy_update' && event.data.hasWorkInProgress === false) {
+        terminal.resolve();
+      }
+      return originalPublish(event);
+    });
+
+    try {
+      const accepted = await request(backend.app).post('/api/v1/conversations').send({
+        clientRequestId: CREATE_IDS[5],
+        prompt: 'Reconcile an unexpected post-acceptance failure.',
+      });
+      expect(accepted.status).toBe(202);
+
+      releases.forEach(({ resolve }) => resolve());
+      const converged = await Promise.race([
+        terminal.promise.then(() => true),
+        new Promise<false>(resolve => setTimeout(() => resolve(false), 2_000)),
+      ]);
+
+      const persisted = await pool.query<{ status: string; count: number }>(
+        `SELECT status, count(*)::int AS count
+           FROM model_responses
+          WHERE turn_id = $1
+          GROUP BY status
+          ORDER BY status`,
+        [accepted.body.turn.id]
+      );
+      const snapshot = await request(backend.app).get(
+        `/api/v1/conversations/${accepted.body.conversation.id}/turns/${accepted.body.turn.id}`
+      );
+
+      expect(
+        persisted.rows.filter(({ status }) => status === 'pending' || status === 'running')
+      ).toEqual([]);
+      expect(snapshot.status).toBe(200);
+      expect(snapshot.body.conversation.hasWorkInProgress).toBe(false);
+      expect(['completed', 'partial', 'failed']).toContain(snapshot.body.turn.status);
+      expect(converged).toBe(true);
+    } finally {
+      unsubscribe();
+      releases.forEach(({ resolve }) => resolve());
+    }
   });
 });
 

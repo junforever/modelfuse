@@ -1,40 +1,37 @@
 import { Pool } from 'pg';
+import type { Environment } from '../config/env.js';
 import { logger } from '../../utils/logger.js';
 
-const { POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB } = process.env;
+export function createPostgresPool(environment: Environment): Pool {
+  const pool = new Pool({
+    user: environment.POSTGRES_USER,
+    password: environment.POSTGRES_PASSWORD,
+    database: environment.POSTGRES_DB,
+    max: environment.POSTGRES_MAX_CONNECTIONS,
+    idleTimeoutMillis: environment.POSTGRES_IDLE_TIMEOUT,
+    connectionTimeoutMillis: environment.POSTGRES_CONNECTION_TIMEOUT,
+    keepAlive: environment.POSTGRES_KEEP_ALIVE,
+  });
 
-if (!POSTGRES_USER || !POSTGRES_PASSWORD || !POSTGRES_DB) {
-  throw new Error('POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB are required in .env');
+  pool.on('error', error =>
+    logger.error({
+      message: 'Postgres pool error',
+      operation: 'postgres_pool',
+      errorType: error.name,
+    })
+  );
+  pool.on('connect', () =>
+    logger.info({
+      message: 'Successfully connected to Postgres',
+      operation: 'postgres_pool_connect',
+    })
+  );
+  pool.on('remove', () =>
+    logger.info({
+      message: 'Postgres pool client removed',
+      operation: 'postgres_pool_remove',
+    })
+  );
+
+  return pool;
 }
-
-const connectionString = `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public`;
-
-export const postgresPool = new Pool({
-  connectionString,
-  max: Number(process.env.POSTGRES_MAX_CONNECTIONS || 10),
-  idleTimeoutMillis: Number(process.env.POSTGRES_IDLE_TIMEOUT || 30000),
-  connectionTimeoutMillis: Number(process.env.POSTGRES_CONNECTION_TIMEOUT || 2000),
-  keepAlive: process.env.POSTGRES_KEEP_ALIVE === 'true',
-});
-
-postgresPool.on('error', error =>
-  logger.error({
-    message: 'Postgres pool error',
-    operation: 'postgres_pool',
-    errorType: error.name,
-  })
-);
-
-postgresPool.on('connect', () =>
-  logger.info({
-    message: 'Successfully connected to Postgres',
-    operation: 'postgres_pool_connect',
-  })
-);
-
-postgresPool.on('remove', () =>
-  logger.info({
-    message: 'Postgres pool client removed',
-    operation: 'postgres_pool_remove',
-  })
-);

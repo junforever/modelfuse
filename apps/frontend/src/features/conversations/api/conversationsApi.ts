@@ -30,14 +30,19 @@ const unknownApiError: ApiError = {
 };
 
 async function validated<T>(request: Promise<AxiosResponse<unknown>>, schema: ZodType<T>): Promise<T> {
+  let response: AxiosResponse<unknown>;
   try {
-    return schema.parse((await request).data);
+    response = await request;
   } catch (error) {
     if (!isAxiosError(error)) throw error;
 
     const apiError = apiErrorSchema.safeParse(error.response?.data);
     throw apiError.success ? apiError.data : unknownApiError;
   }
+
+  const parsed = schema.safeParse(response.data);
+  if (!parsed.success) throw unknownApiError;
+  return parsed.data;
 }
 
 async function completed(request: Promise<AxiosResponse<unknown>>): Promise<void> {

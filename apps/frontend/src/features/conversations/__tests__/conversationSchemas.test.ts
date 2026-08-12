@@ -124,4 +124,64 @@ describe('frontend conversation contracts', () => {
       );
     }
   });
+
+  it('rejects ModelResponse states that violate the persisted runtime invariants', () => {
+    const snapshot = {
+      conversation: { id: conversationId, hasWorkInProgress: false },
+      turn,
+    };
+    const invalidResponses = [
+      ['completed without content', { ...response('openai'), content: '   ' }],
+      ['completed with an error', {
+        ...response('openai'),
+        error: { code: 'provider_error', message: 'Safe failure' },
+      }],
+      ['failed without an error', {
+        ...response('openai'),
+        status: 'failed',
+        content: null,
+        error: null,
+      }],
+      ['running with an error', {
+        ...response('openai'),
+        status: 'running',
+        content: null,
+        error: { code: 'provider_error', message: 'Safe failure' },
+      }],
+      ['continued completed base', { ...response('openai'), continuedWithout: true }],
+      ['continued failed Qwen', {
+        ...response('qwen'),
+        status: 'failed',
+        content: null,
+        error: { code: 'provider_error', message: 'Safe failure' },
+        continuedWithout: true,
+      }],
+      ['stale base', { ...response('openai'), isStale: true }],
+    ] as const;
+
+    const acceptedInvalidStates = invalidResponses.flatMap(([label, candidate]) => {
+      const responses: unknown[] = [...turn.responses];
+      responses[candidate.slot === 'qwen' ? 3 : 0] = candidate;
+      return turnSnapshotResponseSchema.safeParse({
+        ...snapshot,
+        turn: { ...turn, responses },
+      }).success
+        ? [label]
+        : [];
+    });
+    expect(acceptedInvalidStates).toEqual([]);
+
+    expect(
+      turnSnapshotResponseSchema.safeParse({
+        ...snapshot,
+        turn: {
+          ...turn,
+          responses: [
+            ...turn.responses.slice(0, 3),
+            { ...response('qwen'), isStale: true },
+          ],
+        },
+      }).success,
+    ).toBe(true);
+  });
 });

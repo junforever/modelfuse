@@ -19,8 +19,8 @@ import { useConversationExecution } from '../hooks/useConversationExecution';
 import { useConversationQueries } from '../hooks/useConversationQueries';
 import { useTurnEvents } from '../hooks/useTurnEvents';
 import { conversationKeys } from '../queries/conversation-keys';
+import { apiErrorSchema } from '../schemas/conversationSchemas';
 import type {
-  ApiError,
   ConversationPage,
   ConversationTurnResponse,
   ResponseSlot,
@@ -48,9 +48,8 @@ interface ConversationWorkspaceProps {
 }
 
 function errorMessage(error: unknown): string {
-  return typeof error === 'object' && error !== null && 'message' in error
-    ? String((error as Pick<ApiError, 'message'>).message)
-    : 'No se pudo completar la solicitud';
+  const parsed = apiErrorSchema.safeParse(error);
+  return parsed.success ? parsed.data.message : 'No se pudo completar la solicitud';
 }
 
 function toSnapshot(
@@ -89,6 +88,11 @@ function ActiveTimeline({
   const { runtimeStages, error } = useTurnEvents({
     conversationId: snapshot.conversationId,
     turnId: snapshot.turnId,
+    enabled:
+      snapshot.hasWorkInProgress ||
+      (snapshot.turn.status !== 'partial' &&
+        snapshot.turn.status !== 'completed' &&
+        snapshot.turn.status !== 'failed'),
   });
 
   return (

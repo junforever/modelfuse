@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { Button } from '@workspace/ui/components/button';
 
@@ -26,14 +26,17 @@ export function ResponsePanel({
   onContinueWithout,
 }: ResponsePanelProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const errorId = useId();
 
   if (response.status === 'completed') {
+    if (!response.content?.trim()) return null;
+
     return (
       <div className="grid gap-3">
         {response.isStale && (
           <p className="text-sm text-muted-foreground">Consolidación pendiente</p>
         )}
-        <CollapsibleHistoryMessage content={response.content ?? ''} threshold={collapseThreshold} />
+        <CollapsibleHistoryMessage content={response.content} threshold={collapseThreshold} />
       </div>
     );
   }
@@ -54,19 +57,26 @@ export function ResponsePanel({
 
   return (
     <div className="grid gap-4">
-      <p className="text-destructive">{response.error?.message ?? 'La respuesta falló.'}</p>
+      <p id={errorId} role="alert" className="text-destructive">
+        {response.error?.message ?? 'La respuesta falló.'}
+      </p>
       <div className="flex flex-wrap gap-2">
         {response.recoverable && (
           <Button
             variant="outline"
             disabled={hasWorkInProgress}
+            aria-describedby={errorId}
             onClick={() => onRetry(response.slot)}
           >
             Reintentar {modelLabel}
           </Button>
         )}
         {canContinueWithout && (
-          <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
+          <Button
+            variant="destructive"
+            aria-describedby={errorId}
+            onClick={() => setConfirmOpen(true)}
+          >
             Continuar sin {modelLabel}
           </Button>
         )}

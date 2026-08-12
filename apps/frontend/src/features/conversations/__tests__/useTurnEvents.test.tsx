@@ -66,7 +66,8 @@ class ControlledEventSource {
     if (this.readyState === ControlledEventSource.CLOSED) return;
     const event = new Event('error');
     this.onerror?.(event);
-    for (const listener of this.listeners.get('error') ?? []) listener(event as MessageEvent<string>);
+    for (const listener of this.listeners.get('error') ?? [])
+      listener(event as MessageEvent<string>);
   }
 }
 
@@ -285,13 +286,14 @@ describe('useTurnEvents integration', () => {
     let cached = queryClient.getQueryData<ReturnType<typeof turnSnapshotFixture>>(
       conversationKeys.turn(conversationId, turnId)
     )!;
-    expect(cached.turn.responses.map(({ slot, status, content }) => ({ slot, status, content })))
-      .toEqual([
-        { slot: 'openai', status: 'completed', content: 'snapshot OpenAI' },
-        { slot: 'google', status: 'completed', content: 'snapshot Google' },
-        { slot: 'minimax', status: 'failed', content: null },
-        { slot: 'qwen', status: 'running', content: null },
-      ]);
+    expect(
+      cached.turn.responses.map(({ slot, status, content }) => ({ slot, status, content }))
+    ).toEqual([
+      { slot: 'openai', status: 'completed', content: 'snapshot OpenAI' },
+      { slot: 'google', status: 'completed', content: 'snapshot Google' },
+      { slot: 'minimax', status: 'failed', content: null },
+      { slot: 'qwen', status: 'running', content: null },
+    ]);
     expect(cached).toMatchObject({
       lastEventSequence: snapshotSequence,
       hasWorkInProgress: true,
@@ -352,15 +354,80 @@ describe('useTurnEvents integration', () => {
     queryClient.clear();
   });
 
+  it('converges once when terminal and idle events duplicate the canonical cache', async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const queryClient = createTestQueryClient();
+    const initial = turnSnapshotFixture({
+      turn: turnFixture({ status: 'running' }),
+      hasWorkInProgress: true,
+      lastEventSequence: 19,
+    });
+    queryClient.setQueryData(conversationKeys.turn(conversationId, turnId), initial);
+    queryClient.setQueryData(conversationKeys.detail(conversationId), {
+      id: conversationId,
+      title: 'Comparación',
+      hasWorkInProgress: true,
+      createdAt: eventTime,
+      updatedAt: eventTime,
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <TurnEventsProbe />
+      </QueryClientProvider>
+    );
+    expect(ControlledEventSource.instances).toHaveLength(1);
+    const source = ControlledEventSource.instances[0]!;
+
+    act(() => {
+      queryClient.setQueryData(conversationKeys.turn(conversationId, turnId), {
+        ...initial,
+        turn: { ...initial.turn, status: 'completed' },
+        hasWorkInProgress: false,
+        lastEventSequence: 20,
+      });
+      source.emit('turn_update', {
+        conversationId,
+        turnId,
+        eventSequence: 20,
+        turn: { id: turnId, status: 'completed', updatedAt: initial.turn.updatedAt },
+      });
+      source.emit('busy_update', {
+        conversationId,
+        turnId,
+        eventSequence: 20,
+        hasWorkInProgress: false,
+        updatedAt: initial.updatedAt,
+      });
+    });
+
+    expect(source.closeCalls).toBe(1);
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: conversationKeys.detail(conversationId) });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: conversationKeys.turn(conversationId, turnId),
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ControlledEventSource.instances).toHaveLength(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    view.unmount();
+    expect(source.closeCalls).toBe(1);
+    expect(source.listenerCount()).toBe(0);
+    expect(source.onerror).toBeNull();
+    queryClient.clear();
+  });
+
   it('shows an SSE error without starting polling or another transport', async () => {
     vi.useFakeTimers();
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(
-      conversationKeys.turn(conversationId, turnId),
-      turnSnapshotFixture()
-    );
+    queryClient.setQueryData(conversationKeys.turn(conversationId, turnId), turnSnapshotFixture());
 
     const view = render(
       <QueryClientProvider client={queryClient}>
@@ -371,9 +438,7 @@ describe('useTurnEvents integration', () => {
 
     act(() => source.fail());
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'No se pudo actualizar en tiempo real'
-    );
+    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo actualizar en tiempo real');
     await vi.advanceTimersByTimeAsync(60_000);
     expect(ControlledEventSource.instances).toHaveLength(1);
     expect(fetchSpy).not.toHaveBeenCalled();
