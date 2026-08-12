@@ -21,6 +21,7 @@ interface ConversationSidebarProps {
   readonly onDelete: (conversationId: string) => Promise<void>;
   readonly onDeleted?: (conversationId: string) => void;
   readonly onLoadMore: () => void;
+  readonly onNewConversation: () => void;
   readonly onRename: (conversationId: string, title: string) => Promise<ConversationSummary>;
   readonly onRenamed?: (conversation: ConversationSummary) => void;
   readonly onRetry: () => void;
@@ -38,6 +39,7 @@ export function ConversationSidebar({
   onDelete,
   onDeleted,
   onLoadMore,
+  onNewConversation,
   onRename,
   onRenamed,
   onRetry,
@@ -94,6 +96,9 @@ export function ConversationSidebar({
       className="grid max-h-[calc(100vh-8rem)] content-start gap-3 overflow-y-auto"
     >
       <h2 className="text-sm font-semibold">Conversaciones</h2>
+      <Button variant="outline" onClick={onNewConversation}>
+        Nueva conversación
+      </Button>
       {isLoading && !hasItems && (
         <p role="status" aria-label="Cargando conversaciones" className="text-sm text-muted-foreground">
           Cargando conversaciones…

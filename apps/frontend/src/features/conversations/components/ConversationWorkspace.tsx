@@ -126,6 +126,7 @@ export function ConversationWorkspace({
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [draftGeneration, setDraftGeneration] = useState(0);
   const [streamGeneration, setStreamGeneration] = useState(0);
   const environment = parseFrontendEnv(import.meta.env);
   const management = useConversationQueries(
@@ -247,6 +248,13 @@ export function ConversationWorkspace({
     });
     setSelectedConversationId(nextSelection.conversationId);
     setSelection(nextSelection);
+  }
+
+  function startNewConversation() {
+    setSelectedConversationId(null);
+    setSelection(null);
+    setTimeline(null);
+    setDraftGeneration(generation => generation + 1);
   }
 
   const execution = useConversationExecution({
@@ -393,7 +401,7 @@ export function ConversationWorkspace({
       )}
 
       <PromptComposer
-        key={activeSelection?.turnId ?? 'draft'}
+        key={activeSelection?.turnId ?? `draft:${draftGeneration}`}
         isBusy={isBusy}
         isPending={isPending}
         onSubmit={execution.execute}
@@ -415,6 +423,7 @@ export function ConversationWorkspace({
           isLoadingMore={management.conversations.isFetchingNextPage}
           incrementalError={management.conversations.isFetchNextPageError}
           onLoadMore={management.conversations.loadMore}
+          onNewConversation={startNewConversation}
           onRetry={() => {
             if (management.conversations.isFetchNextPageError) {
               void management.conversations.loadMore();
@@ -431,9 +440,7 @@ export function ConversationWorkspace({
           onDelete={id => management.remove.mutateAsync(id)}
           onDeleted={id => {
             if (id !== selectedConversationId) return;
-            setSelectedConversationId(null);
-            setSelection(null);
-            setTimeline(null);
+            startNewConversation();
           }}
         />
       }

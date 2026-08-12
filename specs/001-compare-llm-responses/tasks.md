@@ -237,10 +237,10 @@ explícitos y gestión sin duplicados que respeta busy.
 **Independent Test**: Nueva conversación no inserta datos; el primer prompt crea
 el recurso sin contexto previo y conserva conversaciones existentes.
 
-- [ ] T104 [P] [US4] [UNIT] Probar draft repetido, cero persistencia y conservación de lista en `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx`; tipo: frontend unit.
-- [ ] T105 [P] [US4] [E2E] Escribir primer prompt de draft y contexto aislado en `apps/frontend/e2e/new-conversation.spec.ts`; tipo: E2E.
-- [ ] T106 [US4] [FE] Implementar draft/selección local y acción Nueva conversación en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationSidebar.tsx` (depende de T103); prueba mínima: unit T104.
-- [ ] T107 [US4] [FE] Enviar primer prompt por `POST /conversations`, seleccionar ID y conservar historial en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T106); prueba mínima: E2E T105.
+- [X] T104 [P] [US4] [UNIT] Probar draft repetido, cero persistencia y conservación de lista en `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx`; tipo: frontend unit.
+- [X] T105 [P] [US4] [E2E] Escribir primer prompt de draft y contexto aislado en `apps/frontend/e2e/new-conversation.spec.ts`; tipo: E2E.
+- [X] T106 [US4] [FE] Implementar draft/selección local y acción Nueva conversación en `apps/frontend/src/components/layout/AppShell.tsx` y `ConversationSidebar.tsx` (depende de T103); prueba mínima: unit T104.
+- [X] T107 [US4] [FE] Enviar primer prompt por `POST /conversations`, seleccionar ID y conservar historial en `apps/frontend/src/features/conversations/components/ConversationWorkspace.tsx` (depende de T106); prueba mínima: E2E T105.
 
 **Checkpoint**: no existe endpoint clear ni conversación vacía persistida.
 

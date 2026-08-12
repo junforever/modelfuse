@@ -55,12 +55,14 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
 - Las validaciones globales/cross-task deben ejecutarse una sola vez en el boundary apropiado y delegarse al owner de testing correspondiente cuando `tasks.md` lo requiera.
 - No repitas un comando fallido idéntico más de una vez sin un cambio concreto que pueda corregir la causa. Si el mismo root cause persiste, diagnostica/cambia de estrategia o reporta el blocker.
 - Evita outputs masivos: usa comandos focalizados, filtros y extractos relevantes. No devuelvas logs completos cuando basten el error, resumen y evidencia necesaria.
+- Antes de solicitar una validación, el coordinador debe consultar la evidencia ya reportada por el owner y el estado de los archivos desde esa ejecución. Una validación exitosa del owner, incluido `git diff --check`, es evidencia suficiente para el coordinador salvo que haya cambios posteriores en los archivos validados, falte evidencia verificable o una integración cross-task exija una comprobación distinta. Revisar un diff para entenderlo no autoriza a repetir su validación.
 
 ### Espera, seguimiento y followups
 
 - Evita patrones de polling como `wait → list/status → wait → list/status`.
 - Después de delegar, continúa con otras tareas independientes. Espera/consulta estado sólo cuando una dependencia real impida continuar.
 - Para una misma dependencia, realiza una espera/comprobación razonable y reutiliza el resultado; no hagas checks repetidos sin nueva evidencia.
+- Antes de esperar, identifica la condición concreta que desbloquea el siguiente paso. Un timeout no justifica por sí solo consultar `list/status`: retoma trabajo independiente útil y, si la dependencia sigue bloqueando y ya no queda trabajo independiente, realiza como máximo una espera adicional acotada sin un sondeo intermedio. Consulta estado únicamente para recibir un resultado final, atender un blocker explícito, decidir una interrupción o cumplir la verificación final de apagado.
 - Cuando un subagente ya envió su resultado final, no vuelvas a esperarlo ni pidas confirmaciones redundantes.
 - Formula la delegación inicial con suficiente alcance y acceptance criteria para minimizar followups.
 - Reactiva/envía followup a un agente únicamente por blocker concreto, acceptance criterion fallido, evidencia faltante o nuevo trabajo necesario. No lo reactives sólo para volver a explicar, resumir o confirmar trabajo ya terminado.
@@ -70,6 +72,7 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
 - No pegues archivos completos, diffs completos, logs extensos o resultados de tests extensos en mensajes inter-agent si basta con indicar paths, líneas relevantes o un resumen verificable.
 - Reutiliza evidencia ya obtenida. No vuelvas a leer o recalcular información estable salvo que una modificación posterior la invalide.
 - Si una tarea puede resolverse usando archivos autoritativos del repositorio, referencia esos archivos en lugar de heredar el contexto completo del agente principal.
+- Para documentos extensos, determina primero si una instrucción exige lectura completa. Si no la exige, usa búsquedas y rangos dirigidos; si la exige, léelo por separado y en fragmentos continuables hasta EOF. No combines varios documentos largos en una misma salida ni reinicies una lectura porque se truncó: continúa desde el último rango confirmado. Conserva y reutiliza un resumen verificable de las secciones ya leídas.
 - Una tarea se considera terminada cuando cumple sus acceptance criteria y aporta evidencia suficiente. No añadas validaciones, refactors o exploraciones no solicitadas después de ese punto.
 
 ### Contrato de respuesta de subagentes
