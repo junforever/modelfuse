@@ -307,6 +307,14 @@ hallazgos `critical` o `high`.
 Un hallazgo bloqueante de reauditoría crea otra tarea builder concreta y exige una
 nueva reauditoría; no avanzan los quality gates dependientes mientras quede uno abierto.
 
+## Phase 7B: Remediación de atajo global de tema
+
+**Purpose**: eliminar el atajo global de una sola tecla y conservar el cambio de
+tema mediante un control accesible y visible en el header.
+
+- [ ] T155 [INTEGRATION] Ampliar `apps/frontend/src/components/layout/__tests__/AppShell.test.tsx` con `ThemeProvider` real para exigir que el header exponga un único botón de tema accesible: con tema efectivo oscuro muestra icono de sol, `title` y `aria-label` «Cambiar a modo claro»; con tema efectivo claro muestra icono de luna, `title` y `aria-label` «Cambiar a modo oscuro»; al activarlo alterna y la tecla global `d` no cambia el tema. Evitar aserciones de clases/layout privadas; tipo: frontend integration, debe fallar antes de T156.
+- [ ] T156 [FE] Eliminar el listener global de la tecla `d` en `packages/ui/src/components/theme-provider.tsx` y añadir en `apps/frontend/src/components/layout/AppShell.tsx` el botón icon-only de alternancia, conectado al tema efectivo (incluido `system`), con `title` y `aria-label` según el próximo modo; colocar el nombre de la aplicación al inicio y el control en la esquina superior derecha del header mediante un contenedor flex con separación entre extremos (depende de T155); prueba mínima: T155.
+
 - [ ] T114 [P] [INTEGRATION] Crear fixture ≤5 casos y runner de consolidación ≥90% en `apps/backend/src/services/conversations/__tests__/fixtures/consolidation-evaluation.json` y `apps/backend/src/acceptance/consolidationEvaluation.ts` (depende de T154); tipo: integration acceptance SC-005 con providers fake.
 - [ ] T115 [P] [PERF] Implementar la aceptación cuantitativa SC-001 con PostgreSQL local y providers fake deterministas en `apps/backend/src/acceptance/terminalStates.acceptance.test.ts` (owner: `performance-test-runner`; depende de T154): ejecutar un conjunto controlado, considerar exitosa solo la consulta cuyos cuatro slots obtengan una respuesta o estado terminal explícito dentro de 60 segundos, registrar total, éxitos, porcentaje y `pass`/`fail`, y fallar si el porcentaje es menor al 95%; las pruebas funcionales permanecen en UNIT/INTEGRATION.
 - [ ] T116 [P] [PERF] Implementar latencia `202`/primer historial p95 <1 s en `apps/backend/src/acceptance/latency.acceptance.test.ts` (owner: `performance-test-runner`; depende de T154); tipo: performance acceptance SC-010.
@@ -335,6 +343,9 @@ nueva reauditoría; no avanzan los quality gates dependientes mientras quede uno
 - Phase 7 depende de las historias incluidas en la entrega; Phase 7A corrige los
   hallazgos bloqueantes de sus auditorías iniciales y bloquea todos los gates
   posteriores hasta que T154/T148 pasen.
+- Phase 7B remedia el atajo global de tema informado por T148: `T155` prueba el
+  contrato accesible y `T156` lo implementa; no ejecuta ni sustituye los quality
+  gates T114–T124.
 
 ### Graph
 
@@ -362,7 +373,7 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
   `T131 → T132`; `T133 → T134`; `T135 → T136`; luego
   `T147 → T149/T150 → T151 → T152/T153 → T154`.
 - Frontend remediation: `T137 → T139`; `T138 → T140`; `T141 → T142`;
-  `T143 → T144`; `T145 → T146`; luego `T148`.
+  `T143 → T144`; `T145 → T146`; luego `T148 → T155 → T156`.
 - Quality gates: `T154 → T114–T116/T119/T123`; `T148 → T117/T124`;
   `T154/T148 → T120–T122`; `T117 → T118`.
 

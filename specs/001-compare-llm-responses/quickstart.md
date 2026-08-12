@@ -62,7 +62,7 @@ definen presupuesto de producto ni contabilidad persistente de tokens.
 
 ```dotenv
 VITE_API_BASE_URL=http://localhost:3001/api/v1
-VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD=
+VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD=600
 ```
 
 Frontend genera `clientRequestId` mediante `crypto.randomUUID()`; no requiere
@@ -275,4 +275,4 @@ pnpm --filter backend test:consolidation-eval
   2. ejecutar sus rollbacks explícitos sobre esa base desechable;
   3. comprobar que se recuperó el estado anterior;
   4. aplicar nuevamente los changesets y verificar el esquema final.
-  Nunca ejecutar esta prueba destructiva contra una base con datos que deban conservarse.
+     Nunca ejecutar esta prueba destructiva contra una base con datos que deban conservarse.
