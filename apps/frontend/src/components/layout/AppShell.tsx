@@ -1,4 +1,8 @@
 import { useRef, type ReactNode } from 'react';
+import { MoonIcon, SunIcon } from 'lucide-react';
+
+import { Button } from '@workspace/ui/components/button';
+import { useOptionalTheme } from '@workspace/ui/components/theme-provider';
 
 interface AppShellProps {
   readonly sidebar: ReactNode;
@@ -7,6 +11,15 @@ interface AppShellProps {
 
 export function AppShell({ sidebar, children }: AppShellProps) {
   const mainRef = useRef<HTMLElement>(null);
+  const themeState = useOptionalTheme();
+  const isDark =
+    themeState?.theme === 'dark' ||
+    (themeState?.theme !== 'light' &&
+      (document.documentElement.classList.contains('dark') ||
+        (!document.documentElement.classList.contains('light') &&
+          (window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false))));
+  const nextTheme = isDark ? 'light' : 'dark';
+  const themeLabel = isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -17,8 +30,18 @@ export function AppShell({ sidebar, children }: AppShellProps) {
       >
         Saltar al contenido principal
       </a>
-      <header className="border-b px-4 py-3 sm:px-6">
+      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-6">
         <p className="text-lg font-semibold">ModelFuse</p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title={themeLabel}
+          aria-label={themeLabel}
+          onClick={() => themeState?.setTheme(nextTheme)}
+        >
+          {isDark ? <SunIcon /> : <MoonIcon />}
+        </Button>
       </header>
       <div className="grid min-h-[calc(100vh-3.5rem)] md:grid-cols-[18rem_1fr]">
         <aside className="border-b p-4 md:border-b-0 md:border-r">{sidebar}</aside>
