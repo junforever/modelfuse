@@ -154,7 +154,7 @@ describe('conversation management frontend integration', () => {
     queryClient.clear();
   });
 
-  it('disables Delete while busy but leaves Rename enabled with a reason', async () => {
+  it('disables Delete while busy but leaves Rename enabled with an accessible reason', async () => {
     api.listConversations.mockResolvedValue({
       items: [conversation('Procesando', true, FIRST_ID)],
       nextCursor: null,
@@ -168,11 +168,17 @@ describe('conversation management frontend integration', () => {
       'aria-disabled',
       'true',
     );
-    expect(screen.getByRole('menuitem', { name: 'Eliminar' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    expect(screen.getByText(/no puedes eliminar mientras se procesan respuestas/i)).toBeInTheDocument();
+    const deleteItem = screen.getByRole('menuitem', { name: 'Eliminar' });
+    const busyReason = screen.getByText(/no puedes eliminar mientras se procesan respuestas/i);
+    expect(deleteItem).toHaveAttribute('aria-disabled', 'true');
+    expect(busyReason).toHaveAttribute('id');
+    expect(deleteItem).toHaveAttribute('aria-describedby', busyReason.id);
+    for (const descriptionId of deleteItem
+      .getAttribute('aria-describedby')!
+      .split(/\s+/)
+      .filter(Boolean)) {
+      expect(document.getElementById(descriptionId)).toBe(busyReason);
+    }
     expect(api.deleteConversation).not.toHaveBeenCalled();
     unmount();
     queryClient.clear();
@@ -192,7 +198,10 @@ describe('conversation management frontend integration', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Acciones de Primera' }));
     await user.keyboard('{ArrowDown}');
-    await user.click(screen.getByRole('menuitem', { name: 'Eliminar' }));
+    const deleteItem = screen.getByRole('menuitem', { name: 'Eliminar' });
+    expect(deleteItem).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByText(/no puedes eliminar mientras se procesan respuestas/i)).not.toBeInTheDocument();
+    await user.click(deleteItem);
     const dialog = screen.getByRole('dialog', { name: 'Eliminar conversación' });
     const confirm = within(dialog).getByRole('button', { name: 'Eliminar' });
     await waitFor(() => expect(confirm).toHaveFocus());

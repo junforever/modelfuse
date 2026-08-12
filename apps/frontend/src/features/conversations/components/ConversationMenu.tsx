@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { MoreHorizontalIcon } from 'lucide-react';
 
 import { Button } from '@workspace/ui/components/button';
@@ -31,6 +31,7 @@ export function ConversationMenu({
   onRenamed,
 }: ConversationMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const busyReasonId = useId();
   const [dialog, setDialog] = useState<'rename' | 'delete' | null>(null);
 
   return (
@@ -48,12 +49,13 @@ export function ConversationMenu({
           <DropdownMenuItem
             variant="destructive"
             disabled={conversation.hasWorkInProgress}
+            aria-describedby={conversation.hasWorkInProgress ? busyReasonId : undefined}
             onClick={() => setDialog('delete')}
           >
             Eliminar
           </DropdownMenuItem>
           {conversation.hasWorkInProgress && (
-            <p className="max-w-56 px-3 py-2 text-xs text-muted-foreground">
+            <p id={busyReasonId} className="max-w-56 px-3 py-2 text-xs text-muted-foreground">
               No puedes eliminar mientras se procesan respuestas; no se puede eliminar durante el
               procesamiento.
             </p>
