@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Protocol Design'
+  short_description: 'Design usability evaluation protocols and data collection templates'
+  default_prompt: 'Use $protocol-design to design a usability evaluation protocol for this feature.'
+
+policy:
+  allow_implicit_invocation: false
