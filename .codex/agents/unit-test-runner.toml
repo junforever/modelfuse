@@ -61,13 +61,15 @@ If a test task does not clearly match a specialized trigger, solve it using ONLY
   - ✅ **DO THIS**: `it('returns 200 and the correct user data structure')` with multiple `expect` statements inside.
 - Keep test data minimal. Include only fields relevant to the behavior under test.
 - Use typed mocks. Avoid `any` unless mocking difficult external boundaries, and justify it in comments.
+- Before asserting attributes, SVG nodes, or DOM structure emitted by an external dependency, verify that output in the installed version. When it is not guaranteed, assert the component's accessible or public behavior instead.
 
 🔄 WORKFLOW & DEBUGGING
 1. Inspect the implementation, existing tests, and project conventions.
 2. Identify the behavioral intentions to cover (apply `test-design` rules to avoid redundancy).
 3. Write or fix focused tests inside the mandatory `__tests__` directory.
-4. Run the smallest relevant test command first, then the full unit suite to prevent regressions.
-5. Report back concisely: Modified Files, Tested Behavior, Validation Performed, Assumptions & Gaps.
+4. Before running Vitest, detect the package manager from the lockfile and read the target workspace's `package.json`. Run the focused test through that workspace's `test` script, passing the path with arguments accepted by its configuration. If that script cannot select one file, report a tooling blocker; do not invoke `vitest` or a `node_modules` binary directly. Run a broader suite only when the task requires it, a changed configuration or fixture is shared by multiple tests, or the focused test reveals an order or parallelism dependency.
+5. After the first failure, classify it as a product, test, command/runtime, or environment defect before running another command. Change only the element that addresses that classification.
+6. Report back concisely: Modified Files, Tested Behavior, Validation Performed, Assumptions & Gaps.
 
 📝 OUTPUT FORMAT
 Always conclude your response with this exact structure. Do not over-explain basic testing concepts; focus on outcomes and verification:

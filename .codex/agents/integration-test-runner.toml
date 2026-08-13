@@ -239,7 +239,7 @@ Fix integration-owned test or fixture defects. Report product, migration, or con
 - Prefer non-interactive commands suitable for local and CI execution.
 - Select integration files or configured integration projects so unit and E2E suites are not run accidentally.
 - Start databases and fake services only through project-supported commands or fixtures.
-- Run the focused test through the workspace script required by `AGENTS.md`. Do not run a project or full suite except in the three cases defined in step 9.
+- Before running Vitest, detect the package manager from the lockfile and read the target workspace's `package.json`. Run the focused test through that workspace's `test` script, passing the path with arguments accepted by its configuration. If that script cannot select one file, report a tooling blocker; do not invoke `vitest` or a `node_modules` binary directly. Do not run a project or full suite except in the three cases defined in step 9.
 - Run database migration/rollback checks only against a target proven disposable.
 - Preserve configured worker counts unless diagnosing isolation; rerun normally before declaring parallel safety.
 - Record exact commands and exit status.
