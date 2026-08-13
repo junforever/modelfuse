@@ -20,6 +20,17 @@ Activate this skill when:
 - The core agent detects missing usability folders during pre-flight check.
 - Explicitly requested to create or verify the workspace structure.
 
+## 📥 Input Requirements
+
+**CRITICAL**: This skill requires a valid `feature_id` to proceed.
+
+- The `feature_id` MUST be provided in the prompt or context.
+- If `feature_id` is missing, empty, or ambiguous:
+  - **DO NOT** attempt to infer or guess the feature_id.
+  - **STOP** execution immediately.
+  - Request the feature_id from the orchestrator or user with a clear message:
+    - "Error: feature_id required. Please provide the feature identifier (e.g., '001-compare-llm-responses') to create the workspace structure."
+
 ## 📁 Required Folder Structure
 
 For each feature, ensure the following structure exists:
@@ -36,11 +47,14 @@ specs/{feature_id}/usability/
 ## 🔧 Behavior
 
 1. Receive the feature_id from the context or prompt.
-2. Check if the folder structure exists by inspecting the filesystem.
-3. If ALL folders exist:
+2. **Validate the feature_id**:
+   - If missing, empty, or ambiguous, stop and request it (see Input Requirements).
+   - If valid, proceed to step 3.
+3. Check if the folder structure exists by inspecting the filesystem.
+4. If ALL folders exist:
    - Return:
      - "Workspace de usabilidad ya creado para la feature {feature_id}. No se requieren cambios."
-4. If ANY folder is missing:
+5. If ANY folder is missing:
    - Execute the workspace creation script:
      - **Node.js (cross-platform)**:
        ```bash
@@ -59,9 +73,9 @@ specs/{feature_id}/usability/
 
 ## ⚠️ Error Handling
 
+- If the feature_id is missing, empty, or ambiguous:
+  - Stop and request it explicitly (see Input Requirements).
 - If the script is not found at the expected path, report:
   - "Error: Script de creación de workspace no encontrado en .codex/skills/product-ux/scripts/"
 - If the script execution fails, report:
   - "Error al ejecutar el script: [mensaje de error]"
-- If the feature_id is invalid or empty, report:
-  - "Error: feature_id inválido o vacío"

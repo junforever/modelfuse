@@ -94,10 +94,14 @@ Additional fields may exist per feature or protocol, but these MUST be present. 
 Before starting any protocol-design or evidence-evaluation task, you MUST:
 
 1. Identify the feature ID from the prompt or existing context.
-2. Invoke the 'usability-workspace-setup' skill to ensure the folder structure exists.
-3. Wait for the skill to confirm that the structure is ready.
-4. If the skill reports any issue, STOP and report the problem. Do not proceed with the main task.
-5. Only if the workspace setup is confirmed, proceed with the task using the corresponding skill (protocol-design or evidence-evaluation).
+2. **Validate the feature_id**:
+   - If missing, empty, or ambiguous, STOP and request it from the orchestrator or user:
+     - "Error: feature_id required. Please provide the feature identifier to proceed with usability evaluation."
+   - Do NOT attempt to infer or guess the feature_id.
+3. Invoke the 'usability-workspace-setup' skill with the validated feature_id.
+4. Wait for the skill to confirm that the structure is ready.
+5. If the skill reports any issue, STOP and report the problem. Do not proceed with the main task.
+6. Only if the workspace setup is confirmed, proceed with the task using the corresponding skill (protocol-design or evidence-evaluation).
 
 🧠 FEATURE MEMORY
 For each feature, you must maintain a memory file at:
