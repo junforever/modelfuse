@@ -5,8 +5,9 @@ información relevante, usa como fuentes autoritativas:
 `.specify/memory/constitution.md` y
 `specs/001-compare-llm-responses/plan.md`.
 
-- El agente principal/coordinador debe revisar estas fuentes al inicio del bloque de implementación.
-- Los subagentes NO deben volver a cargar ambos documentos completos por defecto. Deben leer sólo las secciones necesarias para sus tareas, usando búsquedas/lecturas dirigidas. Sólo pueden leerlos completos cuando la tarea realmente lo requiera.
+- El agente principal/coordinador debe leer ambos documentos completos una sola vez, antes de la primera delegación de cada bloque de implementación, y conservar un resumen verificable de sus secciones aplicables.
+- Tras esa lectura inicial, el coordinador y los subagentes deben localizar encabezados con búsqueda y leer únicamente los rangos que correspondan a la tarea. Una nueva lectura completa solo se permite cuando uno de esos documentos cambió desde la lectura inicial o una instrucción explícita exige el documento completo.
+- Los subagentes NO deben cargar ambos documentos completos por defecto. Cada delegación debe indicar las rutas y los encabezados o rangos que debe consultar.
 
 <!-- SPECKIT END -->
 
@@ -48,12 +49,15 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
 
 ### Validación y comandos
 
+- Antes de la primera validación JavaScript/TypeScript de un bloque de implementación, el coordinador debe resolver una vez el runtime Node y `pnpm` disponibles y comunicar al owner el comando completo que debe usar. Ese runtime se reutiliza en todas las validaciones del bloque.
+- Toda prueba Vitest focalizada debe ejecutarse desde la raíz mediante el script declarado por el workspace: `pnpm --filter <workspace> run test --run <ruta-relativa-del-test>`. No se usa `pnpm exec vitest` ni se invoca `vitest` directamente.
+- Antes de añadir una aserción sobre el DOM emitido por una dependencia externa, el owner de test debe comprobar ese DOM en la versión instalada. Si el atributo no está garantizado, la prueba debe usar un resultado observable estable del componente; no debe asumir atributos internos de la dependencia.
 - El owner de una tarea debe ejecutar la validación mínima y suficiente para demostrar sus acceptance criteria.
 - Prefiere tests/typecheck/lint/build focalizados al área modificada antes de ejecutar suites globales.
 - No repitas exactamente la misma validación si no hubo cambios de código, configuración o estado que puedan alterar el resultado.
 - El coordinador no debe volver a ejecutar una validación que el owner ya reportó como exitosa, salvo que exista una integración cross-task que requiera una comprobación adicional.
 - Las validaciones globales/cross-task deben ejecutarse una sola vez en el boundary apropiado y delegarse al owner de testing correspondiente cuando `tasks.md` lo requiera.
-- No repitas un comando fallido idéntico más de una vez sin un cambio concreto que pueda corregir la causa. Si el mismo root cause persiste, diagnostica/cambia de estrategia o reporta el blocker.
+- Tras una validación fallida, el owner debe registrar el primer error relevante y clasificarlo como defecto de producto, defecto de test, defecto de comando/runtime o bloqueo externo. El siguiente comando solo puede cambiar el elemento que corrige esa clasificación. No se permiten reintentos por variaciones de sintaxis, binario o directorio sin un diagnóstico que los justifique.
 - Evita outputs masivos: usa comandos focalizados, filtros y extractos relevantes. No devuelvas logs completos cuando basten el error, resumen y evidencia necesaria.
 - Antes de solicitar una validación, el coordinador debe consultar la evidencia ya reportada por el owner y el estado de los archivos desde esa ejecución. Una validación exitosa del owner, incluido `git diff --check`, es evidencia suficiente para el coordinador salvo que haya cambios posteriores en los archivos validados, falte evidencia verificable o una integración cross-task exija una comprobación distinta. Revisar un diff para entenderlo no autoriza a repetir su validación.
 
@@ -62,7 +66,7 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
 - Evita patrones de polling como `wait → list/status → wait → list/status`.
 - Después de delegar, continúa con otras tareas independientes. Espera/consulta estado sólo cuando una dependencia real impida continuar.
 - Para una misma dependencia, realiza una espera/comprobación razonable y reutiliza el resultado; no hagas checks repetidos sin nueva evidencia.
-- Antes de esperar, identifica la condición concreta que desbloquea el siguiente paso. Un timeout no justifica por sí solo consultar `list/status`: retoma trabajo independiente útil y, si la dependencia sigue bloqueando y ya no queda trabajo independiente, realiza como máximo una espera adicional acotada sin un sondeo intermedio. Consulta estado únicamente para recibir un resultado final, atender un blocker explícito, decidir una interrupción o cumplir la verificación final de apagado.
+- Antes de esperar, identifica la condición concreta que desbloquea el siguiente paso. Por cada dependencia, realiza como máximo dos esperas de hasta 60 segundos sin recibir mensaje del subagente. Tras el segundo timeout, envía un único followup solicitando estado, bloqueo o ETA y no vuelve a esperar hasta recibir su respuesta, una actualización del usuario o un resultado final. Consulta `list/status` únicamente para recibir un resultado final, atender un blocker explícito, decidir una interrupción o cumplir la verificación final de apagado.
 - Cuando un subagente ya envió su resultado final, no vuelvas a esperarlo ni pidas confirmaciones redundantes.
 - Formula la delegación inicial con suficiente alcance y acceptance criteria para minimizar followups.
 - Reactiva/envía followup a un agente únicamente por blocker concreto, acceptance criterion fallido, evidencia faltante o nuevo trabajo necesario. No lo reactives sólo para volver a explicar, resumir o confirmar trabajo ya terminado.
@@ -72,7 +76,7 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
 - No pegues archivos completos, diffs completos, logs extensos o resultados de tests extensos en mensajes inter-agent si basta con indicar paths, líneas relevantes o un resumen verificable.
 - Reutiliza evidencia ya obtenida. No vuelvas a leer o recalcular información estable salvo que una modificación posterior la invalide.
 - Si una tarea puede resolverse usando archivos autoritativos del repositorio, referencia esos archivos en lugar de heredar el contexto completo del agente principal.
-- Para documentos extensos, determina primero si una instrucción exige lectura completa. Si no la exige, usa búsquedas y rangos dirigidos; si la exige, léelo por separado y en fragmentos continuables hasta EOF. No combines varios documentos largos en una misma salida ni reinicies una lectura porque se truncó: continúa desde el último rango confirmado. Conserva y reutiliza un resumen verificable de las secciones ya leídas.
+- Para documentos extensos, primero lista sus encabezados y localiza los términos de la tarea; después lee únicamente los rangos resultantes. Cuando una instrucción exige lectura completa, léelo por separado y en fragmentos continuables hasta EOF. No combines varios documentos largos en una misma salida ni reinicies una lectura porque se truncó: continúa desde el último rango confirmado. Conserva y reutiliza un resumen verificable de las secciones ya leídas.
 - Una tarea se considera terminada cuando cumple sus acceptance criteria y aporta evidencia suficiente. No añadas validaciones, refactors o exploraciones no solicitadas después de ese punto.
 
 ### Contrato de respuesta de subagentes
