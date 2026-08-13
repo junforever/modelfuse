@@ -1,9 +1,9 @@
 ---
 name: evidence-evaluation
-description: Validates collected usability evidence, computes success metrics, decides pass/fail against acceptance criteria, and generates UX improvement recommendations. Use for T118-style tasks or explicit usability evaluation requests.
+description: Validates collected usability evidence, computes success metrics, decides pass/fail against acceptance criteria, and generates UX improvement recommendations. Use for evidence evaluation tasks or explicit usability evaluation requests.
 compatibility: Generic across any feature/project. Works with Markdown or CSV evidence files.
 metadata:
-  author: junforever
+  author: your-name
   version: '1.0'
   category: usability
 ---
@@ -17,27 +17,10 @@ Apply this skill ONLY when the task explicitly requires validating collected usa
 Activate this skill when the task involves:
 
 - Evaluating usability evidence for a feature.
-- Computing metrics for success criteria (e.g., SC-003, SC-004).
+- Computing metrics for success criteria defined in the protocol.
 - Generating a usability results report.
 - Deriving UX improvement recommendations from results.
-- Explicit T118-style tasks in a tasks.md file.
-
-## 🔍 Pre-Flight Check
-
-Before starting:
-
-- Confirm that the folder structure exists:
-  - specs/{feature_id}/usability/
-  - specs/{feature_id}/usability/incoming/
-  - specs/{feature_id}/usability/protocol/
-  - specs/{feature_id}/usability/results/
-  - specs/{feature_id}/usability/memory/
-- Verify that:
-  - there is at least one non-processed file in `incoming/`,
-  - a protocol exists in `protocol/`,
-  - a memory file exists in `memory/`.
-- If any of these is missing, STOP and report exactly what is missing.
-- Do not proceed until the structure is correct.
+- Explicit evidence evaluation tasks in a tasks.md file.
 
 ## 📄 Evidence Validation
 
@@ -69,10 +52,10 @@ Before starting:
 - Apply inclusion/exclusion rules from the protocol:
   - Exclude participants only if they match pre-defined criteria.
   - Do not change the denominator retrospectively.
-- For each success criterion (e.g., SC-003, SC-004):
+- For each success criterion defined in the protocol:
   - Count participants who succeeded on the first attempt without help.
   - Compute percentage = successes / valid_participants.
-  - Compare against the threshold (e.g., 90%).
+  - Compare against the threshold defined in the protocol.
   - Record pass/fail.
 
 ## 📈 Results & Recommendations

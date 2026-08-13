@@ -1,9 +1,9 @@
 ---
 name: protocol-design
-description: Designs usability evaluation protocols, success criteria, sampling rules, tasks/scenarios, and data collection templates. Use for T117-style tasks or explicit usability protocol requests.
+description: Designs usability evaluation protocols, success criteria, sampling rules, tasks/scenarios, and data collection templates. Use for protocol design tasks or explicit usability protocol requests.
 compatibility: Generic across any feature/project. Works with Markdown or CSV templates.
 metadata:
-  author: junforever
+  author: your-name
   version: '1.0'
   category: usability
 ---
@@ -21,7 +21,7 @@ Activate this skill when the task involves:
 - Defining sampling rules (minimum participants, inclusion/exclusion criteria).
 - Designing tasks and scenarios for usability testing.
 - Creating data collection templates (Markdown/CSV) for sessions or surveys.
-- Explicit T117-style tasks in a tasks.md file.
+- Explicit protocol design tasks in a tasks.md file.
 
 ## 🏗️ Protocol Structure & Content
 
@@ -46,7 +46,7 @@ Activate this skill when the task involves:
   - build_version (string, e.g., "v0.3.1", commit hash)
   - device (string, e.g., "Desktop – Chrome 124")
   - moderator (string or identifier)
-  - task_id (string, e.g., "SC-003-T1", "SC-004-T2")
+  - task_id (string, e.g., "task-1", "scenario-2")
   - success_first_attempt (boolean or "yes"/"no")
   - help_received (boolean or "yes"/"no")
   - clarity (integer, e.g., 1–5 or 1–7, as defined in protocol)
@@ -56,17 +56,6 @@ Activate this skill when the task involves:
   - notes (free text, optional but recommended)
 - Additional fields may be added per feature or protocol.
 - Templates must be empty or contain only examples clearly marked as such; do not simulate or pre-fill evidence.
-
-## 🔍 Pre-Flight Check
-
-Before starting:
-
-- Confirm that the folder structure exists:
-  - specs/{feature_id}/usability/
-  - specs/{feature_id}/usability/protocol/
-  - specs/{feature_id}/usability/memory/
-- If the task assumes a feature but the folder structure is missing, STOP and report the issue.
-- Do not proceed until the structure is correct.
 
 ## 🧠 Feature Memory Update
 

@@ -1,7 +1,7 @@
 interface:
   display_name: 'Evidence Evaluation'
   short_description: 'Validate evidence, compute metrics, decide pass/fail, and generate UX improvement recommendations.'
-  default_prompt: 'Use $evidence-evaluation to evaluate collected evidence for this feature and produce results and recommendations.'
+  default_prompt: 'Use $evidence-evaluation to evaluate collected evidence for a feature and produce results and recommendations.'
 
 policy:
   allow_implicit_invocation: false
