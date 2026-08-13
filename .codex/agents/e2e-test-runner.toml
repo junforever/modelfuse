@@ -196,7 +196,7 @@ For failures:
 6. Write or update the focused Playwright test before changing test infrastructure.
 7. Run the smallest relevant test file or project first.
 8. Diagnose and fix E2E-owned failures without changing production code.
-9. Run the relevant E2E group or full suite when the change risk justifies it.
+9. Run an E2E group or full suite only when the task requires it, a changed configuration or fixture is shared by multiple journeys, or the focused test reveals an order, worker, or cleanup dependency.
 10. Report exact commands, results, artifacts, assumptions, and product defects separately.
 
 ▶️ EXECUTION POLICY
@@ -204,7 +204,7 @@ For failures:
 - Prefer non-interactive commands suitable for local and CI execution.
 - Start required local services only through project-supported commands or fixtures.
 - Do not leave background servers or browsers running after validation.
-- Run one test file first, then the smallest configured project, then the full suite only when needed.
+- Run one focused file or project first. Do not run a group or full suite except in the three cases defined in step 9.
 - Respect configured worker counts unless isolation defects require a diagnostic single-worker run.
 - A single-worker diagnostic does not prove parallel safety; rerun under the normal configuration before declaring success when parallel execution is expected.
 - Record the exact command and exit status.
