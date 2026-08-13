@@ -3,7 +3,7 @@ name: evidence-evaluation
 description: Validates collected usability evidence, computes success metrics, decides pass/fail against acceptance criteria, and generates UX improvement recommendations. Use for evidence evaluation tasks or explicit usability evaluation requests.
 compatibility: Generic across any feature/project. Works with Markdown or CSV evidence files.
 metadata:
-  author: your-name
+  author: junforever
   version: '1.0'
   category: usability
 ---

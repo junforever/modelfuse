@@ -1,7 +1,7 @@
 ---
 name: usability-workspace-setup
 description: Creates or verifies the standard usability workspace folder structure for a feature. Ensures deterministic setup before protocol design or evidence evaluation.
-compatibility: Generic across any feature/project. Requires filesystem write access.
+compatibility: Generic across any feature/project. Requires filesystem write access and script execution capability.
 metadata:
   author: junforever
   version: '1.0'
@@ -36,16 +36,32 @@ specs/{feature_id}/usability/
 ## 🔧 Behavior
 
 1. Receive the feature_id from the context or prompt.
-2. Check if the folder structure exists:
-   - If ALL folders exist, return:
+2. Check if the folder structure exists by inspecting the filesystem.
+3. If ALL folders exist:
+   - Return:
      - "Workspace de usabilidad ya creado para la feature {feature_id}. No se requieren cambios."
-   - If ANY folder is missing:
-     - Create the missing folders.
-     - Return:
-       - "Workspace de usabilidad creado/actualizado para la feature {feature_id}. Carpetas creadas: [lista]."
+4. If ANY folder is missing:
+   - Execute the workspace creation script:
+     - **Node.js (cross-platform)**:
+       ```bash
+       node .codex/skills/product-ux/scripts/create-usability-workspace.js <feature_id>
+       ```
+   - Capture the script output to identify which folders were created.
+   - Return:
+     - "Workspace de usabilidad creado/actualizado para la feature {feature_id}. Carpetas creadas: [lista de carpetas creadas]."
 
 ## 📝 Output Expectations
 
 - Report exactly which folders were created (if any).
 - Do not modify any existing files or content.
 - Ensure folder names are exactly as specified (lowercase, no spaces).
+- If the script fails, report the error message and stop execution.
+
+## ⚠️ Error Handling
+
+- If the script is not found at the expected path, report:
+  - "Error: Script de creación de workspace no encontrado en .codex/skills/product-ux/scripts/"
+- If the script execution fails, report:
+  - "Error al ejecutar el script: [mensaje de error]"
+- If the feature_id is invalid or empty, report:
+  - "Error: feature_id inválido o vacío"

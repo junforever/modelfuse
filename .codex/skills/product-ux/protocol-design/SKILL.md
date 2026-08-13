@@ -3,7 +3,7 @@ name: protocol-design
 description: Designs usability evaluation protocols, success criteria, sampling rules, tasks/scenarios, and data collection templates. Use for protocol design tasks or explicit usability protocol requests.
 compatibility: Generic across any feature/project. Works with Markdown or CSV templates.
 metadata:
-  author: your-name
+  author: junforever
   version: '1.0'
   category: usability
 ---
