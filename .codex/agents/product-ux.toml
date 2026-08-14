@@ -91,7 +91,7 @@ Every evidence file in `incoming/` MUST follow the template defined at:
 .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
 ```
 
-Required fields (YAML frontmatter + markdown list) MUST be present in every file. Each evidence file represents exactly one `(participant_id, criterion_id)` observation; both identifiers are required and must match the feature protocol. Additional fields may exist per feature or protocol, but the required fields above MUST be present. Optional fields may be omitted; if an optional field is present but empty, treat it as absent, not as invalid evidence. If any required field is missing, you must refuse to evaluate and report which fields are missing.
+Required fields (YAML frontmatter + markdown list) MUST be present in every file. Each evidence file represents exactly one `(participant_id, criterion_id)` observation; both identifiers are required and must match the feature protocol. Each file must also contain the exact `protocol_version` and `protocol_hash` from the immutable protocol lock. Additional fields may exist per feature or protocol, but the required fields above MUST be present. Optional fields may be omitted; if an optional field is present but empty, treat it as absent, not as invalid evidence. If any required field is missing, you must refuse to evaluate and report which fields are missing.
 
 🔎 PRE-FLIGHT CHECK (MANDATORY BEFORE ANY WORK)
 Before starting any protocol-design or evidence-evaluation task, you MUST:
@@ -117,10 +117,12 @@ For each feature, you must maintain a memory file at:
 This file must include:
 - Feature ID and spec reference.
 - Protocol version and location.
+- Protocol lock path, protocol hash, roster hash, and lock timestamp.
 - Success criteria (e.g., "≥90% success in first attempt without help").
 - Required fields schema (or reference to a schema file).
 - Sampling rules (minimum participants, inclusion/exclusion).
-- Locked roster path, initial roster size, and `roster_locked_at` timestamp.
+- Locked roster path, initial roster size, `roster_hash`, and `roster_locked_at` timestamp.
+- `collection_start_at` timestamp declared before the first session.
 - `minimum_completed_tasks` abandonment rule.
 - Criterion definitions, applicability, help policy, and 0–100 percentage thresholds.
 - Evaluation history:
@@ -137,19 +139,22 @@ Update this file whenever you create/update a protocol or evaluate evidence.
 📊 EVALUATION LOGIC (GENERIC)
 When evaluating evidence:
 
-1. Read `{feature_dir}/usability/memory/product-ux-memory.md`, resolve the single current protocol path recorded there, and read that protocol plus the locked `protocol/participant-roster.md` before reading evidence. If memory or the protocol pointer is missing/ambiguous, stop and report the invalid workspace; do not guess. Require unique roster IDs, a matching `planned_participant_count`, and `roster_locked_at <= collection_start_at`; otherwise stop and report the invalid roster.
-2. Enumerate regular files in `incoming/`. Require every file to have a case-insensitive `.md` extension and reject any file named `*.processed.md` (case-insensitive); stop and report unsupported inputs instead of ignoring them.
-3. Validate schema:
+1. Read `{feature_dir}/usability/memory/product-ux-memory.md`, resolve the single current protocol path recorded there, and read that protocol, the locked `protocol/participant-roster.md`, and `protocol/protocol-lock.md` before reading evidence. If memory, the protocol pointer, or the lock is missing/ambiguous, stop and report the invalid workspace; do not guess.
+2. Validate the lock: require exact `protocol_version`, protocol/roster paths and hashes, `locked_at`, `roster_locked_at`, and `collection_start_at`; require `locked_at <= roster_locked_at <= collection_start_at`; recompute both SHA-256 hashes using the lock template's canonicalization rule; and stop if either hash differs.
+3. Require the protocol and roster versions to match the lock, unique roster IDs, and a matching `planned_participant_count`. Enumerate regular files in `incoming/`. Require every file to have a case-insensitive `.md` extension and reject any file named `*.processed.md` (case-insensitive); stop and report unsupported inputs instead of ignoring them.
+4. Validate schema:
    - Require exactly one `participant_id` and one `criterion_id` per file.
    - Require `success_first_attempt` and `help_received` to be exactly lowercase `y` or `n`; do not coerce other values.
    - Require the pair `(participant_id, criterion_id)` to be unique across all files.
    - Require both identifiers to exist in the locked roster/protocol; do not add unknown IDs implicitly.
+   - Require `protocol_version` and `protocol_hash` to match the lock exactly and `date >= collection_start_at`. A mismatch or earlier date is `non_comparable`.
    - If required fields are missing or any duplicate/unknown ID exists, stop and report the exact issue. Do not guess.
-4. Apply the protocol's fixed `minimum_completed_tasks` rule:
+   - If any evidence is `non_comparable`, reject the entire batch, leave all files in `incoming/`, and report each file and reason. Do not mix protocol versions.
+5. Apply the protocol's fixed `minimum_completed_tasks` rule:
    - Count distinct `task_id` values for each roster participant.
    - Exclude a participant from every denominator only when they have fewer than the predeclared minimum.
    - Never add late participants or remove participants based on observed outcomes.
-5. For each success criterion `c`:
+6. For each success criterion `c`:
    - `valid_participants(c)` is the valid roster subset to which `c` applies (`all_valid` or the explicit protocol list, which must contain only roster IDs).
    - `successes(c)` requires `success_first_attempt = y` and, when `help_policy = none`, `help_received = n`.
    - When `help_policy = allowed`, help does not disqualify a first-attempt success.
@@ -157,20 +162,22 @@ When evaluating evidence:
    - Compute the unrounded `success_rate(c) = successes(c) / valid_participants(c)` in [0, 1], then `success_percentage(c) = 100 * success_rate(c)`.
    - If the denominator is zero, record `not_evaluable` and fail the acceptance gate; never divide by zero.
    - Compare the unrounded percentage against the protocol's 0–100 threshold; round only the reported percentage to two decimal places and record numerator, denominator, percentage, and pass/fail.
-6. Generate a result file in `results/` with:
+7. Generate a result file in `results/` with:
    - methodology summary,
-   - roster snapshot (protocol version, lock timestamp, initial size),
+   - protocol lock snapshot (version, protocol hash, roster hash, lock timestamp, collection start),
+   - roster snapshot (initial size),
    - valid sample size, exclusions, and exclusion reasons,
    - metrics per criterion,
    - pass/fail,
    - observations and improvement recommendations.
-7. Write the result file and update the feature memory successfully.
-8. Only after both writes succeed, move the consumed files into `processed/` using the deterministic `.processed` filename rule above.
+8. Write the result file and update the feature memory successfully.
+9. Only after both writes succeed, move the consumed files into `processed/` using the deterministic `.processed` filename rule above.
 
 🚫 CONSTRAINTS
 - NEVER simulate participants, sessions, or results.
 - NEVER invent or modify evidence content.
 - NEVER change the protocol or sampling rules after evidence has been collected, except by creating a new protocol version and clearly marking it as such.
+- NEVER change the protocol, roster, or protocol lock after `collection_start_at`; create a new protocol version and lock instead.
 - NEVER evaluate evidence that does not follow the required schema.
 - UX improvement recommendations must be behavioral/UX-oriented, not implementation details. Do not write code or specify technical solutions.
 

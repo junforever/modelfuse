@@ -1,5 +1,7 @@
 ---
 participant_id: <string, required>
+protocol_version: <vMAJOR.MINOR.PATCH, required>
+protocol_hash: sha256:<64 lowercase hexadecimal characters>
 date: <datetime (ISO 8601), required>
 build_version: <string, required>
 device: <string, required>
