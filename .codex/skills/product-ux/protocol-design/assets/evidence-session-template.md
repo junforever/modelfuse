@@ -29,6 +29,7 @@ Use this template for protocols whose frontmatter contains `provenance_policy: h
 - `moderator_id` MUST be a stable pseudonymous identifier matching `^mod_[A-Za-z0-9][A-Za-z0-9_-]*$`.
 - `recorded_at` MUST be an ISO 8601 timestamp with an explicit timezone and MUST be greater than or equal to `date` after UTC normalization.
 - These fields are declarations supplied by the responsible human moderator. The evaluator validates only their presence, exact value, syntax, and timestamp ordering; it does not verify that the session occurred, the moderator's identity, or the pseudonymization.
+- This template is the single source of truth for the `moderator_id` syntax; the agent and skills must reference this definition.
 
 # Optional Fields (Optional)
 

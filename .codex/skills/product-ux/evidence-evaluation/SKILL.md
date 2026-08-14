@@ -46,7 +46,7 @@ Activate this skill when the task involves:
   - Require `date >= collection_start_at`; an earlier session is `non_comparable`. When the locked protocol declares the provenance policy, `date` must also be ISO 8601 with an explicit timezone.
   - Determine provenance mode only from the protocol frontmatter: exact `provenance_policy: human_attestation_v1` enables the policy; absence of that marker in an existing locked protocol means legacy.
   - In enabled mode, require `collection_attestation` to equal exactly `human_attested`.
-  - In enabled mode, require `moderator_id` to match `^mod_[A-Za-z0-9][A-Za-z0-9_-]*$`; this validates only the declared syntax and does not verify pseudonymization or identity.
+  - In enabled mode, require `moderator_id` to follow the exact format defined in `evidence-session-template.md`; this validates only the declared syntax and does not verify pseudonymization or identity.
   - In enabled mode, require `recorded_at` to be an ISO 8601 timestamp with an explicit timezone and greater than or equal to `date` after UTC normalization.
   - In legacy mode, do not retrofit these fields or reject otherwise valid evidence for their absence; set the report status to `not_attested_not_verified`.
   - Require `success_first_attempt` and `help_received` to be exactly lowercase `y` or `n`; do not coerce other values.
