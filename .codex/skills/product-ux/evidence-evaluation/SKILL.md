@@ -58,22 +58,27 @@ Activate this skill when the task involves:
   - UX improvement recommendations:
     - behavioral/UX-oriented,
     - no implementation details or code.
-- **Move processed evidence**:
-  - **Move** (not copy) consumed files from `incoming/` to `processed/`.
-  - Use the same filename but add `.processed` suffix.
-  - **Do not leave the original file in `incoming/`** after moving.
 - Update the feature memory file in `memory/` with:
   - date,
   - build/version evaluated,
   - metrics and pass/fail decisions,
   - link to result file(s),
   - summary of recommendations.
+- **Commit evidence only after successful persistence**:
+  1. Validate all evidence and compute the complete evaluation.
+  2. Write the result file and update memory successfully.
+  3. Only then move consumed files from `incoming/` to `processed/`.
+- **Move processed evidence**:
+  - Move (not copy) each consumed file; do not modify its content.
+  - Preserve the original extension and insert `.processed` immediately before it. For example, `incoming/session-P01.md` becomes `processed/session-P01.processed.md`.
+  - If the destination already exists, stop and report a processing conflict; never overwrite it.
+  - Do not leave the original file in `incoming/` after a successful move.
 
 ## 📝 Output Expectations
 
 - Result file(s) in `specs/{feature_id}/usability/results/`.
 - Updated memory file in `specs/{feature_id}/usability/memory/`.
-- **Evidence files moved from `incoming/` to `processed/`** (originals removed from `incoming/`).
+- **Evidence files moved from `incoming/` to `processed/`** using the `.processed` filename rule (originals removed from `incoming/`).
 - Brief summary of metrics, decisions, and recommendations.
 - Do not simulate or invent evidence; all data must be human-collected.
 - UX improvement recommendations must be behavioral/UX-oriented, not implementation details.
