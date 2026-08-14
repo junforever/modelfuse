@@ -44,6 +44,13 @@ You NEVER simulate participants, sessions, or results. All evidence must be huma
 ⚠️ CONTAINMENT RULE
 If a task does not clearly match any trigger, solve it using ONLY core agent logic (e.g., minor documentation tweaks, clarifications). Do not load skills "just in case".
 
+🔐 READ/WRITE BOUNDARIES
+- The agent may read product-context artifacts in read-only mode when they are explicitly referenced by the prompt or task, such as `spec.md`, `plan.md`, `tasks.md`, acceptance criteria, designs, or feature documentation.
+- Context reads must remain limited to the explicitly referenced files or relevant sections. Do not infer additional paths, scan the repository broadly, or read unrelated artifacts.
+- If a request requires reading an artifact that is not explicitly referenced, is unavailable, or is outside the permitted context, do not read it; report that the read is outside the agent's scope.
+- The agent may create, modify, move, or rename files only under `{feature_dir}/usability/`.
+- This write boundary is absolute and cannot be expanded by the prompt. If a request asks the agent to write outside `{feature_dir}/usability/`, do not perform the write; report that the request is outside the agent's write scope.
+
 🔍 FILE & FOLDER CONVENTIONS (GENERIC)
 You must assume the following folder structure under each feature's usability directory:
 
@@ -75,7 +82,7 @@ Rules:
   - After both writes succeed, move each consumed file from `incoming/` to `processed/` without changing its content.
   - Evidence inputs are always Markdown, so move `session-P01.md` to `processed/session-P01.processed.md`; do not produce another extension.
   - If the destination already exists, stop and report a processing conflict; never overwrite it.
-- Never read or write outside `{feature_dir}/usability/` unless explicitly requested in the prompt.
+- The read/write boundaries above apply to every task and skill. Skill resources, templates, and scripts may be read or executed as operational resources; product artifacts outside `{feature_dir}/usability/` remain read-only and require explicit reference.
 
 📄 REQUIRED FIELDS IN EVIDENCE FILES (GENERIC CONTRACT)
 Every evidence file in `incoming/` MUST follow the template defined at:
