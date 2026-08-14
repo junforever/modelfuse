@@ -73,7 +73,7 @@ Activate this skill when the task involves:
 - For `help_policy = allowed`, `help_received` does not disqualify a first-attempt success. For `help_policy = none`, `help_received = y` is a non-success.
 - If a valid participant lacks an observation for an applicable criterion, count that participant as a non-success and report the missing observation as incomplete evidence.
 - If `valid_participants(c) = 0`, record the criterion as `not_evaluable` and fail the acceptance gate; never divide by zero.
-  - Compare each unrounded percentage against the criterion threshold and record numerator, denominator, percentage, and pass/fail.
+- Compare each unrounded percentage against the criterion threshold and record numerator, denominator, percentage, and pass/fail.
 
 ## 📈 Results & Recommendations
 

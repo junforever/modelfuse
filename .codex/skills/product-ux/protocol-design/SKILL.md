@@ -51,7 +51,7 @@ Activate this skill when the task involves:
 - List metadata to record per session:
   - participant_id, date (ISO 8601 with explicit timezone), build_version, device, moderator_id, task_id, criterion_id.
   - collection_attestation and recorded_at.
-- Define the provenance policy explicitly: `collection_attestation` must be the exact value `human_attested`; `moderator_id` must follow the pseudonymous stable-identifier format defined in `evidence-session-template.md`; and `recorded_at` must be an ISO 8601 timestamp with an explicit timezone that is greater than or equal to `date` after UTC normalization. These are declarations supplied by the responsible human; the agent may validate only presence, exact value, syntax, and timestamp ordering, never whether the session occurred, who the moderator is, or whether the identifier is truly pseudonymized.
+- For new or updated protocols with `provenance_policy: human_attestation_v1`, define the provenance policy explicitly: `collection_attestation` must be the exact value `human_attested`; `moderator_id` must follow the pseudonymous stable-identifier format defined in `evidence-session-template.md`; and `recorded_at` must be an ISO 8601 timestamp with an explicit timezone that is greater than or equal to `date` after UTC normalization. These are declarations supplied by the responsible human; the agent may validate only presence, exact value, syntax, and timestamp ordering, never whether the session occurred, who the moderator is, or whether the identifier is truly pseudonymized.
 - Adding this provenance policy changes the evidence schema. Never edit an existing locked protocol to add these fields; create a new protocol version and lock before collecting sessions under the new schema.
 
 ## 📄 Data Collection Template Requirements
@@ -64,7 +64,7 @@ Activate this skill when the task involves:
 - **Required fields** (YAML frontmatter + markdown list) MUST be present in every file.
 - Each evidence file represents exactly one `(participant_id, criterion_id)` observation. `criterion_id` is required and must match a criterion in the protocol.
 - Each evidence file must include the exact `protocol_version` and `protocol_hash` from `protocol-lock.md`.
-- Each evidence file must include `collection_attestation: human_attested`, a `moderator_id` following the format defined in `evidence-session-template.md`, and `recorded_at` according to the protocol's provenance policy.
+- For protocols with `provenance_policy: human_attestation_v1`, each evidence file must include `collection_attestation: human_attested`, a `moderator_id` following the format defined in `evidence-session-template.md`, and `recorded_at` according to the protocol's provenance policy. Do not retrofit these fields into an already locked legacy protocol.
 - Evidence files accepted by the evaluation workflow are Markdown files only (`.md`). YAML is allowed only as frontmatter embedded in that Markdown file; standalone CSV, JSON, YAML, or other formats are not supported.
 - **Optional fields** may be added per feature but must be documented in the protocol.
 - Optional fields may be omitted. If an optional field is present but empty, treat it as absent, not as invalid evidence.
