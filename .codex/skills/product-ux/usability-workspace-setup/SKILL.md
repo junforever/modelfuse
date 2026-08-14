@@ -49,7 +49,7 @@ For the selected feature directory, ensure the following structure exists:
 1. Receive `feature_id` or `feature_dir` from the context or prompt.
 2. **Validate the input**:
    - If `feature_dir` is provided, resolve it and require that it already exists as a directory.
-   - Otherwise validate `feature_id` against `^[A-Za-z0-9][A-Za-z0-9_-]*$` and use `specs/{feature_id}` relative to the project directory.
+   - Otherwise pass `feature_id` to the workspace script, which owns its syntax and path validation, and use the script's fallback location.
    - If the input is missing, ambiguous, or invalid, stop and request it.
 3. Check if the folder structure exists by inspecting the filesystem.
 4. If ALL folders exist:
