@@ -49,9 +49,24 @@ function parseArguments(args) {
 }
 
 function requireDirectory(directory, label) {
-  if (!fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) {
+  let stats;
+  try {
+    stats = fs.statSync(directory);
+  } catch {
     throw new Error(`${label} does not exist or is not a directory: ${directory}`);
   }
+  if (!stats.isDirectory()) {
+    throw new Error(`${label} does not exist or is not a directory: ${directory}`);
+  }
+}
+
+function ensureDirectory(directory, label) {
+  const existed = fs.existsSync(directory);
+  if (!existed) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+  requireDirectory(directory, label);
+  return existed;
 }
 
 let parsed;
@@ -79,14 +94,16 @@ try {
 const baseDir = path.join(featureDir, 'usability');
 const folders = ['incoming', 'processed', 'protocol', 'results', 'memory'];
 
-folders.forEach(folder => {
-  const folderPath = path.join(baseDir, folder);
-  if (!fs.existsSync(folderPath)) {
-    fs.mkdirSync(folderPath, { recursive: true });
-    console.log(`Created: ${folderPath}`);
-  } else {
-    console.log(`Exists: ${folderPath}`);
-  }
-});
+try {
+  ensureDirectory(baseDir, 'usability directory');
+  folders.forEach(folder => {
+    const folderPath = path.join(baseDir, folder);
+    const existed = ensureDirectory(folderPath, `usability/${folder}`);
+    console.log(`${existed ? 'Exists' : 'Created'}: ${folderPath}`);
+  });
+} catch (error) {
+  console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
 
 console.log(`Workspace ready: ${baseDir}`);
