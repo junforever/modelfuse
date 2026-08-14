@@ -34,6 +34,7 @@ Activate this skill when the task involves:
     ```
   - Check that each file has YAML frontmatter with required fields.
   - Check that each file has a markdown section "Required Fields (Mandatory)".
+  - Optional fields may be omitted. If an optional field is present but empty, treat it as absent, not as invalid evidence.
   - If any required field is missing, stop and report:
     - which files are affected,
     - which fields are missing.

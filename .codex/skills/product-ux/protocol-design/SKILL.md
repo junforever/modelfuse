@@ -47,6 +47,7 @@ Activate this skill when the task involves:
 - **Required fields** (YAML frontmatter + markdown list) MUST be present in every file.
 - Evidence files accepted by the evaluation workflow are Markdown files only (`.md`). YAML is allowed only as frontmatter embedded in that Markdown file; standalone CSV, JSON, YAML, or other formats are not supported.
 - **Optional fields** may be added per feature but must be documented in the protocol.
+- Optional fields may be omitted. If an optional field is present but empty, treat it as absent, not as invalid evidence.
 - Templates must be empty or contain only examples clearly marked as such; do not simulate or pre-fill evidence.
 
 ## 🧠 Feature Memory Update

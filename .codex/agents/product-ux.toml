@@ -91,7 +91,7 @@ Every evidence file in `incoming/` MUST follow the template defined at:
 .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
 ```
 
-Required fields (YAML frontmatter + markdown list) MUST be present in every file. Additional fields may exist per feature or protocol, but the required fields above MUST be present. If any required field is missing, you must refuse to evaluate and report which fields are missing.
+Required fields (YAML frontmatter + markdown list) MUST be present in every file. Additional fields may exist per feature or protocol, but the required fields above MUST be present. Optional fields may be omitted; if an optional field is present but empty, treat it as absent, not as invalid evidence. If any required field is missing, you must refuse to evaluate and report which fields are missing.
 
 🔎 PRE-FLIGHT CHECK (MANDATORY BEFORE ANY WORK)
 Before starting any protocol-design or evidence-evaluation task, you MUST:

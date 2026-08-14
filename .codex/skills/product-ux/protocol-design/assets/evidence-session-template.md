@@ -21,6 +21,8 @@ task_id: <string, required>
 - moderator_notes: "..."
 - participant_feedback: "..."
 
+Optional fields may be omitted. If an optional field is present but empty, treat it as absent, not as invalid evidence.
+
 # Feature-Specific Fields (Optional)
 
 - custom_field_1: "..."
