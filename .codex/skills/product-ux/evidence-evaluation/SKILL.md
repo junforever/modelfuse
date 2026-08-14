@@ -26,7 +26,7 @@ Activate this skill when the task involves:
 
 - Before reading evidence, read `{feature_dir}/usability/memory/product-ux-memory.md`, resolve the single current protocol path recorded there, and read that protocol, `{feature_dir}/usability/protocol/participant-roster.md`, and `{feature_dir}/usability/protocol/protocol-lock.md`.
 - If the memory file is missing, does not identify exactly one current protocol path, or any referenced artifact is unavailable, stop and report the invalid workspace; do not guess.
-- The lock must contain exactly one `protocol_version`, `protocol_path`, `protocol_hash`, `roster_path`, `roster_hash`, `locked_at`, `roster_locked_at`, and `collection_start_at` with `locked_at <= roster_locked_at <= collection_start_at`.
+- The lock must contain exactly one `protocol_version`, `protocol_path`, `protocol_hash`, `roster_path`, `roster_hash`, `locked_at`, `roster_locked_at`, and `collection_start_at`; all three timestamps must be ISO 8601 with explicit timezones and satisfy `locked_at <= roster_locked_at <= collection_start_at`.
 - Recompute the protocol and roster SHA-256 hashes using the canonicalization rule in `protocol-lock-template.md`. If either hash differs from the lock, stop and report the lock as invalid; do not evaluate or move evidence.
 - Require the protocol and roster `protocol_version` values to match the lock exactly. The roster must contain unique participant IDs and `planned_participant_count` equal to the number of listed IDs.
 - The declared `collection_start_at` is immutable and must precede or equal every accepted session date.

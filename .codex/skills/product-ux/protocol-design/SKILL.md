@@ -41,12 +41,12 @@ Activate this skill when the task involves:
   ```text
   .codex/skills/product-ux/protocol-design/assets/participant-roster-template.md
   ```
-  The roster must contain unique participant IDs, `protocol_version`, `protocol_hash`, `planned_participant_count`, `roster_locked_at`, and `collection_start_at`, with `roster_locked_at` earlier than or equal to `collection_start_at`.
+  The roster must contain unique participant IDs, `protocol_version`, `protocol_hash`, `planned_participant_count`, `roster_locked_at`, and `collection_start_at`. Both timestamps must be ISO 8601 with explicit timezones, with `roster_locked_at` earlier than or equal to `collection_start_at`.
 - Create `{feature_dir}/usability/protocol/protocol-lock.md` before receiving the first session, using:
   ```text
   .codex/skills/product-ux/protocol-design/assets/protocol-lock-template.md
   ```
-  The lock must identify exactly one protocol and roster, store their SHA-256 hashes, and satisfy `locked_at <= roster_locked_at <= collection_start_at`.
+  The lock must identify exactly one protocol and roster, store their SHA-256 hashes, require all three timestamps to be ISO 8601 with explicit timezones, and satisfy `locked_at <= roster_locked_at <= collection_start_at`.
 - The protocol frontmatter must contain `protocol_version` in the exact form `vMAJOR.MINOR.PATCH`; it must match the lock. New or updated protocols using the provenance policy must also contain the exact marker `provenance_policy: human_attestation_v1`. An existing locked protocol without that marker is legacy and must not be retrofitted. Store `protocol_hash` outside the protocol file (in the lock, roster, memory, and evidence metadata) to avoid hashing a file that contains its own hash.
 - List metadata to record per session:
   - participant_id, date (ISO 8601 with explicit timezone), build_version, device, moderator_id, task_id, criterion_id.

@@ -4,9 +4,9 @@ protocol_path: protocol/usability-protocol-v1.0.0.md
 protocol_hash: sha256:<64 lowercase hexadecimal characters>
 roster_path: protocol/participant-roster.md
 roster_hash: sha256:<64 lowercase hexadecimal characters>
-locked_at: <datetime (ISO 8601), required>
-roster_locked_at: <datetime (ISO 8601), required>
-collection_start_at: <datetime (ISO 8601), required>
+locked_at: <ISO 8601 datetime with explicit timezone, required>
+roster_locked_at: <ISO 8601 datetime with explicit timezone, required>
+collection_start_at: <ISO 8601 datetime with explicit timezone, required>
 ---
 
 # Protocol Lock
@@ -20,3 +20,5 @@ The timestamps must satisfy:
 ```text
 locked_at <= roster_locked_at <= collection_start_at
 ```
+
+Every timestamp must include an explicit UTC designator (`Z`) or numeric offset (`+/-HH:MM`). Normalize all three timestamps to UTC before comparing them.

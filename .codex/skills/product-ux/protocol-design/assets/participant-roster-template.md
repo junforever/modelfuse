@@ -1,14 +1,16 @@
 ---
 protocol_version: <vMAJOR.MINOR.PATCH, required>
 protocol_hash: sha256:<64 lowercase hexadecimal characters>
-roster_locked_at: <datetime (ISO 8601), required>
-collection_start_at: <datetime (ISO 8601), required>
+roster_locked_at: <ISO 8601 datetime with explicit timezone, required>
+collection_start_at: <ISO 8601 datetime with explicit timezone, required>
 planned_participant_count: <positive integer, required>
 ---
 
 # Initial Participant Roster
 
 The roster is immutable after `roster_locked_at`. Every `participant_id` must be unique, and the roster must be finalized before `collection_start_at`.
+
+Both timestamps must include an explicit UTC designator (`Z`) or numeric offset (`+/-HH:MM`). Normalize them to UTC before comparing them.
 
 `protocol_version` and `protocol_hash` must exactly match `protocol-lock.md`.
 
