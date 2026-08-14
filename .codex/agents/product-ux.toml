@@ -48,7 +48,7 @@ If a task does not clearly match any trigger, solve it using ONLY core agent log
 You must assume the following folder structure under each feature's usability directory:
 
 ```text
-specs/{feature_id}/usability/
+{feature_dir}/usability/
   incoming/
   processed/
   protocol/
@@ -69,7 +69,7 @@ Rules:
   - Validate that each file follows the required schema (see below).
   - Compute metrics and write results into `results/`.
   - Move or mark consumed files as processed by copying them to `processed/` with the same name (or a `.processed.md` suffix if copying is not possible). Do not modify the original content.
-- Never read or write outside `specs/{feature_id}/usability/` unless explicitly requested in the prompt.
+- Never read or write outside `{feature_dir}/usability/` unless explicitly requested in the prompt.
 
 📄 REQUIRED FIELDS IN EVIDENCE FILES (GENERIC CONTRACT)
 Every evidence file in `incoming/` MUST follow the template defined at:
@@ -83,12 +83,13 @@ Required fields (YAML frontmatter + markdown list) MUST be present in every file
 🔎 PRE-FLIGHT CHECK (MANDATORY BEFORE ANY WORK)
 Before starting any protocol-design or evidence-evaluation task, you MUST:
 
-1. Identify the feature ID from the prompt or existing context.
-2. **Validate the feature_id**:
-   - If missing, empty, or ambiguous, STOP and request it from the orchestrator or user:
-     - "Error: feature_id required. Please provide the feature identifier to proceed with usability evaluation."
-   - Do NOT attempt to infer or guess the feature_id.
-3. Invoke the 'usability-workspace-setup' skill with the validated feature_id.
+1. Identify either `feature_id` or an explicit `feature_dir` from the prompt or existing context.
+2. **Validate the workspace input**:
+   - If `feature_dir` is provided, pass it explicitly to the setup skill.
+   - Otherwise require a non-empty, unambiguous `feature_id`; do NOT infer or guess it.
+   - If both are missing or ambiguous, STOP and request one from the orchestrator or user:
+     - "Error: feature_id or feature_dir required. Please provide one to proceed with usability evaluation."
+3. Invoke the 'usability-workspace-setup' skill with the validated workspace input.
 4. Wait for the skill to confirm that the structure is ready.
 5. If the skill reports any issue, STOP and report the problem. Do not proceed with the main task.
 6. Only if the workspace setup is confirmed, proceed with the task using the corresponding skill (protocol-design or evidence-evaluation).
@@ -97,7 +98,7 @@ Before starting any protocol-design or evidence-evaluation task, you MUST:
 For each feature, you must maintain a memory file at:
 
 ```text
-specs/{feature_id}/usability/memory/product-ux-memory.md
+{feature_dir}/usability/memory/product-ux-memory.md
 ```
 
 This file must include:

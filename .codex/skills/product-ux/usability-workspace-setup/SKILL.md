@@ -22,21 +22,21 @@ Activate this skill when:
 
 ## 📥 Input Requirements
 
-**CRITICAL**: This skill requires a valid `feature_id` to proceed.
+**CRITICAL**: This skill requires either a valid `feature_id` or an explicit `feature_dir` to proceed.
 
-- The `feature_id` MUST be provided in the prompt or context.
-- If `feature_id` is missing, empty, or ambiguous:
+- The `feature_id` or `feature_dir` MUST be provided in the prompt or context.
+- If both are missing, empty, or ambiguous:
   - **DO NOT** attempt to infer or guess the feature_id.
   - **STOP** execution immediately.
   - Request the feature_id from the orchestrator or user with a clear message:
-    - "Error: feature_id required. Please provide the feature identifier (e.g., '001-compare-llm-responses') to create the workspace structure."
+    - "Error: feature_id or feature_dir required. Please provide one to create the workspace structure."
 
 ## 📁 Required Folder Structure
 
-For each feature, ensure the following structure exists:
+For the selected feature directory, ensure the following structure exists:
 
 ```text
-specs/{feature_id}/usability/
+{feature_dir}/usability/
   incoming/
   processed/
   protocol/
@@ -46,20 +46,25 @@ specs/{feature_id}/usability/
 
 ## 🔧 Behavior
 
-1. Receive the feature_id from the context or prompt.
-2. **Validate the feature_id**:
-   - If missing, empty, or ambiguous, stop and request it (see Input Requirements).
-   - If valid, proceed to step 3.
+1. Receive `feature_id` or `feature_dir` from the context or prompt.
+2. **Validate the input**:
+   - If `feature_dir` is provided, resolve it and require that it already exists as a directory.
+   - Otherwise validate `feature_id` against `^[A-Za-z0-9][A-Za-z0-9_-]*$` and use `specs/{feature_id}` relative to the project directory.
+   - If the input is missing, ambiguous, or invalid, stop and request it.
 3. Check if the folder structure exists by inspecting the filesystem.
 4. If ALL folders exist:
    - Return:
      - "Workspace de usabilidad ya creado para la feature {feature_id}. No se requieren cambios."
 5. If ANY folder is missing:
    - Execute the workspace creation script:
-     - **Node.js (cross-platform)**:
-       ```bash
-       node .codex/skills/product-ux/usability-workspace-setup/scripts/create-usability-workspace.cjs <feature_id>
-       ```
+      - **Node.js (cross-platform)** with an explicit feature directory:
+        ```bash
+        node .codex/skills/product-ux/usability-workspace-setup/scripts/create-usability-workspace.cjs --feature-dir <path>
+        ```
+      - Backward-compatible fallback:
+        ```bash
+        node .codex/skills/product-ux/usability-workspace-setup/scripts/create-usability-workspace.cjs <feature_id>
+        ```
    - Capture the script output to identify which folders were created.
    - Return:
      - "Workspace de usabilidad creado/actualizado para la feature {feature_id}. Carpetas creadas: [lista de carpetas creadas]."
@@ -73,8 +78,8 @@ specs/{feature_id}/usability/
 
 ## ⚠️ Error Handling
 
-- If the feature_id is missing, empty, or ambiguous:
-  - Stop and request it explicitly (see Input Requirements).
+- If both feature_id and feature_dir are missing, empty, or ambiguous:
+  - Stop and request one explicitly (see Input Requirements).
 - If the script is not found at the expected path, report:
   - "Error: Script de creación de workspace no encontrado en .codex/skills/product-ux/usability-workspace-setup/scripts/"
 - If the script execution fails, report:
