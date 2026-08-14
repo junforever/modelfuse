@@ -106,15 +106,15 @@ Activate this skill when the task involves:
   - summary of recommendations.
 - **Preflight conflicts before persistence**:
   1. Use the exact result path `{feature_dir}/usability/results/usability-results.md`; an existing result is updated only through the transaction below, never by direct overwrite.
-  2. If any transaction temporary or backup artifact exists from a previous run, stop and report the incomplete transaction; do not write or move anything.
+  2. Use the fixed transaction directory `{feature_dir}/usability/.evaluation-transaction/`. If it exists, read its manifest and roll back every recorded move and target replacement to the pre-run state, remove the transaction directory, report the rollback, and do not start a new evaluation in the same run. If the manifest is missing or invalid, stop and report the incomplete transaction without changing any file.
   3. Compute the final `.processed.md` destination for every consumed file. If any destination already exists, stop and report the conflicts; do not write results, update memory, or move any evidence.
 - **Commit evidence only after successful persistence**:
   1. Validate all evidence and compute the complete evaluation.
   2. Complete the preflight conflict checks above.
-  3. Write result and memory to deterministic temporary siblings (`usability-results.md.pending` and `product-ux-memory.md.pending`) and validate both.
-  4. If target result or memory files exist, rename them to deterministic backups (`usability-results.md.backup` and `product-ux-memory.md.backup`), then rename both pending files into place. If either replacement fails, restore both backups, remove pending files, leave evidence in `incoming/`, and report the transaction failure. If restoration fails, stop and report the exact artifact state; do not move evidence.
-  5. Only after both target files are committed, move consumed files from `incoming/` to `processed/`. If a filesystem error occurs, stop immediately and move every file already moved in this run back to its original `incoming/` path. If rollback fails, report the exact moved and unmoved files and do not claim a complete evaluation.
-  6. Remove backups only after both target files and all evidence moves succeed. A successful run must leave no `.pending` or `.backup` artifacts.
+  3. Create the transaction directory and a manifest containing the target paths, whether each target existed, every source/destination evidence pair, and the transaction phase. Write and validate staged result and memory files inside that directory.
+  4. Move existing result and memory targets into the transaction directory as backups, then install both staged files. Record the phase only after both replacements succeed. If replacement fails, restore backups (or remove newly created targets), remove the transaction directory, leave evidence in `incoming/`, and report the transaction failure. If restoration fails, stop and report the exact artifact state; do not move evidence.
+  5. Only after both target files are committed, move consumed files from `incoming/` to `processed/`, recording each successful move in the manifest. If a filesystem error occurs, roll back every recorded move and restore the target backups. If rollback fails, report the exact moved and unmoved files and do not claim a complete evaluation.
+  6. Remove the transaction directory only after both target files and all evidence moves succeed. A successful run must leave no transaction artifacts.
 - **Move processed evidence**:
   - Move (not copy) each consumed file; do not modify its content.
   - Evidence inputs are Markdown, so `incoming/session-P01.md` becomes `processed/session-P01.processed.md`; do not produce another extension.
