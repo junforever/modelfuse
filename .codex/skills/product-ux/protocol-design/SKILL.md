@@ -62,7 +62,7 @@ Activate this skill when the task involves:
   ```text
   .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
   ```
-- **Required fields** (YAML frontmatter + markdown list) MUST be present in every file.
+- Required fields are mode-dependent: every evidence file must contain the locked protocol's required YAML frontmatter and Markdown fields; `collection_attestation`, `moderator_id`, and `recorded_at` are mandatory only when `provenance_policy: human_attestation_v1` is enabled. Legacy evidence must preserve its locked schema and must not be retrofitted with provenance fields.
 - Each evidence file represents exactly one `(participant_id, criterion_id)` observation. `criterion_id` is required and must match a criterion in the protocol.
 - Each evidence file must include the exact `protocol_version` and `protocol_hash` from `protocol-lock.md`.
 - For protocols with `provenance_policy: human_attestation_v1`, each evidence file must include `collection_attestation: human_attested`, a `moderator_id` following the format defined in `evidence-session-template.md`, and `recorded_at` according to the protocol's provenance policy. Do not retrofit these fields into an already locked legacy protocol.

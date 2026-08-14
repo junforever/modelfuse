@@ -26,11 +26,12 @@ Activate this skill when the task involves:
 
 - Before reading evidence, read `{feature_dir}/usability/memory/product-ux-memory.md`, resolve the single current protocol path recorded there, and read that protocol, `{feature_dir}/usability/protocol/participant-roster.md`, and `{feature_dir}/usability/protocol/protocol-lock.md`.
 - If the memory file is missing, does not identify exactly one current protocol path, or any referenced artifact is unavailable, stop and report the invalid workspace; do not guess.
+- Reject duplicate YAML keys in evidence frontmatter, protocol, roster, and lock metadata; never apply a parser's last-value-wins behavior.
 - The lock must contain exactly one `protocol_version`, `protocol_path`, `protocol_hash`, `roster_path`, `roster_hash`, `locked_at`, `roster_locked_at`, and `collection_start_at`; all three timestamps must be ISO 8601 with explicit timezones and satisfy `locked_at <= roster_locked_at <= collection_start_at`.
 - Normalize all lock paths as POSIX-relative paths under `{feature_dir}/usability/`. Require `protocol_path` to equal the single current protocol path recorded in memory and `roster_path` to equal `protocol/participant-roster.md`; reject absolute paths, paths that escape the usability directory, or any mismatch.
 - Recompute the protocol and roster SHA-256 hashes using the canonicalization rule in `protocol-lock-template.md`. If either hash differs from the lock, stop and report the lock as invalid; do not evaluate or move evidence.
 - Require every `protocol_version` in the lock, protocol, roster, and memory to match `^v[0-9]+\.[0-9]+\.[0-9]+$` and to match one another exactly. Require the roster's `protocol_hash`, `roster_locked_at`, and `collection_start_at` to match the lock exactly. The roster must contain unique participant IDs and a positive integer `planned_participant_count` equal to the number of listed IDs.
-- Require memory's current protocol path, protocol version/hash, lock path, lock timestamp, roster path/hash, roster lock timestamp, and `collection_start_at` to match the resolved lock and roster exactly, normalizing paths and timestamps as specified above. If any value is missing or differs, stop and report the workspace metadata as invalid; do not evaluate or move evidence.
+- Require memory's current protocol path, lock path, and roster path to be POSIX-relative under `{feature_dir}/usability/`, with no absolute or `..` segments, and to match the resolved lock and roster paths exactly. Require memory's protocol version/hash, lock timestamp, roster hash, roster lock timestamp, and `collection_start_at` to match the resolved lock and roster exactly, normalizing timestamps as specified above. If any value is missing or differs, stop and report the workspace metadata as invalid; do not evaluate or move evidence.
 - The declared `collection_start_at` is immutable and must precede or equal every accepted session date.
 - The protocol must define a positive integer `minimum_completed_tasks` that does not exceed its number of defined tasks, and every criterion must define a 0–100 percentage threshold, applicability (`all_valid` or a participant list containing only roster IDs), and help policy (`none` or `allowed`). If any is missing or invalid, stop and report the invalid protocol.
 - Read only regular Markdown evidence files (`*.md`, case-insensitive) in `incoming/`.
@@ -41,7 +42,7 @@ Activate this skill when the task involves:
     ```text
     .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
     ```
-  - Check that each file has YAML frontmatter with required fields.
+  - Check that each file has YAML frontmatter with the required fields for the active protocol mode.
   - Check that each file has a markdown section "Required Fields (Mandatory)".
   - Require exactly one `participant_id` and one `criterion_id` per file. The pair `(participant_id, criterion_id)` is the unique unit of analysis.
   - Require `protocol_version` and `protocol_hash` to match the lock exactly. A missing or mismatched value makes the file `non_comparable`.
@@ -81,7 +82,7 @@ Activate this skill when the task involves:
 
 ## 📈 Results & Recommendations
 
-- Generate a Markdown result file in `{feature_dir}/usability/results/` (e.g., `usability-results.md`) including:
+  - Generate or update the Markdown result file at the exact path `{feature_dir}/usability/results/usability-results.md` including:
   - methodology summary,
   - protocol lock snapshot (version, protocol hash, roster hash, lock timestamp, and collection start),
   - roster snapshot (protocol version, lock timestamp, initial size),
@@ -103,10 +104,17 @@ Activate this skill when the task involves:
   - subjective metric normalization summary (count and affected files/fields),
   - link to result file(s),
   - summary of recommendations.
+- **Preflight conflicts before persistence**:
+  1. Use the exact result path `{feature_dir}/usability/results/usability-results.md`; an existing result is updated only through the transaction below, never by direct overwrite.
+  2. If any transaction temporary or backup artifact exists from a previous run, stop and report the incomplete transaction; do not write or move anything.
+  3. Compute the final `.processed.md` destination for every consumed file. If any destination already exists, stop and report the conflicts; do not write results, update memory, or move any evidence.
 - **Commit evidence only after successful persistence**:
   1. Validate all evidence and compute the complete evaluation.
-  2. Write the result file and update memory successfully.
-  3. Only then move consumed files from `incoming/` to `processed/`.
+  2. Complete the preflight conflict checks above.
+  3. Write result and memory to deterministic temporary siblings (`usability-results.md.pending` and `product-ux-memory.md.pending`) and validate both.
+  4. If target result or memory files exist, rename them to deterministic backups (`usability-results.md.backup` and `product-ux-memory.md.backup`), then rename both pending files into place. If either replacement fails, restore both backups, remove pending files, leave evidence in `incoming/`, and report the transaction failure. If restoration fails, stop and report the exact artifact state; do not move evidence.
+  5. Only after both target files are committed, move consumed files from `incoming/` to `processed/`. If a filesystem error occurs, stop immediately and move every file already moved in this run back to its original `incoming/` path. If rollback fails, report the exact moved and unmoved files and do not claim a complete evaluation.
+  6. Remove backups only after both target files and all evidence moves succeed. A successful run must leave no `.pending` or `.backup` artifacts.
 - **Move processed evidence**:
   - Move (not copy) each consumed file; do not modify its content.
   - Evidence inputs are Markdown, so `incoming/session-P01.md` becomes `processed/session-P01.processed.md`; do not produce another extension.

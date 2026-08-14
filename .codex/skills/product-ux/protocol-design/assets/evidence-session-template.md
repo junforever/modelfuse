@@ -25,7 +25,7 @@ Use this template for protocols whose frontmatter contains `provenance_policy: h
 
 Subjective metric values are integers from 1 through 5. During evaluation, a numeric value greater than 5 is saturated to 5 and reported as normalized; values below 1, non-numeric values, and missing values are invalid.
 
-## Provenance Metadata (Mandatory)
+## Provenance Metadata (Mandatory when provenance policy is enabled)
 
 - `collection_attestation` MUST equal exactly `human_attested`.
 - `moderator_id` MUST be a stable pseudonymous identifier matching `^mod_[A-Za-z0-9][A-Za-z0-9_-]*$`.
