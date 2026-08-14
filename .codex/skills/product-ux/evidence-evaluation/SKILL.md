@@ -24,7 +24,9 @@ Activate this skill when the task involves:
 
 ## 📄 Evidence Validation
 
-- Read all evidence files in `incoming/`.
+- Read only regular Markdown evidence files (`*.md`, case-insensitive) in `incoming/`.
+- YAML is allowed only as frontmatter embedded in a Markdown file. Standalone CSV, JSON, YAML, YML, or any other format is unsupported. If any such regular file exists in `incoming/`, stop and report it; do not ignore, evaluate, move, or delete it.
+- A file whose name already matches `*.processed.md` (case-insensitive) is not eligible for evaluation, even if it is found in `incoming/`.
 - **Validate schema against the template:**
   - Reference the template at:
     ```text
@@ -50,7 +52,7 @@ Activate this skill when the task involves:
 
 ## 📈 Results & Recommendations
 
-- Generate a result file in `specs/{feature_id}/usability/results/` (e.g., `usability-results.md`) including:
+- Generate a Markdown result file in `{feature_dir}/usability/results/` (e.g., `usability-results.md`) including:
   - methodology summary,
   - sample description (size, exclusions),
   - metrics per criterion (numerator, denominator, percentage, pass/fail),
@@ -58,7 +60,7 @@ Activate this skill when the task involves:
   - UX improvement recommendations:
     - behavioral/UX-oriented,
     - no implementation details or code.
-- Update the feature memory file in `memory/` with:
+- Update the feature memory file at `{feature_dir}/usability/memory/product-ux-memory.md` with:
   - date,
   - build/version evaluated,
   - metrics and pass/fail decisions,
@@ -70,14 +72,14 @@ Activate this skill when the task involves:
   3. Only then move consumed files from `incoming/` to `processed/`.
 - **Move processed evidence**:
   - Move (not copy) each consumed file; do not modify its content.
-  - Preserve the original extension and insert `.processed` immediately before it. For example, `incoming/session-P01.md` becomes `processed/session-P01.processed.md`.
+  - Evidence inputs are Markdown, so `incoming/session-P01.md` becomes `processed/session-P01.processed.md`; do not produce another extension.
   - If the destination already exists, stop and report a processing conflict; never overwrite it.
   - Do not leave the original file in `incoming/` after a successful move.
 
 ## 📝 Output Expectations
 
-- Result file(s) in `specs/{feature_id}/usability/results/`.
-- Updated memory file in `specs/{feature_id}/usability/memory/`.
+- Markdown result file(s) in `{feature_dir}/usability/results/`.
+- Updated Markdown memory file at `{feature_dir}/usability/memory/product-ux-memory.md`.
 - **Evidence files moved from `incoming/` to `processed/`** using the `.processed` filename rule (originals removed from `incoming/`).
 - Brief summary of metrics, decisions, and recommendations.
 - Do not simulate or invent evidence; all data must be human-collected.

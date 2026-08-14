@@ -39,12 +39,13 @@ Activate this skill when the task involves:
 
 ## 📄 Data Collection Template Requirements
 
-- Create templates in Markdown format.
+- Create every protocol and data-collection template as a Markdown file with a `.md` extension.
 - Use the template defined at:
   ```text
   .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
   ```
 - **Required fields** (YAML frontmatter + markdown list) MUST be present in every file.
+- Evidence files accepted by the evaluation workflow are Markdown files only (`.md`). YAML is allowed only as frontmatter embedded in that Markdown file; standalone CSV, JSON, YAML, or other formats are not supported.
 - **Optional fields** may be added per feature but must be documented in the protocol.
 - Templates must be empty or contain only examples clearly marked as such; do not simulate or pre-fill evidence.
 
@@ -52,7 +53,7 @@ Activate this skill when the task involves:
 
 - Create or update the feature memory file at:
   ```text
-  specs/{feature_id}/usability/memory/product-ux-memory.md
+  {feature_dir}/usability/memory/product-ux-memory.md
   ```
 - Include:
   - protocol version,
@@ -63,8 +64,8 @@ Activate this skill when the task involves:
 
 ## 📝 Output Expectations
 
-- Protocol file(s) in `specs/{feature_id}/usability/protocol/`.
+- Protocol file(s) in `{feature_dir}/usability/protocol/`.
 - Template file(s) in the same folder.
-- Updated memory file in `specs/{feature_id}/usability/memory/`.
+- Updated Markdown memory file in `{feature_dir}/usability/memory/`.
 - Brief summary of decisions and rationale.
 - Do not simulate or pre-fill evidence; templates must remain empty or contain only clearly marked examples.

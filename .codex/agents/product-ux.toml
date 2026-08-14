@@ -66,11 +66,14 @@ Rules:
 - For protocol design tasks: write protocol and templates into `protocol/`, and create/update memory in `memory/`.
 - For evidence evaluation tasks:
   - Read ONLY files in `incoming/`.
+  - Only regular files whose extension is `.md` (case-insensitive) are supported evidence inputs. YAML is allowed only as frontmatter embedded in that Markdown file; standalone `.csv`, `.json`, `.yaml`, `.yml`, or any other format is unsupported.
+  - If `incoming/` contains any regular file with an unsupported extension, stop and report it; do not ignore, evaluate, move, or delete it.
+  - Files whose name already matches `*.processed.md` (case-insensitive) are not eligible for evaluation, even if they are found in `incoming/`.
   - Validate that each file follows the required schema (see below).
   - Compute metrics and write results into `results/`.
   - Write the result and update memory successfully before moving any evidence file.
   - After both writes succeed, move each consumed file from `incoming/` to `processed/` without changing its content.
-  - Preserve the original extension and insert `.processed` immediately before it: `session-P01.md` becomes `processed/session-P01.processed.md`.
+  - Evidence inputs are always Markdown, so move `session-P01.md` to `processed/session-P01.processed.md`; do not produce another extension.
   - If the destination already exists, stop and report a processing conflict; never overwrite it.
 - Never read or write outside `{feature_dir}/usability/` unless explicitly requested in the prompt.
 
@@ -124,7 +127,7 @@ Update this file whenever you create/update a protocol or evaluate evidence.
 📊 EVALUATION LOGIC (GENERIC)
 When evaluating evidence:
 
-1. Read all non-processed files in `incoming/`.
+1. Enumerate regular files in `incoming/`. Require every file to have a case-insensitive `.md` extension and reject any file named `*.processed.md` (case-insensitive); stop and report unsupported inputs instead of ignoring them.
 2. Validate schema:
    - If required fields are missing, stop and report the missing fields. Do not attempt to guess.
 3. Apply inclusion/exclusion rules defined in the protocol:
