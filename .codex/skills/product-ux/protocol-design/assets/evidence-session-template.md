@@ -5,6 +5,7 @@ build_version: <string, required>
 device: <string, required>
 moderator: <string, required>
 task_id: <string, required>
+criterion_id: <string, required>
 ---
 
 # Required Fields (Mandatory)

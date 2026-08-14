@@ -91,7 +91,7 @@ Every evidence file in `incoming/` MUST follow the template defined at:
 .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
 ```
 
-Required fields (YAML frontmatter + markdown list) MUST be present in every file. Additional fields may exist per feature or protocol, but the required fields above MUST be present. Optional fields may be omitted; if an optional field is present but empty, treat it as absent, not as invalid evidence. If any required field is missing, you must refuse to evaluate and report which fields are missing.
+Required fields (YAML frontmatter + markdown list) MUST be present in every file. Each evidence file represents exactly one `(participant_id, criterion_id)` observation; both identifiers are required and must match the feature protocol. Additional fields may exist per feature or protocol, but the required fields above MUST be present. Optional fields may be omitted; if an optional field is present but empty, treat it as absent, not as invalid evidence. If any required field is missing, you must refuse to evaluate and report which fields are missing.
 
 🔎 PRE-FLIGHT CHECK (MANDATORY BEFORE ANY WORK)
 Before starting any protocol-design or evidence-evaluation task, you MUST:
@@ -120,6 +120,9 @@ This file must include:
 - Success criteria (e.g., "≥90% success in first attempt without help").
 - Required fields schema (or reference to a schema file).
 - Sampling rules (minimum participants, inclusion/exclusion).
+- Locked roster path, initial roster size, and `roster_locked_at` timestamp.
+- `minimum_completed_tasks` abandonment rule.
+- Criterion definitions, applicability, help policy, and 0–100 percentage thresholds.
 - Evaluation history:
   - date,
   - build/version evaluated,
@@ -134,25 +137,35 @@ Update this file whenever you create/update a protocol or evaluate evidence.
 📊 EVALUATION LOGIC (GENERIC)
 When evaluating evidence:
 
-1. Enumerate regular files in `incoming/`. Require every file to have a case-insensitive `.md` extension and reject any file named `*.processed.md` (case-insensitive); stop and report unsupported inputs instead of ignoring them.
-2. Validate schema:
-   - If required fields are missing, stop and report the missing fields. Do not attempt to guess.
-3. Apply inclusion/exclusion rules defined in the protocol:
-   - Exclude participants only if they match pre-defined exclusion criteria.
-   - Do not change the denominator retrospectively.
-4. For each success criterion defined in the protocol:
-   - Count participants who succeeded on the first attempt without help.
-   - Compute percentage = successes / valid_participants.
-   - Compare against the threshold defined in the protocol.
-   - Record pass/fail.
-5. Generate a result file in `results/` with:
+1. Read `{feature_dir}/usability/memory/product-ux-memory.md`, resolve the single current protocol path recorded there, and read that protocol plus the locked `protocol/participant-roster.md` before reading evidence. If memory or the protocol pointer is missing/ambiguous, stop and report the invalid workspace; do not guess. Require unique roster IDs, a matching `planned_participant_count`, and `roster_locked_at <= collection_start_at`; otherwise stop and report the invalid roster.
+2. Enumerate regular files in `incoming/`. Require every file to have a case-insensitive `.md` extension and reject any file named `*.processed.md` (case-insensitive); stop and report unsupported inputs instead of ignoring them.
+3. Validate schema:
+   - Require exactly one `participant_id` and one `criterion_id` per file.
+   - Require `success_first_attempt` and `help_received` to be exactly lowercase `y` or `n`; do not coerce other values.
+   - Require the pair `(participant_id, criterion_id)` to be unique across all files.
+   - Require both identifiers to exist in the locked roster/protocol; do not add unknown IDs implicitly.
+   - If required fields are missing or any duplicate/unknown ID exists, stop and report the exact issue. Do not guess.
+4. Apply the protocol's fixed `minimum_completed_tasks` rule:
+   - Count distinct `task_id` values for each roster participant.
+   - Exclude a participant from every denominator only when they have fewer than the predeclared minimum.
+   - Never add late participants or remove participants based on observed outcomes.
+5. For each success criterion `c`:
+   - `valid_participants(c)` is the valid roster subset to which `c` applies (`all_valid` or the explicit protocol list, which must contain only roster IDs).
+   - `successes(c)` requires `success_first_attempt = y` and, when `help_policy = none`, `help_received = n`.
+   - When `help_policy = allowed`, help does not disqualify a first-attempt success.
+   - A valid participant without an applicable observation is a non-success and must be reported as incomplete evidence.
+   - Compute the unrounded `success_rate(c) = successes(c) / valid_participants(c)` in [0, 1], then `success_percentage(c) = 100 * success_rate(c)`.
+   - If the denominator is zero, record `not_evaluable` and fail the acceptance gate; never divide by zero.
+   - Compare the unrounded percentage against the protocol's 0–100 threshold; round only the reported percentage to two decimal places and record numerator, denominator, percentage, and pass/fail.
+6. Generate a result file in `results/` with:
    - methodology summary,
-   - sample description,
+   - roster snapshot (protocol version, lock timestamp, initial size),
+   - valid sample size, exclusions, and exclusion reasons,
    - metrics per criterion,
    - pass/fail,
    - observations and improvement recommendations.
-6. Write the result file and update the feature memory successfully.
-7. Only after both writes succeed, move the consumed files into `processed/` using the deterministic `.processed` filename rule above.
+7. Write the result file and update the feature memory successfully.
+8. Only after both writes succeed, move the consumed files into `processed/` using the deterministic `.processed` filename rule above.
 
 🚫 CONSTRAINTS
 - NEVER simulate participants, sessions, or results.
