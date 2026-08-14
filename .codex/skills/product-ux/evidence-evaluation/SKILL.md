@@ -30,6 +30,7 @@ Activate this skill when the task involves:
 - Normalize all lock paths as POSIX-relative paths under `{feature_dir}/usability/`. Require `protocol_path` to equal the single current protocol path recorded in memory and `roster_path` to equal `protocol/participant-roster.md`; reject absolute paths, paths that escape the usability directory, or any mismatch.
 - Recompute the protocol and roster SHA-256 hashes using the canonicalization rule in `protocol-lock-template.md`. If either hash differs from the lock, stop and report the lock as invalid; do not evaluate or move evidence.
 - Require the protocol and roster `protocol_version` values to match the lock exactly. Require the roster's `protocol_hash`, `roster_locked_at`, and `collection_start_at` to match the lock exactly. The roster must contain unique participant IDs and `planned_participant_count` equal to the number of listed IDs.
+- Require memory's current protocol path, protocol version/hash, lock path, roster path/hash, roster lock timestamp, and `collection_start_at` to match the resolved lock and roster exactly, normalizing paths and timestamps as specified above. If any value is missing or differs, stop and report the workspace metadata as invalid; do not evaluate or move evidence.
 - The declared `collection_start_at` is immutable and must precede or equal every accepted session date.
 - The protocol must define a positive integer `minimum_completed_tasks` that does not exceed its number of defined tasks, and every criterion must define a 0–100 percentage threshold, applicability (`all_valid` or a participant list containing only roster IDs), and help policy (`none` or `allowed`). If any is missing or invalid, stop and report the invalid protocol.
 - Read only regular Markdown evidence files (`*.md`, case-insensitive) in `incoming/`.
@@ -44,13 +45,14 @@ Activate this skill when the task involves:
   - Check that each file has a markdown section "Required Fields (Mandatory)".
   - Require exactly one `participant_id` and one `criterion_id` per file. The pair `(participant_id, criterion_id)` is the unique unit of analysis.
   - Require `protocol_version` and `protocol_hash` to match the lock exactly. A missing or mismatched value makes the file `non_comparable`.
-  - Require `date >= collection_start_at`; an earlier session is `non_comparable`. When the locked protocol declares the provenance policy, `date` must also be ISO 8601 with an explicit timezone.
+  - Require `date` to be an ISO 8601 timestamp with an explicit timezone and `date >= collection_start_at`; an earlier session is `non_comparable`. This requirement applies to legacy protocols too and does not retrofit provenance fields.
   - Determine provenance mode only from the protocol frontmatter: exact `provenance_policy: human_attestation_v1` enables the policy; absence of that marker in an existing locked protocol means legacy.
   - In enabled mode, require `collection_attestation` to equal exactly `human_attested`.
   - In enabled mode, require `moderator_id` to follow the exact format defined in `evidence-session-template.md`; this validates only the declared syntax and does not verify pseudonymization or identity.
   - In enabled mode, require `recorded_at` to be an ISO 8601 timestamp with an explicit timezone and greater than or equal to `date` after UTC normalization.
   - In legacy mode, do not retrofit these fields or reject otherwise valid evidence for their absence; set the report status to `not_attested_not_verified`.
   - Require `success_first_attempt` and `help_received` to be exactly lowercase `y` or `n`; do not coerce other values.
+  - Require `clarity`, `confidence`, `effort`, and `frustration` to be numeric values. Saturate each value greater than 5 to 5 and record the original field/file in the report and memory normalization summary. Values below 1, non-numeric values, or missing values are invalid evidence.
   - Require every `participant_id` to exist in the locked roster and every `criterion_id` to exist in the protocol. An unknown participant or criterion is an error; do not add it implicitly.
   - If two files contain the same `(participant_id, criterion_id)` pair, stop and report the duplicate; never choose one record silently.
   - Optional fields may be omitted. If an optional field is present but empty, treat it as absent, not as invalid evidence.
@@ -87,6 +89,7 @@ Activate this skill when the task involves:
   - sample description (valid size, exclusions, and exclusion reasons),
   - metrics per criterion (numerator, denominator, percentage, pass/fail),
   - observations,
+  - subjective metric normalization summary (count and affected files/fields; values above 5 saturated to 5),
   - UX improvement recommendations:
     - behavioral/UX-oriented,
     - no implementation details or code.
@@ -96,6 +99,7 @@ Activate this skill when the task involves:
   - protocol version, protocol hash, roster hash, lock path, and collection start,
   - provenance disclosure status and counts of attested evidence files and distinct pseudonymous moderator IDs; never record these as independently verified human provenance,
   - metrics and pass/fail decisions,
+  - subjective metric normalization summary (count and affected files/fields),
   - link to result file(s),
   - summary of recommendations.
 - **Commit evidence only after successful persistence**:

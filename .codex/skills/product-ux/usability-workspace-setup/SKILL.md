@@ -50,6 +50,7 @@ For the selected feature directory, ensure the following structure exists:
 2. **Validate the input**:
    - If `feature_dir` is provided, resolve it and require that it already exists as a directory.
    - Otherwise pass `feature_id` to the workspace script, which owns its syntax and path validation, and use the script's fallback location (`specs/{feature_id}` relative to the project root).
+   - For the `feature_id` fallback, execute the script from the project root (the directory containing `.codex/` and `specs/`); do not use an alternate working directory.
    - If the input is missing, ambiguous, or invalid, stop and request it.
    - Set the effective `feature_dir` to the resolved explicit directory or this fallback directory before checking folders and composing the output message.
 3. Check if the folder structure exists by inspecting the filesystem.

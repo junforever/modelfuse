@@ -59,7 +59,7 @@ If a task does not clearly match any trigger, solve it using ONLY core agent log
 1. Apply the routing rules above; the detailed setup and task procedure belong to the activated skill.
 2. Report back concisely using the structure below:
    - **Mode**: protocol-design or evidence-evaluation.
-   - **Feature**: feature ID.
+   - **Feature**: feature ID when provided; otherwise the resolved feature directory.
    - **Files Created/Updated**: list of paths.
    - **Summary**: brief explanation of what was done.
    - **Validation**: schema validation results, metrics computed, pass/fail decisions.

@@ -23,6 +23,8 @@ Use this template for protocols whose frontmatter contains `provenance_policy: h
 - effort: 1-5
 - frustration: 1-5
 
+Subjective metric values are integers from 1 through 5. During evaluation, a numeric value greater than 5 is saturated to 5 and reported as normalized; values below 1, non-numeric values, and missing values are invalid.
+
 ## Provenance Metadata (Mandatory)
 
 - `collection_attestation` MUST equal exactly `human_attested`.

@@ -34,7 +34,7 @@ Activate this skill when the task involves:
   - what counts as "success" and "help".
 - Define one stable `criterion_id` for every success criterion.
 - Define a criterion table with `criterion_id`, a threshold expressed as a percentage from 0 to 100, applicability (`all_valid` or an explicit participant list), and help policy (`none` or `allowed`).
-- Define scales for subjective metrics (clarity, confidence, effort, frustration), including range (e.g., 1–5 or 1–7).
+- Define integer scales for subjective metrics (clarity, confidence, effort, frustration) in the inclusive range 1–5. During evaluation, numeric values above 5 are saturated to 5 and reported as normalized; values below 1, non-numeric values, and missing values are invalid.
 - Specify one positive integer `minimum_completed_tasks` rule for valid participation. It must not exceed the number of tasks defined by the protocol. A participant below that threshold is excluded from every denominator.
 - Specify rules for missing criterion observations and dropouts before collection starts. A valid participant missing an applicable criterion observation is counted as a non-success and reported as incomplete; do not remove that participant from the denominator.
 - Create and lock `{feature_dir}/usability/protocol/participant-roster.md` before collection starts, using:
@@ -47,6 +47,7 @@ Activate this skill when the task involves:
   .codex/skills/product-ux/protocol-design/assets/protocol-lock-template.md
   ```
   The lock must identify exactly one protocol and roster, store their SHA-256 hashes, require all three timestamps to be ISO 8601 with explicit timezones, and satisfy `locked_at <= roster_locked_at <= collection_start_at`.
+- Store `protocol_path` and `roster_path` as POSIX-relative paths under `{feature_dir}/usability/`; reject absolute paths or paths that escape that directory. Use the same current protocol path in memory and the lock, `protocol/participant-roster.md` for `roster_path`, and `protocol/protocol-lock.md` for the lock path.
 - The protocol frontmatter must contain `protocol_version` in the exact form `vMAJOR.MINOR.PATCH`; it must match the lock. New or updated protocols using the provenance policy must also contain the exact marker `provenance_policy: human_attestation_v1`. An existing locked protocol without that marker is legacy and must not be retrofitted. Store `protocol_hash` outside the protocol file (in the lock, roster, memory, and evidence metadata) to avoid hashing a file that contains its own hash.
 - List metadata to record per session:
   - participant_id, date (ISO 8601 with explicit timezone), build_version, device, moderator_id, task_id, criterion_id.
@@ -68,6 +69,7 @@ Activate this skill when the task involves:
 - Evidence files accepted by the evaluation workflow are Markdown files only (`.md`). YAML is allowed only as frontmatter embedded in that Markdown file; standalone CSV, JSON, YAML, or other formats are not supported.
 - **Optional fields** may be added per feature but must be documented in the protocol.
 - Optional fields may be omitted. If an optional field is present but empty, treat it as absent, not as invalid evidence.
+- Subjective metric values must be integers from 1 through 5; values above 5 are saturated to 5 by the evaluator and must be reported as normalized, while values below 1, non-numeric values, and missing values are invalid.
 - Templates must be empty or contain only examples clearly marked as such; do not simulate or pre-fill evidence. A template's attestation placeholder is not evidence of human collection.
 
 ## 🧠 Feature Memory Update

@@ -15,6 +15,8 @@ Create this lock before receiving the first session. It is immutable after `lock
 
 Hashes use SHA-256 over the referenced Markdown file after decoding as UTF-8, removing a UTF-8 BOM if present, and normalizing CRLF/CR line endings to LF. Preserve all other content exactly. The lock file itself is not included in either hash.
 
+`protocol_path` and `roster_path` must be POSIX-relative paths under the feature's `usability/` directory. Use the single current protocol path recorded in memory, `protocol/participant-roster.md` for `roster_path`, and never use absolute paths or paths containing `..`.
+
 The timestamps must satisfy:
 
 ```text
