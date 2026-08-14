@@ -43,7 +43,12 @@ Activate this skill when the task involves:
   - Check that each file has a markdown section "Required Fields (Mandatory)".
   - Require exactly one `participant_id` and one `criterion_id` per file. The pair `(participant_id, criterion_id)` is the unique unit of analysis.
   - Require `protocol_version` and `protocol_hash` to match the lock exactly. A missing or mismatched value makes the file `non_comparable`.
-  - Require `date >= collection_start_at`; an earlier session is `non_comparable`.
+  - Require `date >= collection_start_at`; an earlier session is `non_comparable`. When the locked protocol declares the provenance policy, `date` must also be ISO 8601 with an explicit timezone.
+  - Determine provenance mode only from the protocol frontmatter: exact `provenance_policy: human_attestation_v1` enables the policy; absence of that marker in an existing locked protocol means legacy.
+  - In enabled mode, require `collection_attestation` to equal exactly `human_attested`.
+  - In enabled mode, require `moderator_id` to match `^mod_[A-Za-z0-9][A-Za-z0-9_-]*$`; this validates only the declared syntax and does not verify pseudonymization or identity.
+  - In enabled mode, require `recorded_at` to be an ISO 8601 timestamp with an explicit timezone and greater than or equal to `date` after UTC normalization.
+  - In legacy mode, do not retrofit these fields or reject otherwise valid evidence for their absence; set the report status to `not_attested_not_verified`.
   - Require `success_first_attempt` and `help_received` to be exactly lowercase `y` or `n`; do not coerce other values.
   - Require every `participant_id` to exist in the locked roster and every `criterion_id` to exist in the protocol. An unknown participant or criterion is an error; do not add it implicitly.
   - If two files contain the same `(participant_id, criterion_id)` pair, stop and report the duplicate; never choose one record silently.
@@ -76,6 +81,8 @@ Activate this skill when the task involves:
   - methodology summary,
   - protocol lock snapshot (version, protocol hash, roster hash, lock timestamp, and collection start),
   - roster snapshot (protocol version, lock timestamp, initial size),
+  - a `Provenance disclosure` section with status `human_attested_not_verified` when the locked protocol declares the provenance policy, stating that provenance was supplied by the responsible human moderator and that the agent validated only metadata presence, exact value, syntax, and timestamp ordering; use `not_attested_not_verified` for protocols predating the policy. Never claim independent verification of session occurrence, moderator identity, or pseudonymization,
+  - for protocols declaring the policy, the number of evidence files with valid attestations and the number of distinct pseudonymous moderator IDs; for legacy protocols, report these counts as `not_applicable`,
   - sample description (valid size, exclusions, and exclusion reasons),
   - metrics per criterion (numerator, denominator, percentage, pass/fail),
   - observations,
@@ -86,6 +93,7 @@ Activate this skill when the task involves:
   - date,
   - build/version evaluated,
   - protocol version, protocol hash, roster hash, lock path, and collection start,
+  - provenance disclosure status and counts of attested evidence files and distinct pseudonymous moderator IDs; never record these as independently verified human provenance,
   - metrics and pass/fail decisions,
   - link to result file(s),
   - summary of recommendations.
@@ -105,5 +113,5 @@ Activate this skill when the task involves:
 - Updated Markdown memory file at `{feature_dir}/usability/memory/product-ux-memory.md`.
 - **Evidence files moved from `incoming/` to `processed/`** using the `.processed` filename rule (originals removed from `incoming/`).
 - Brief summary of metrics, decisions, and recommendations.
-- Do not simulate or invent evidence; all data must be human-collected.
+- Do not simulate or invent evidence. Evidence under a provenance-enabled protocol must be human-attested; legacy evidence follows its locked schema and must be reported as not attested. Never report either case as independently verified human collection.
 - UX improvement recommendations must be behavioral/UX-oriented, not implementation details.
