@@ -23,6 +23,8 @@ Para toda ejecución de implementación basada en un archivo `tasks.md`:
   - `UNIT` -> `unit-test-runner`
   - `INTEGRATION` -> `integration-test-runner`
   - `E2E` -> `e2e-test-runner`
+  - `PERF` -> `performance-test-runner`
+  - `UX` -> `product-designer`
 - Delega toda tarea de product code y tests a su owner declarado, respetando dependencias y orden de ejecución de `tasks.md`.
 - El agente principal actúa sólo como coordinador: puede inspeccionar contexto, delegar, seguir progreso, revisar evidencia y reportar resultados, pero no debe implementar ni modificar directamente product code o tests.
 - Si el agente owner requerido no existe o no está disponible, detén el trabajo afectado y reporta el bloqueo. No implementes la tarea directamente ni la reasignes a otro owner.

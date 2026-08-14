@@ -136,66 +136,69 @@ modelfuse/
 ## 🧩 Responsabilidades por capa
 
 ### `apps/frontend/`
+
 Responsable de la experiencia de usuario y del flujo conversacional:
 
-| Componente | Responsabilidad |
-|---|---|
-| `AppShell.tsx` | Layout principal, navegación entre sesiones, estado global de UI. |
-| `ConversationWorkspace.tsx` | Área central: lista de turnos, envío de prompts, recepción SSE, atribución de respuestas a slots. |
-| `ConversationSidebar.tsx` | Historial de conversaciones, selección, reapertura y estados (`pending`, `running`, `completed`, `failed`, `interrupted`). |
-| `ComparisonPanel.tsx` | Vista lado a lado de respuestas de múltiples LLMs para el mismo turno. |
-| `PromptInput.tsx` | Input de usuario, validación, enqueue de solicitudes, manejo de estados de envío. |
-| `LLMProviderSelector.tsx` | Configuración de qué modelos se invocan para cada turno. |
+| Componente                  | Responsabilidad                                                                                                            |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `AppShell.tsx`              | Layout principal, navegación entre sesiones, estado global de UI.                                                          |
+| `ConversationWorkspace.tsx` | Área central: lista de turnos, envío de prompts, recepción SSE, atribución de respuestas a slots.                          |
+| `ConversationSidebar.tsx`   | Historial de conversaciones, selección, reapertura y estados (`pending`, `running`, `completed`, `failed`, `interrupted`). |
+| `ComparisonPanel.tsx`       | Vista lado a lado de respuestas de múltiples LLMs para el mismo turno.                                                     |
+| `PromptInput.tsx`           | Input de usuario, validación, enqueue de solicitudes, manejo de estados de envío.                                          |
+| `LLMProviderSelector.tsx`   | Configuración de qué modelos se invocan para cada turno.                                                                   |
 
 ### `apps/backend/`
+
 Responsable de la orquestación del sistema. Sigue una arquitectura limpia orientada a responsabilidades:
 
-| Módulo | Responsabilidad |
-|---|---|
-| `index.ts` | **Única responsabilidad**: levantar el servidor (puerto y graceful shutdown). |
-| `app.ts` | Configuración de Express, middlewares globales y montado de rutas. |
-| `controllers/` | Maneja peticiones HTTP (`req/res`), extrae parámetros e invoca la lógica necesaria. |
-| `routes/` | Define endpoints de Express y los enlaza con sus controladores. |
-| `middleware/` | Validación (Zod), autenticación, manejo centralizado de errores, logging. |
-| `infrastructure/` | Conexiones a PostgreSQL, clientes LLM y servicios externos. |
-| `utils/` | Funciones de apoyo y helpers genéricos. |
-| `types/` | Declaraciones globales de tipos TypeScript. |
+| Módulo            | Responsabilidad                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `index.ts`        | **Única responsabilidad**: levantar el servidor (puerto y graceful shutdown).       |
+| `app.ts`          | Configuración de Express, middlewares globales y montado de rutas.                  |
+| `controllers/`    | Maneja peticiones HTTP (`req/res`), extrae parámetros e invoca la lógica necesaria. |
+| `routes/`         | Define endpoints de Express y los enlaza con sus controladores.                     |
+| `middleware/`     | Validación (Zod), autenticación, manejo centralizado de errores, logging.           |
+| `infrastructure/` | Conexiones a PostgreSQL, clientes LLM y servicios externos.                         |
+| `utils/`          | Funciones de apoyo y helpers genéricos.                                             |
+| `types/`          | Declaraciones globales de tipos TypeScript.                                         |
 
 Los **servicios core** que orquestan la lógica de negocio son:
 
-| Servicio | Responsabilidad |
-|---|---|
-| `ConversationService` | CRUD de conversaciones, estados e historial. |
-| `TurnService` | Creación de turnos, ordinales y atribución a conversaciones. |
-| `ResponseService` | Persistencia de respuestas, atribución a turnos y slots. |
-| `SlotScheduler` | Asignación de slots de ejecución a LLMs, manejo de colas. |
-| `RecoveryService` | Recuperación post-reinicio: conversión de slots `pending`/`running` a `failed`/`interrupted`. |
-| `SSE Gateway` | Emisión de eventos en tiempo real: `turn:created`, `response:delta`, `response:complete`. |
+| Servicio              | Responsabilidad                                                                               |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `ConversationService` | CRUD de conversaciones, estados e historial.                                                  |
+| `TurnService`         | Creación de turnos, ordinales y atribución a conversaciones.                                  |
+| `ResponseService`     | Persistencia de respuestas, atribución a turnos y slots.                                      |
+| `SlotScheduler`       | Asignación de slots de ejecución a LLMs, manejo de colas.                                     |
+| `RecoveryService`     | Recuperación post-reinicio: conversión de slots `pending`/`running` a `failed`/`interrupted`. |
+| `SSE Gateway`         | Emisión de eventos en tiempo real: `turn:created`, `response:delta`, `response:complete`.     |
 
 ### `packages/ui/`
+
 Librería de componentes visuales compartidos y reutilizables. Debe mantenerse **100% desacoplada** de la lógica de negocio y de cualquier dependencia específica de una aplicación.
 
 ---
 
 ## 🗄️ Modelo de datos
 
-| Tabla | Propósito |
-|---|---|
-| `conversations` | Metadatos de cada conversación (usuario, estado, timestamps). |
-| `turns` | Turnos de conversación, ordinales y atribución a conversación. |
-| `responses` | Respuestas de LLMs, atribución a turno y slot, contenido delta. |
-| `slots` | Slots de ejecución con estado (`pending`, `running`, `completed`, `failed`, `interrupted`). |
-| `llm_providers` | Configuración de proveedores (API keys, modelos, timeouts). |
+| Tabla           | Propósito                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| `conversations` | Metadatos de cada conversación (usuario, estado, timestamps).                               |
+| `turns`         | Turnos de conversación, ordinales y atribución a conversación.                              |
+| `responses`     | Respuestas de LLMs, atribución a turno y slot, contenido delta.                             |
+| `slots`         | Slots de ejecución con estado (`pending`, `running`, `completed`, `failed`, `interrupted`). |
+| `llm_providers` | Configuración de proveedores (API keys, modelos, timeouts).                                 |
 
 ### Estados de slots y transiciones
 
-| Estado | Descripción | Transiciones |
-|---|---|---|
-| `pending` | Slot asignado, no iniciado. | → `running` |
-| `running` | LLM invocándose, streaming en curso. | → `completed`, `failed`, `interrupted` |
-| `completed` | Respuesta completa persistida. | — |
-| `failed` | Error no recuperable. | — |
-| `interrupted` | Error recuperable (`error_recoverable=true`). | → `pending` (reintentar) |
+| Estado        | Descripción                                   | Transiciones                           |
+| ------------- | --------------------------------------------- | -------------------------------------- |
+| `pending`     | Slot asignado, no iniciado.                   | → `running`                            |
+| `running`     | LLM invocándose, streaming en curso.          | → `completed`, `failed`, `interrupted` |
+| `completed`   | Respuesta completa persistida.                | —                                      |
+| `failed`      | Error no recuperable.                         | —                                      |
+| `interrupted` | Error recuperable (`error_recoverable=true`). | → `pending` (reintentar)               |
 
 ---
 
@@ -253,15 +256,15 @@ pnpm run dev:frontend
 
 ## 🛠️ Stack tecnológico
 
-| Capa | Tecnología |
-|---|---|
-| Frontend | React + Vite + TypeScript |
-| Backend | Node.js + Express + TypeScript |
-| UI | Shadcn UI + Tailwind CSS |
-| Monorepo | pnpm workspaces |
-| Base de datos | PostgreSQL |
-| Migraciones | Liquibase |
-| Streaming | Server-Sent Events (SSE) |
+| Capa          | Tecnología                     |
+| ------------- | ------------------------------ |
+| Frontend      | React + Vite + TypeScript      |
+| Backend       | Node.js + Express + TypeScript |
+| UI            | Shadcn UI + Tailwind CSS       |
+| Monorepo      | pnpm workspaces                |
+| Base de datos | PostgreSQL                     |
+| Migraciones   | Liquibase                      |
+| Streaming     | Server-Sent Events (SSE)       |
 
 ---
 
@@ -326,14 +329,15 @@ Toda integración con modelos externos debe ser:
 
 ### Ownership de pruebas
 
-| Rol | Responsabilidad |
-|---|---|
+| Rol                                    | Responsabilidad                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------- |
 | `frontend-builder` / `backend-builder` | Código de producto y seams de testabilidad. No crean ni ejecutan pruebas. |
-| `frontend-auditor` / `backend-auditor` | Solo lectura. No crean pruebas ni correcciones. |
-| `unit-test-runner` | Pruebas unitarias aisladas y contract-unit. |
-| `integration-test-runner` | Pruebas sin navegador entre componentes reales. |
-| `e2e-test-runner` | Journeys Playwright en navegador real. |
-| `performance-test-runner` | Pruebas de aceptación, regresión, carga, stress, spike y soak. |
+| `frontend-auditor` / `backend-auditor` | Solo lectura. No crean pruebas ni correcciones.                           |
+| `unit-test-runner`                     | Pruebas unitarias aisladas y contract-unit.                               |
+| `integration-test-runner`              | Pruebas sin navegador entre componentes reales.                           |
+| `e2e-test-runner`                      | Journeys Playwright en navegador real.                                    |
+| `performance-test-runner`              | Pruebas de aceptación, regresión, carga, stress, spike y soak.            |
+| `product-ux`                           | Pruebas de usabilidad.                                                    |
 
 ---
 

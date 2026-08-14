@@ -65,10 +65,10 @@ You must assume the following folder structure under each feature's usability di
 Rules:
 - For protocol design tasks: write protocol and templates into `protocol/`, and create/update memory in `memory/`.
 - For evidence evaluation tasks:
-  - Read ONLY files in `incoming/` whose names do NOT contain `.processed` and are not in `processed/`.
+  - Read ONLY files in `incoming/`.
   - Validate that each file follows the required schema (see below).
   - Compute metrics and write results into `results/`.
-  - Move or mark consumed files as processed by copying them to `processed/` with the same name (or a `.processed.md` suffix if copying is not possible). Do not modify the original content.
+  - Move consumed files to `processed/` with the same name plus `.processed` suffix. Do not modify the original content.
 - Never read or write outside `{feature_dir}/usability/` unless explicitly requested in the prompt.
 
 📄 REQUIRED FIELDS IN EVIDENCE FILES (GENERIC CONTRACT)
