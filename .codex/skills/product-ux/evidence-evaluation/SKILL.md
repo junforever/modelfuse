@@ -1,7 +1,7 @@
 ---
 name: evidence-evaluation
 description: Validates collected usability evidence, computes success metrics, decides pass/fail against acceptance criteria, and generates UX improvement recommendations. Use for evidence evaluation tasks or explicit usability evaluation requests.
-compatibility: Generic across any feature/project. Works with Markdown or CSV evidence files.
+compatibility: Generic across any feature/project. Works with Markdown evidence files.
 metadata:
   author: junforever
   version: '1.0'
@@ -24,24 +24,14 @@ Activate this skill when the task involves:
 
 ## 📄 Evidence Validation
 
-- Read all evidence files in `incoming/` that:
-  - do NOT contain `.processed` in their name,
-  - are NOT inside `processed/`.
-- Validate schema:
-  - Check that each file includes all required fields:
-    - participant_id
-    - date
-    - build_version
-    - device
-    - moderator
-    - task_id
-    - success_first_attempt
-    - help_received
-    - clarity
-    - confidence
-    - effort
-    - frustration
-    - notes
+- Read all evidence files in `incoming/`.
+- **Validate schema against the template:**
+  - Reference the template at:
+    ```text
+    .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
+    ```
+  - Check that each file has YAML frontmatter with required fields.
+  - Check that each file has a markdown section "Required Fields (Mandatory)".
   - If any required field is missing, stop and report:
     - which files are affected,
     - which fields are missing.
@@ -68,9 +58,10 @@ Activate this skill when the task involves:
   - UX improvement recommendations:
     - behavioral/UX-oriented,
     - no implementation details or code.
-- Move/mark processed evidence:
-  - Copy consumed files from `incoming/` to `processed/` (same name or with `.processed.md` suffix).
-  - Do not modify the original content.
+- **Move processed evidence**:
+  - **Move** (not copy) consumed files from `incoming/` to `processed/`.
+  - Use the same filename but add `.processed` suffix.
+  - **Do not leave the original file in `incoming/`** after moving.
 - Update the feature memory file in `memory/` with:
   - date,
   - build/version evaluated,
@@ -82,7 +73,7 @@ Activate this skill when the task involves:
 
 - Result file(s) in `specs/{feature_id}/usability/results/`.
 - Updated memory file in `specs/{feature_id}/usability/memory/`.
-- Evidence files copied to `processed/`.
+- **Evidence files moved from `incoming/` to `processed/`** (originals removed from `incoming/`).
 - Brief summary of metrics, decisions, and recommendations.
 - Do not simulate or invent evidence; all data must be human-collected.
 - UX improvement recommendations must be behavioral/UX-oriented, not implementation details.

@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-
+/*
+ * Folder structure for usability evaluation
+ * - incoming/: NEW evidence files (not yet evaluated)
+ * - processed/: evidence files ALREADY evaluated (moved from incoming/)
+ * - protocol/: protocol definitions and templates
+ * - results/: evaluation results and reports
+ * - memory/: feature-level memory
+ */
 const fs = require('fs');
 const path = require('path');
 
@@ -7,7 +14,7 @@ const featureId = process.argv[2];
 
 if (!featureId) {
   console.error('Error: feature_id required');
-  console.error('Usage: node create-usability-workspace.js <feature_id>');
+  console.error('Usage: node create-usability-workspace.cjs <feature_id>');
   process.exit(1);
 }
 

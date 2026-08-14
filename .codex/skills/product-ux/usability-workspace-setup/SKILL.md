@@ -58,7 +58,7 @@ specs/{feature_id}/usability/
    - Execute the workspace creation script:
      - **Node.js (cross-platform)**:
        ```bash
-       node .codex/skills/product-ux/scripts/create-usability-workspace.js <feature_id>
+       node .codex/skills/product-ux/usability-workspace-setup/scripts/create-usability-workspace.cjs <feature_id>
        ```
    - Capture the script output to identify which folders were created.
    - Return:
@@ -76,6 +76,6 @@ specs/{feature_id}/usability/
 - If the feature_id is missing, empty, or ambiguous:
   - Stop and request it explicitly (see Input Requirements).
 - If the script is not found at the expected path, report:
-  - "Error: Script de creación de workspace no encontrado en .codex/skills/product-ux/scripts/"
+  - "Error: Script de creación de workspace no encontrado en .codex/skills/product-ux/usability-workspace-setup/scripts/"
 - If the script execution fails, report:
   - "Error al ejecutar el script: [mensaje de error]"

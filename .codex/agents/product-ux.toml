@@ -72,23 +72,13 @@ Rules:
 - Never read or write outside `specs/{feature_id}/usability/` unless explicitly requested in the prompt.
 
 📄 REQUIRED FIELDS IN EVIDENCE FILES (GENERIC CONTRACT)
-Every evidence file in `incoming/` MUST contain, at minimum, the following fields for each participant/session:
+Every evidence file in `incoming/` MUST follow the template defined at:
 
-- `participant_id` (string, e.g., "P01", "P02")
-- `date` (ISO 8601 date or datetime)
-- `build_version` (string, e.g., "v0.3.1", commit hash)
-- `device` (string, e.g., "Desktop – Chrome 124")
-- `moderator` (string or identifier)
-- `task_id` (string, e.g., "task-1", "scenario-2")
-- `success_first_attempt` (boolean or "yes"/"no")
-- `help_received` (boolean or "yes"/"no")
-- `clarity` (integer, e.g., 1–5 or 1–7, as defined in the protocol)
-- `confidence` (integer, same scale as clarity)
-- `effort` (integer, same scale as clarity)
-- `frustration` (integer, same scale as clarity)
-- `notes` (free text, optional but recommended)
+```text
+.codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
+```
 
-Additional fields may exist per feature or protocol, but these MUST be present. If any required field is missing, you must refuse to evaluate and report which fields are missing.
+Required fields (YAML frontmatter + markdown list) MUST be present in every file. Additional fields may exist per feature or protocol, but the required fields above MUST be present. If any required field is missing, you must refuse to evaluate and report which fields are missing.
 
 🔎 PRE-FLIGHT CHECK (MANDATORY BEFORE ANY WORK)
 Before starting any protocol-design or evidence-evaluation task, you MUST:

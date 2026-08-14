@@ -1,7 +1,7 @@
 ---
 name: protocol-design
 description: Designs usability evaluation protocols, success criteria, sampling rules, tasks/scenarios, and data collection templates. Use for protocol design tasks or explicit usability protocol requests.
-compatibility: Generic across any feature/project. Works with Markdown or CSV templates.
+compatibility: Generic across any feature/project. Works with Markdown templates.
 metadata:
   author: junforever
   version: '1.0'
@@ -20,7 +20,7 @@ Activate this skill when the task involves:
 - Defining success criteria (e.g., "≥90% success in first attempt without help").
 - Defining sampling rules (minimum participants, inclusion/exclusion criteria).
 - Designing tasks and scenarios for usability testing.
-- Creating data collection templates (Markdown/CSV) for sessions or surveys.
+- Creating data collection templates (Markdown) for sessions or surveys.
 - Explicit protocol design tasks in a tasks.md file.
 
 ## 🏗️ Protocol Structure & Content
@@ -39,22 +39,13 @@ Activate this skill when the task involves:
 
 ## 📄 Data Collection Template Requirements
 
-- Create templates in Markdown or CSV format.
-- Include at minimum the following required fields for each participant/session:
-  - participant_id (string, e.g., "P01", "P02")
-  - date (ISO 8601 date or datetime)
-  - build_version (string, e.g., "v0.3.1", commit hash)
-  - device (string, e.g., "Desktop – Chrome 124")
-  - moderator (string or identifier)
-  - task_id (string, e.g., "task-1", "scenario-2")
-  - success_first_attempt (boolean or "yes"/"no")
-  - help_received (boolean or "yes"/"no")
-  - clarity (integer, e.g., 1–5 or 1–7, as defined in protocol)
-  - confidence (integer, same scale as clarity)
-  - effort (integer, same scale as clarity)
-  - frustration (integer, same scale as clarity)
-  - notes (free text, optional but recommended)
-- Additional fields may be added per feature or protocol.
+- Create templates in Markdown format.
+- Use the template defined at:
+  ```text
+  .codex/skills/product-ux/protocol-design/assets/evidence-session-template.md
+  ```
+- **Required fields** (YAML frontmatter + markdown list) MUST be present in every file.
+- **Optional fields** may be added per feature but must be documented in the protocol.
 - Templates must be empty or contain only examples clearly marked as such; do not simulate or pre-fill evidence.
 
 ## 🧠 Feature Memory Update
