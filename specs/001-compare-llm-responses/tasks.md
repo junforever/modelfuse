@@ -325,12 +325,12 @@ tema mediante un control accesible y visible en el header.
 - [ ] T121 [P] [INTEGRATION] Ejecutar las suites de integración backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T154, T148); registrar fallos como tareas concretas.
 - [ ] T122 [E2E] Ejecutar Playwright con fakes desde `apps/frontend/playwright.config.ts` (depende de T154, T148 y de las historias implementadas); tipo: E2E, registrar fallos como tareas concretas.
 - [x] T123 [P] [BE] Ejecutar `pnpm --filter backend build` desde `package.json` (owner: `backend-builder`; depende de T154); prueba mínima: comando exitoso, sin corregir hallazgos aquí.
-- [ ] T124 [P] [FE] Ejecutar `pnpm --filter frontend typecheck`, `pnpm --filter frontend lint`, `pnpm --filter frontend build`, `pnpm --filter @workspace/ui typecheck` y `pnpm --filter @workspace/ui lint` desde `package.json` (owner: `frontend-builder`; depende de T148); prueba mínima: cinco comandos exitosos, sin corregir hallazgos aquí.
+- [x] T124 [P] [FE] Ejecutar `pnpm --filter frontend typecheck`, `pnpm --filter frontend lint`, `pnpm --filter frontend build`, `pnpm --filter @workspace/ui typecheck` y `pnpm --filter @workspace/ui lint` desde `package.json` (owner: `frontend-builder`; depende de T148); prueba mínima: cinco comandos exitosos, sin corregir hallazgos aquí.
 
 ### Correctivas generadas por T124
 
-- [ ] T157 [UNIT] Corregir los mocks `NoopEventSource` en `apps/frontend/src/features/conversations/__tests__/conversation-history.test.tsx` y `apps/frontend/src/features/conversations/__tests__/new-conversation-draft.test.tsx` para eliminar o usar el parámetro `_url` sin alterar el contrato observable de los tests (generada por T124); prueba mínima: suites unitarias afectadas y `pnpm --filter frontend lint` exitosos; desbloquea la reejecución de T124.
-- [ ] T158 [UI] Ajustar el límite público de `packages/ui/src/components/button.tsx` para que el módulo cumpla `react-refresh/only-export-components`, reubicando `buttonVariants` si debe conservarse como export público y sin cambiar el comportamiento de `Button` (generada por T124); prueba mínima: `pnpm --filter @workspace/ui typecheck`, `pnpm --filter @workspace/ui lint` y `pnpm --filter frontend typecheck` exitosos; desbloquea la reejecución de T124.
+- [x] T157 [UNIT] Resolver los falsos positivos de argumentos `_url` mediante `argsIgnorePattern: '^_'` en la configuración ESLint de frontend/UI, manteniendo las variables locales bajo validación (generada por T124); prueba mínima: `pnpm --filter frontend lint` exitoso; desbloquea la reejecución de T124.
+- [x] T158 [UI] Configurar el override de `react-refresh/only-export-components` únicamente para `packages/ui/src/components/**/*.{ts,tsx}`, preservando la validación del resto del paquete y sin cambiar el comportamiento de los componentes (generada por T124); prueba mínima: `pnpm --filter @workspace/ui typecheck` y `pnpm --filter @workspace/ui lint` exitosos; desbloquea la reejecución de T124.
 
 ### Correctivas generadas por T121
 
