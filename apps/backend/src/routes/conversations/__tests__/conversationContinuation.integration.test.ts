@@ -133,6 +133,89 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
       idleObservations.forEach(({ unsubscribe }) => unsubscribe());
     }
   });
+
+  it('reproduces the busy rejection while active response persistence races with turn creation', async () => {
+    const providers = createControlledProviders();
+    const baseGates = Array.from({ length: 3 }, () => deferred());
+    const qwenGate = deferred();
+    providers.openai.enqueueBlocked(baseGates[0]!.promise);
+    providers.google.enqueueBlocked(baseGates[1]!.promise);
+    providers.minimax.enqueueBlocked(baseGates[2]!.promise);
+    providers.qwen.enqueueBlocked(qwenGate.promise);
+
+    const backend = createIntegrationBackend(pool, providers);
+    const secondPayload = { clientRequestId: SECOND_REQUEST_ID, prompt: 'Turn activo' };
+    let secondIdle: IdleObservation | undefined;
+    let firstPostgresError: string | undefined;
+
+    try {
+      const created = await request(backend.app)
+        .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
+        .send(secondPayload);
+      expect(created.status).toBe(202);
+      expect(created.body.turn).toMatchObject({ ordinal: 2, ...secondPayload });
+      secondIdle = observeIdle(backend.publisher, created.body.turn.id);
+
+      await Promise.all([
+        providers.openai.waitUntilCalled(),
+        providers.google.waitUntilCalled(),
+        providers.minimax.waitUntilCalled(),
+      ]);
+
+      // Start the contender before releasing provider gates. This leaves the
+      // two real transactions to contend on the conversation row without any
+      // timing padding or private repository hooks.
+      const busyPromise = request(backend.app)
+        .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
+        .send({ clientRequestId: THIRD_REQUEST_ID, prompt: 'No debe crearse' })
+        .then(response => {
+          firstPostgresError ??= postgresCode(response.body);
+          return response;
+        });
+      baseGates.forEach(gate => gate.resolve());
+
+      await providers.qwen.waitUntilCalled();
+      qwenGate.resolve();
+      const [busy] = await Promise.all([busyPromise, secondIdle.promise]);
+
+      expect(
+        { status: busy.status, body: safeResponseBody(busy.body), firstPostgresError },
+        'T168 busy response (safe status/body only)'
+      ).toMatchObject({
+        status: 409,
+        body: { code: 'CONVERSATION_BUSY' },
+      });
+      expect(providers.openai.calls).toHaveLength(1);
+      expect(providers.google.calls).toHaveLength(1);
+      expect(providers.minimax.calls).toHaveLength(1);
+      expect(providers.qwen.calls).toHaveLength(1);
+
+      const persisted = await pool.query<{
+        ordinal: number;
+        client_request_id: string;
+        status: string;
+      }>(
+        `SELECT ordinal, client_request_id::text, status
+           FROM turns
+          WHERE conversation_id = $1
+          ORDER BY ordinal`,
+        [CONVERSATION_ID]
+      );
+      expect(persisted.rows).toEqual([
+        {
+          ordinal: 1,
+          client_request_id: '73100000-0000-4000-8000-000000000177',
+          status: 'completed',
+        },
+        { ordinal: 2, client_request_id: SECOND_REQUEST_ID, status: 'completed' },
+      ]);
+    } finally {
+      baseGates.forEach(gate => gate.resolve());
+      qwenGate.resolve();
+      await backend.conversationService.stop();
+      secondIdle?.unsubscribe();
+    }
+  });
 });
 
 interface IdleObservation {
@@ -154,6 +237,26 @@ function observeIdle(
     });
   });
   return { promise, unsubscribe: () => unsubscribe() };
+}
+
+function safeResponseBody(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== 'object') return {};
+  const value = body as Record<string, unknown>;
+  return {
+    code: typeof value.code === 'string' ? value.code : undefined,
+    message: typeof value.message === 'string' ? value.message : undefined,
+    requestId: typeof value.requestId === 'string' ? value.requestId : undefined,
+  };
+}
+
+function postgresCode(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const debug = (body as Record<string, unknown>).debug;
+  if (!debug || typeof debug !== 'object') return undefined;
+  const postgres = (debug as Record<string, unknown>).postgres;
+  if (!postgres || typeof postgres !== 'object') return undefined;
+  const code = (postgres as Record<string, unknown>).code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 async function seedCompletedConversation(pool: Pool): Promise<void> {

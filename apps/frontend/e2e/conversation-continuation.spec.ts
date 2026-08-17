@@ -19,6 +19,49 @@ function waitForTurnStream(page: Page): Promise<Response> {
   );
 }
 
+async function waitForTerminalTurn(
+  page: Page,
+  conversationId: string,
+  turnId: string,
+): Promise<void> {
+  await page.evaluate(
+    ({ backendOrigin, conversationId: id, turnId: currentTurnId }) =>
+      new Promise<void>((resolve, reject) => {
+        const source = new EventSource(
+          `${backendOrigin}/api/v1/conversations/${id}/turns/${currentTurnId}/events`,
+        );
+        let terminal = false;
+        let idle = false;
+
+        const finish = (): void => {
+          if (!terminal || !idle) return;
+          source.close();
+          resolve();
+        };
+
+        source.addEventListener('turn_update', event => {
+          const data = JSON.parse((event as MessageEvent<string>).data) as {
+            turn?: { status?: string };
+          };
+          terminal = ['completed', 'partial', 'failed'].includes(data.turn?.status ?? '');
+          finish();
+        });
+        source.addEventListener('busy_update', event => {
+          const data = JSON.parse((event as MessageEvent<string>).data) as {
+            hasWorkInProgress?: boolean;
+          };
+          idle = data.hasWorkInProgress === false;
+          finish();
+        });
+        source.addEventListener('error', () => {
+          source.close();
+          reject(new Error('Auxiliary conversation SSE failed before terminal state'));
+        });
+      }),
+    { backendOrigin: E2E_BACKEND_ORIGIN, conversationId, turnId },
+  );
+}
+
 async function submitPrompt(page: Page, prompt: string, path: RegExp) {
   const responsePromise = page.waitForResponse(
     response =>
@@ -61,6 +104,7 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
   expect(continuation.result.turn.ordinal).toBe(2);
 
   let otherConversationId: string | undefined;
+  let otherTurnId: string | undefined;
   try {
     await expect(
       page.getByRole('status').filter({ hasText: 'Procesando respuestas' })
@@ -90,13 +134,15 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
     expect(otherConversation.status()).toBe(202);
     const otherResult = (await otherConversation.json()) as ConversationTurnResponse;
     otherConversationId = otherResult.conversation.id;
+    otherTurnId = otherResult.turn.id;
     expect(otherConversationId).not.toBe(initial.result.conversation.id);
   } finally {
     const release = await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
       params: { prompt: scenarioPrompts.continuationBusy },
     });
     expect(release.status()).toBe(204);
-    if (otherConversationId) {
+    if (otherConversationId && otherTurnId) {
+      await waitForTerminalTurn(page, otherConversationId, otherTurnId);
       const cleanup = await request.delete(
         `${E2E_BACKEND_ORIGIN}/__e2e/conversations/${otherConversationId}`
       );
