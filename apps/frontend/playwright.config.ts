@@ -25,6 +25,7 @@ export default defineConfig({
       env: {
         MODELFUSE_E2E_RUN_ID: runId,
         MODELFUSE_TEST_DATABASE_URL: process.env.MODELFUSE_TEST_DATABASE_URL ?? '',
+        NODE_OPTIONS: '--conditions=development',
         NODE_ENV: 'test',
         FRONTEND_URL_LOCALHOST: E2E_FRONTEND_ORIGIN,
       },
