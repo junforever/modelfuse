@@ -19,7 +19,7 @@ test('starts one local draft and persists its first prompt without inheriting pr
   await page.goto('/');
   const previous = await submitPrompt(page, previousPrompt, CREATE_CONVERSATION);
   await previous.stream.finished();
-  await expect(page.getByRole('button', { name: 'Enviar' })).toBeEnabled();
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 
   const sidebar = page.getByRole('navigation', { name: 'Conversaciones' });
   const writesWhileStartingDraft: string[] = [];

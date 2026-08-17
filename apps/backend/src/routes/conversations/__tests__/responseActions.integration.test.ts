@@ -160,8 +160,8 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     expect(ineligible.body.code).toBe('RESPONSE_NOT_RETRYABLE');
   });
 
-  it('persists Continue-without for any failed base without changing recoverability or invoking providers', async () => {
-    await seedFailedTurn(pool, { slot: 'minimax', recoverable: false });
+  it('persists Continue-without and rejects a later retry without mutation or provider calls', async () => {
+    await seedFailedTurn(pool, { slot: 'minimax', recoverable: true });
     const providers = createControlledProviders();
     const backend = createIntegrationBackend(pool, providers);
 
@@ -172,7 +172,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
         expect.objectContaining({
           slot: 'minimax',
           status: 'failed',
-          recoverable: false,
+          recoverable: true,
           continuedWithout: true,
         }),
       ])
@@ -187,13 +187,24 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
          FROM model_responses WHERE turn_id = $1 AND slot = 'minimax'`,
       [TURN_ID]
     );
-    expect(persisted.rows[0]).toMatchObject({ status: 'failed', error_recoverable: false });
+    expect(persisted.rows[0]).toMatchObject({ status: 'failed', error_recoverable: true });
     expect(persisted.rows[0].continued_without_at).toBeInstanceOf(Date);
+
+    const stateBeforeRetry = await readPersistedActionState(pool);
+    const providerCallsBeforeRetry = Object.values(providers).flatMap(({ calls }) => calls);
+    expect(providerCallsBeforeRetry).toHaveLength(0);
 
     const retry = await request(backend.app).post(actionPath('minimax', 'retry'));
     expect(retry.status).toBe(409);
-    expect(retry.body.code).toBe('RESPONSE_NOT_RETRYABLE');
-    expect(Object.values(providers).flatMap(({ calls }) => calls)).toHaveLength(0);
+    expect(retry.body).toEqual({
+      code: 'RESPONSE_NOT_RETRYABLE',
+      message: 'The response is not retryable.',
+      requestId: expect.any(String),
+    });
+    expect(await readPersistedActionState(pool)).toEqual(stateBeforeRetry);
+    expect(Object.values(providers).flatMap(({ calls }) => calls)).toHaveLength(
+      providerCallsBeforeRetry.length
+    );
   });
 });
 
@@ -213,6 +224,23 @@ function waitForIdle(
       }
     });
   });
+}
+
+async function readPersistedActionState(pool: Pool): Promise<Record<string, unknown>[]> {
+  const state = await pool.query<Record<string, unknown>>(
+    `SELECT mr.slot, mr.status, mr.content, mr.error_code, mr.error_message,
+            mr.error_recoverable, mr.continued_without_at, mr.attempt_no,
+            mr.started_at, mr.completed_at, mr.updated_at,
+            t.status AS turn_status, t.updated_at AS turn_updated_at,
+            c.updated_at AS conversation_updated_at
+       FROM model_responses mr
+       JOIN turns t ON t.id = mr.turn_id
+       JOIN conversations c ON c.id = t.conversation_id
+      WHERE mr.turn_id = $1
+      ORDER BY mr.slot`,
+    [TURN_ID]
+  );
+  return state.rows;
 }
 
 async function seedFailedTurn(

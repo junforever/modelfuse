@@ -55,11 +55,17 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
     }
     const { app, publisher } = createIntegrationBackend(pool, providers);
     const secondPayload = { clientRequestId: SECOND_REQUEST_ID, prompt: 'Segundo turno' };
+    const idleObservations: IdleObservation[] = [];
 
     try {
       const created = await request(app)
         .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
         .send(secondPayload);
+      const secondIdle =
+        created.status === 202 && created.body.turn?.id
+          ? observeIdle(publisher, created.body.turn.id)
+          : undefined;
+      if (secondIdle) idleObservations.push(secondIdle);
       expect(created.status).toBe(202);
       expect(created.body.turn).toMatchObject({ ordinal: 2, ...secondPayload });
 
@@ -80,19 +86,22 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
         providers.google.waitUntilCalled(1),
         providers.minimax.waitUntilCalled(1),
       ]);
-      const secondIdle = waitForIdle(publisher, created.body.turn.id);
       gates.slice(0, 3).forEach(gate => gate.resolve());
-      await secondIdle;
+      await secondIdle?.promise;
 
       const third = await request(app)
         .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
         .send({ clientRequestId: THIRD_REQUEST_ID, prompt: 'Tercer turno' });
+      const thirdIdle =
+        third.status === 202 && third.body.turn?.id
+          ? observeIdle(publisher, third.body.turn.id)
+          : undefined;
+      if (thirdIdle) idleObservations.push(thirdIdle);
       expect(third.status).toBe(202);
       expect(third.body.turn).toMatchObject({ ordinal: 3, clientRequestId: THIRD_REQUEST_ID });
 
-      const thirdIdle = waitForIdle(publisher, third.body.turn.id);
       gates.slice(3).forEach(gate => gate.resolve());
-      await thirdIdle;
+      await thirdIdle?.promise;
 
       const persisted = await pool.query<{
         ordinal: number;
@@ -120,28 +129,31 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
       expect(providers.qwen.calls).toHaveLength(2);
     } finally {
       gates.forEach(gate => gate.resolve());
+      await Promise.all(idleObservations.map(({ promise }) => promise));
+      idleObservations.forEach(({ unsubscribe }) => unsubscribe());
     }
   });
 });
 
-function waitForIdle(
+interface IdleObservation {
+  promise: Promise<void>;
+  unsubscribe: () => void;
+}
+
+function observeIdle(
   publisher: { subscribe: (turnId: string, listener: (event: any) => void) => () => void },
   turnId: string
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let unsubscribe: () => void = () => undefined;
-    const timeout = setTimeout(() => {
-      unsubscribe();
-      reject(new Error(`Turn ${turnId} did not become idle`));
-    }, 5_000);
+): IdleObservation {
+  let unsubscribe: () => void = () => undefined;
+  const promise = new Promise<void>(resolve => {
     unsubscribe = publisher.subscribe(turnId, event => {
       if (event.event === 'busy_update' && event.data.hasWorkInProgress === false) {
-        clearTimeout(timeout);
         unsubscribe();
         resolve();
       }
     });
   });
+  return { promise, unsubscribe: () => unsubscribe() };
 }
 
 async function seedCompletedConversation(pool: Pool): Promise<void> {

@@ -82,7 +82,7 @@ describe('conversation continuation frontend integration', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps both turns cached by ID and replaces the active SSE stream after one idempotent follow-up', async () => {
+  it('keeps both turns cached by ID and opens one SSE stream for the active follow-up', async () => {
     const user = userEvent.setup();
     const first = result(FIRST_TURN_ID, FIRST_REQUEST_ID, 1, 'Primer prompt', false);
     const second = result(SECOND_TURN_ID, SECOND_REQUEST_ID, 2, 'Segundo prompt', true);
@@ -113,7 +113,7 @@ describe('conversation continuation frontend integration', () => {
       clientRequestId: FIRST_REQUEST_ID,
       prompt: 'Primer prompt',
     });
-    expect(ControlledEventSource.instances).toHaveLength(1);
+    expect(ControlledEventSource.instances).toHaveLength(0);
 
     await user.clear(screen.getByLabelText('Prompt'));
     await user.type(screen.getByLabelText('Prompt'), 'Segundo prompt');
@@ -131,12 +131,10 @@ describe('conversation continuation frontend integration', () => {
     expect(screen.getByText('Primer prompt')).toBeInTheDocument();
     expect(screen.getByText('Segundo prompt')).toBeInTheDocument();
 
-    await waitFor(() => expect(ControlledEventSource.instances).toHaveLength(2));
-    expect(new URL(ControlledEventSource.instances[1]!.url).pathname).toBe(
+    await waitFor(() => expect(ControlledEventSource.instances).toHaveLength(1));
+    expect(new URL(ControlledEventSource.instances[0]!.url).pathname).toBe(
       `/api/v1/conversations/${CONVERSATION_ID}/turns/${SECOND_TURN_ID}/events`
     );
-    expect(ControlledEventSource.instances[0]!.closeCalls).toBe(1);
-    expect(ControlledEventSource.instances[0]!.listenerCount()).toBe(0);
 
     expect(
       queryClient.getQueryData(conversationKeys.turn(CONVERSATION_ID, FIRST_TURN_ID))
@@ -146,8 +144,8 @@ describe('conversation continuation frontend integration', () => {
     ).toMatchObject({ turnId: SECOND_TURN_ID, turn: { ordinal: 2 } });
 
     unmount();
-    expect(ControlledEventSource.instances[1]!.closeCalls).toBe(1);
-    expect(ControlledEventSource.instances[1]!.listenerCount()).toBe(0);
+    expect(ControlledEventSource.instances[0]!.closeCalls).toBe(1);
+    expect(ControlledEventSource.instances[0]!.listenerCount()).toBe(0);
     queryClient.clear();
   });
 });

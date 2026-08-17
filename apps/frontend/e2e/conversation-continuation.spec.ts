@@ -26,8 +26,12 @@ async function submitPrompt(page: Page, prompt: string, path: RegExp) {
   );
   const streamPromise = waitForTurnStream(page);
 
-  await page.getByRole('textbox', { name: 'Prompt' }).fill(prompt);
-  await page.getByRole('button', { name: 'Enviar' }).click();
+  const composer = page.getByRole('textbox', { name: 'Prompt' });
+  const submit = page.getByRole('button', { name: 'Enviar' });
+  await expect(composer).toBeEditable();
+  await composer.fill(prompt);
+  await expect(submit).toBeEnabled();
+  await submit.click();
 
   const response = await responsePromise;
   expect(response.status()).toBe(202);
@@ -46,7 +50,7 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
 
   const initial = await submitPrompt(page, scenarioPrompts.comparison, /\/api\/v1\/conversations$/);
   await initial.stream.finished();
-  await expect(page.getByRole('button', { name: 'Enviar' })).toBeEnabled();
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 
   const continuation = await submitPrompt(
     page,
@@ -101,7 +105,7 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
   }
 
   await continuation.stream.finished();
-  await expect(page.getByRole('button', { name: 'Enviar' })).toBeEnabled();
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 
   const secondTurn = page.getByRole('article', { name: 'Turno 2' });
   await expect(page.getByRole('article', { name: 'Turno 1' })).toBeVisible();

@@ -54,12 +54,16 @@ describe('conversation creation REST/PostgreSQL', () => {
     providers.google.enqueueBlocked(releases[1].promise);
     providers.minimax.enqueueBlocked(releases[2].promise);
     const { app, publisher } = createIntegrationBackend(pool, providers);
+    let idle: IdleObservation | undefined;
 
     try {
       const response = await request(app).post('/api/v1/conversations').send({
         clientRequestId: CREATE_IDS[0],
         prompt: 'Compare atomic persistence.',
       });
+      if (response.status === 202 && response.body.turn?.id) {
+        idle = observeIdle(publisher, response.body.turn.id);
+      }
 
       expect(response.status).toBe(202);
       expect(response.body).toMatchObject({
@@ -89,11 +93,12 @@ describe('conversation creation REST/PostgreSQL', () => {
       );
       expect(rows.rows[0]).toEqual({ conversations: 1, turns: 1, responses: 4 });
 
-      const idle = waitForIdle(publisher, response.body.turn.id);
       releases.forEach(({ resolve }) => resolve());
-      await idle;
+      await idle?.promise;
     } finally {
       releases.forEach(({ resolve }) => resolve());
+      await idle?.promise;
+      idle?.unsubscribe();
     }
   });
 
@@ -151,12 +156,17 @@ describe('conversation creation REST/PostgreSQL', () => {
     providers.minimax.enqueueBlocked(releases[2].promise);
     const { app, publisher } = createIntegrationBackend(pool, providers);
     const create = { clientRequestId: CREATE_IDS[2], prompt: 'Concurrent replay prompt.' };
+    let idle: IdleObservation | undefined;
 
     try {
       const [first, replay] = await Promise.all([
         request(app).post(`/api/v1/conversations/${SEEDED_CONVERSATION_ID}/turns`).send(create),
         request(app).post(`/api/v1/conversations/${SEEDED_CONVERSATION_ID}/turns`).send(create),
       ]);
+
+      if (first.status === 202 && first.body.turn?.id) {
+        idle = observeIdle(publisher, first.body.turn.id);
+      }
 
       expect([first.status, replay.status]).toEqual([202, 202]);
       expect(replay.body.turn.id).toBe(first.body.turn.id);
@@ -190,11 +200,12 @@ describe('conversation creation REST/PostgreSQL', () => {
       expect(providers.google.calls).toHaveLength(1);
       expect(providers.minimax.calls).toHaveLength(1);
 
-      const idle = waitForIdle(publisher, first.body.turn.id);
       releases.forEach(({ resolve }) => resolve());
-      await idle;
+      await idle.promise;
     } finally {
       releases.forEach(({ resolve }) => resolve());
+      await idle?.promise;
+      idle?.unsubscribe();
     }
   });
 
@@ -210,38 +221,50 @@ describe('conversation creation REST/PostgreSQL', () => {
     const { app, publisher } = createIntegrationBackend(pool, providers);
     const eighty = `${'A'.repeat(78)}👩‍💻e\u0301`;
     const eightyOne = `${eighty}Z`;
+    const idleObservations: IdleObservation[] = [];
 
-    const exact = await request(app)
-      .post('/api/v1/conversations')
-      .send({
-        clientRequestId: CREATE_IDS[3],
-        prompt: `  ${eighty}  `,
-      });
-    const exactIdle = waitForIdle(publisher, exact.body.turn.id);
-    releases.slice(0, 3).forEach(({ resolve }) => resolve());
-    await exactIdle;
-    const truncated = await request(app)
-      .post('/api/v1/conversations')
-      .send({
-        clientRequestId: CREATE_IDS[4],
-        prompt: `  ${eightyOne}  `,
-      });
-    const truncatedIdle = waitForIdle(publisher, truncated.body.turn.id);
-    releases.slice(3).forEach(({ resolve }) => resolve());
-    await truncatedIdle;
+    try {
+      const exact = await request(app)
+        .post('/api/v1/conversations')
+        .send({
+          clientRequestId: CREATE_IDS[3],
+          prompt: `  ${eighty}  `,
+        });
+      if (exact.status === 202 && exact.body.turn?.id) {
+        idleObservations.push(observeIdle(publisher, exact.body.turn.id));
+      }
+      releases.slice(0, 3).forEach(({ resolve }) => resolve());
+      await idleObservations.at(-1)?.promise;
 
-    expect(exact.status).toBe(202);
-    expect(truncated.status).toBe(202);
-    expect(exact.body.conversation.title).toBe(eighty);
-    expect(truncated.body.conversation.title).toBe(eighty);
+      const truncated = await request(app)
+        .post('/api/v1/conversations')
+        .send({
+          clientRequestId: CREATE_IDS[4],
+          prompt: `  ${eightyOne}  `,
+        });
+      if (truncated.status === 202 && truncated.body.turn?.id) {
+        idleObservations.push(observeIdle(publisher, truncated.body.turn.id));
+      }
+      releases.slice(3).forEach(({ resolve }) => resolve());
+      await idleObservations.at(-1)?.promise;
 
-    const titles = await pool.query<{ title: string }>(
-      `SELECT title FROM conversations
-        WHERE create_client_request_id = ANY($1::uuid[])
-        ORDER BY create_client_request_id`,
-      [[CREATE_IDS[3], CREATE_IDS[4]]]
-    );
-    expect(titles.rows.map(({ title }) => title)).toEqual([eighty, eighty]);
+      expect(exact.status).toBe(202);
+      expect(truncated.status).toBe(202);
+      expect(exact.body.conversation.title).toBe(eighty);
+      expect(truncated.body.conversation.title).toBe(eighty);
+
+      const titles = await pool.query<{ title: string }>(
+        `SELECT title FROM conversations
+          WHERE create_client_request_id = ANY($1::uuid[])
+          ORDER BY create_client_request_id`,
+        [[CREATE_IDS[3], CREATE_IDS[4]]]
+      );
+      expect(titles.rows.map(({ title }) => title)).toEqual([eighty, eighty]);
+    } finally {
+      releases.forEach(({ resolve }) => resolve());
+      await Promise.all(idleObservations.map(({ promise }) => promise));
+      idleObservations.forEach(({ unsubscribe }) => unsubscribe());
+    }
   });
 
   it('reconciles every active slot when an unexpected publisher failure escapes after 202', async () => {
@@ -255,6 +278,7 @@ describe('conversation creation REST/PostgreSQL', () => {
     const terminal = deferred();
     let unsubscribe: () => void = () => undefined;
     let failureListenerInstalled = false;
+    let acceptedWork = false;
 
     vi.spyOn(backend.publisher, 'publish').mockImplementation(event => {
       if (!failureListenerInstalled) {
@@ -275,12 +299,10 @@ describe('conversation creation REST/PostgreSQL', () => {
         prompt: 'Reconcile an unexpected post-acceptance failure.',
       });
       expect(accepted.status).toBe(202);
+      acceptedWork = true;
 
       releases.forEach(({ resolve }) => resolve());
-      const converged = await Promise.race([
-        terminal.promise.then(() => true),
-        new Promise<false>(resolve => setTimeout(() => resolve(false), 2_000)),
-      ]);
+      await terminal.promise;
 
       const persisted = await pool.query<{ status: string; count: number }>(
         `SELECT status, count(*)::int AS count
@@ -300,26 +322,33 @@ describe('conversation creation REST/PostgreSQL', () => {
       expect(snapshot.status).toBe(200);
       expect(snapshot.body.conversation.hasWorkInProgress).toBe(false);
       expect(['completed', 'partial', 'failed']).toContain(snapshot.body.turn.status);
-      expect(converged).toBe(true);
     } finally {
-      unsubscribe();
       releases.forEach(({ resolve }) => resolve());
+      if (acceptedWork) await terminal.promise;
+      unsubscribe();
     }
   });
 });
 
-function waitForIdle(
+interface IdleObservation {
+  promise: Promise<void>;
+  unsubscribe: () => void;
+}
+
+function observeIdle(
   publisher: { subscribe: (turnId: string, listener: (event: any) => void) => () => void },
   turnId: string
-): Promise<void> {
-  return new Promise(resolve => {
-    const unsubscribe = publisher.subscribe(turnId, event => {
+): IdleObservation {
+  let unsubscribe: () => void = () => undefined;
+  const promise = new Promise<void>(resolve => {
+    unsubscribe = publisher.subscribe(turnId, event => {
       if (event.event === 'busy_update' && event.data.hasWorkInProgress === false) {
         unsubscribe();
         resolve();
       }
     });
   });
+  return { promise, unsubscribe: () => unsubscribe() };
 }
 
 async function seedCompletedConversation(pool: Pool): Promise<void> {

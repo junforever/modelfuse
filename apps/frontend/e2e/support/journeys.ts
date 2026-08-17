@@ -20,8 +20,12 @@ export async function submitPrompt(page: Page, prompt: string, endpoint: RegExp)
   );
   const streamPromise = waitForTurnStream(page);
 
-  await page.getByRole('textbox', { name: 'Prompt' }).fill(prompt);
-  await page.getByRole('button', { name: 'Enviar' }).click();
+  const composer = page.getByRole('textbox', { name: 'Prompt' });
+  const submit = page.getByRole('button', { name: 'Enviar' });
+  await expect(composer).toBeEditable();
+  await composer.fill(prompt);
+  await expect(submit).toBeEnabled();
+  await submit.click();
 
   const response = await responsePromise;
   expect(response.status()).toBe(202);

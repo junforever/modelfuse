@@ -20,7 +20,7 @@ test('reopens only the latest three turns and prepends history in 3/3/1 blocks',
     );
     expect(submission.result.turn.ordinal).toBe(ordinal);
     await submission.stream.finished();
-    await expect(page.getByRole('button', { name: 'Enviar' })).toBeEnabled();
+    await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
   }
 
   await page.reload();

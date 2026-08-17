@@ -171,6 +171,21 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === 'POST' && url.pathname === '/__e2e/shutdown') {
+    if (request.headers['x-modelfuse-e2e-run-id'] !== runId) {
+      response.statusCode = 403;
+      response.end();
+      return;
+    }
+
+    response.statusCode = 204;
+    response.once('finish', () => {
+      setImmediate(() => exitAfterShutdown());
+    });
+    response.end();
+    return;
+  }
+
   if (request.method === 'POST' && url.pathname === '/__e2e/release-continuation') {
     const prompt = url.searchParams.get('prompt');
     if (!prompt || !prompt.includes(`[run:${runId}:`)) {
@@ -240,10 +255,20 @@ async function shutdown(): Promise<void> {
   await pool.end();
 }
 
+function exitAfterShutdown(): void {
+  void shutdown().then(
+    () => process.exit(0),
+    error => {
+      console.error(
+        `ModelFuse E2E backend shutdown failed: ${error instanceof Error ? error.message : 'unknown error'}`
+      );
+      process.exit(1);
+    }
+  );
+}
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
-    void shutdown().then(() => {
-      process.exitCode = 0;
-    });
+    exitAfterShutdown();
   });
 }

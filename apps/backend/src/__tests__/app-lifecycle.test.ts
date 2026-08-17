@@ -171,12 +171,14 @@ describe('backend application lifecycle', () => {
       ]);
 
       let stopped = false;
+      const admissionClosed = new Promise<void>(resolve => {
+        server!.once('close', () => resolve());
+      });
       const stopping = stopServer(server).then(() => {
         stopped = true;
       });
-      await expect(
-        fetch(`${baseUrl}/api/v1/conversations`, { signal: AbortSignal.timeout(2_000) })
-      ).rejects.toThrow();
+      await admissionClosed;
+      await expect(request(baseUrl).get('/api/v1/conversations')).rejects.toThrow();
       expect(stopped).toBe(false);
 
       baseReleases.forEach(({ resolve }) => resolve());
@@ -260,10 +262,9 @@ describe('backend application lifecycle', () => {
 
     try {
       await recoveryStarted.promise;
-      await new Promise<void>(resolve => setImmediate(resolve));
+      await poolEndStarted.promise;
 
       expect(pool.end).toHaveBeenCalledOnce();
-      await expect(poolEndStarted.promise).resolves.toBeUndefined();
       expect(settled).not.toHaveBeenCalled();
 
       allowPoolEnd.resolve();

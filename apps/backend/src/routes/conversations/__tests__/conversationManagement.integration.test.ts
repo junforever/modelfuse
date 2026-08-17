@@ -180,10 +180,11 @@ async function seedConversation(
         is_stale, attempt_no, started_at, completed_at, created_at, updated_at)
      SELECT gen_random_uuid(), $1, slot,
             CASE WHEN slot = 'qwen' THEN 'consolidator' ELSE 'base' END,
-            slot, slot || '-model', $2,
-            CASE WHEN $2 = 'completed' THEN slot || '-response' ELSE NULL END,
-            false, false, 1, $3,
-            CASE WHEN $2 = 'completed' THEN $3::timestamptz ELSE NULL END, $3, $3
+            slot, slot || '-model', $2::varchar,
+            CASE WHEN $2::varchar = 'completed' THEN slot || '-response' ELSE NULL END,
+            false, false, 1, $3::timestamptz,
+            CASE WHEN $2::varchar = 'completed' THEN $3::timestamptz ELSE NULL END,
+            $3::timestamptz, $3::timestamptz
        FROM unnest(ARRAY['openai', 'google', 'minimax', 'qwen']) AS slot`,
     [turnId, status, NOW],
   );

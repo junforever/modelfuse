@@ -53,9 +53,12 @@ test('renames during busy, blocks Delete, then deletes the conversation persiste
     ).toBeVisible();
 
     await sidebar.getByRole('button', { name: `Acciones de ${renamedTitle}` }).click();
-    const deleteItem = page.getByRole('menuitem', { name: 'Eliminar' });
+    const reopenedMenu = page.getByRole('menu');
+    const deleteItem = reopenedMenu.getByRole('menuitem', { name: 'Eliminar' });
     await expect(deleteItem).toBeDisabled();
-    await expect(page.getByText(/no se puede eliminar mientras.*proces/i)).toBeVisible();
+    await expect(
+      reopenedMenu.getByText(/no puedes eliminar mientras se procesan respuestas/i)
+    ).toBeVisible();
 
     const release = await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
       params: { prompt },
@@ -75,7 +78,7 @@ test('renames during busy, blocks Delete, then deletes the conversation persiste
     expect((await deleteResponsePromise).status()).toBe(204);
     await expect(deleteDialog).toBeHidden();
     await expect(sidebar.getByRole('button', { name: renamedTitle, exact: true })).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEnabled();
+    await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 
     await page.reload();
     await expect(sidebar.getByRole('button', { name: renamedTitle, exact: true })).toHaveCount(0);
@@ -114,6 +117,7 @@ test('shows a real-time update error when reopening a busy conversation loses SS
       .filter({ hasText: /actualización en tiempo real/i });
     await expect(streamError).toBeVisible();
     await expect(streamError).toContainText(/intenta.*más tarde/i);
+    await page.getByRole('textbox', { name: 'Prompt' }).fill('No debe enviarse durante busy');
     await expect(page.getByRole('button', { name: 'Enviar' })).toBeDisabled();
 
     const release = await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {

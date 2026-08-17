@@ -30,8 +30,6 @@ describe('ConversationRepository history PostgreSQL integration', () => {
 
   beforeEach(async () => {
     await deleteOwnedConversations(pool, OWNED_IDS);
-    await seedHistory(pool);
-    await seedSidebar(pool);
   });
 
   afterEach(async () => {
@@ -43,6 +41,7 @@ describe('ConversationRepository history PostgreSQL integration', () => {
   });
 
   it('keeps sidebar keyset traversal stable when a newer conversation is inserted', async () => {
+    await seedSidebar(pool);
     const first = await repository.listConversations(2);
 
     expect(first.items.map(({ id }) => id)).toEqual([SIDEBAR_IDS[3], SIDEBAR_IDS[2]]);
@@ -57,12 +56,15 @@ describe('ConversationRepository history PostgreSQL integration', () => {
     const second = await repository.listConversations(2, first.nextCursor ?? undefined);
 
     expect(second.items.map(({ id }) => id)).toEqual([SIDEBAR_IDS[1], SIDEBAR_IDS[0]]);
-    expect(second.nextCursor).toBeNull();
     expect([...first.items, ...second.items].map(({ id }) => id)).toHaveLength(4);
     expect(new Set([...first.items, ...second.items].map(({ id }) => id)).size).toBe(4);
+    expect([...first.items, ...second.items].map(({ id }) => id)).not.toContain(
+      INSERTED_AFTER_CURSOR_ID,
+    );
   });
 
   it('returns seven complete turns in chronological 3/3/1 blocks without gaps', async () => {
+    await seedHistory(pool);
     const recent = await repository.listTurns(HISTORY_ID);
     const middle = await repository.listTurns(HISTORY_ID, recent.olderCursor ?? undefined);
     const oldest = await repository.listTurns(HISTORY_ID, middle.olderCursor ?? undefined);
@@ -141,5 +143,6 @@ async function insertCompletedTurn(pool: Pool, conversationId: string, ordinal: 
 }
 
 function requestId(id: string, value: number): string {
-  return `${id.slice(0, -12)}${String(value).padStart(12, '0')}`;
+  const uniqueSuffix = BigInt(id.slice(-12)) + BigInt(value);
+  return `${id.slice(0, -12)}${String(uniqueSuffix).padStart(12, '0')}`;
 }

@@ -26,8 +26,12 @@ test('accepts a prompt, renders four final responses, and closes the turn stream
       )
   );
 
-  await page.getByRole('textbox', { name: 'Prompt' }).fill(scenarioPrompts.comparison);
-  await page.getByRole('button', { name: 'Enviar' }).click();
+  const composer = page.getByRole('textbox', { name: 'Prompt' });
+  const submit = page.getByRole('button', { name: 'Enviar' });
+  await expect(composer).toBeEditable();
+  await composer.fill(scenarioPrompts.comparison);
+  await expect(submit).toBeEnabled();
+  await submit.click();
 
   expect((await createResponsePromise).status()).toBe(202);
   const streamResponse = await streamResponsePromise;
@@ -41,6 +45,6 @@ test('accepts a prompt, renders four final responses, and closes the turn stream
   }
 
   await expect(page.getByRole('status').filter({ hasText: 'Procesando respuestas' })).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Enviar' })).toBeEnabled();
+  await expect(composer).toBeEditable();
   await streamResponse.finished();
 });

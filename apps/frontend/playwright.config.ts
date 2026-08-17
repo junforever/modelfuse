@@ -12,6 +12,7 @@ process.env.MODELFUSE_E2E_RUN_ID = runId;
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+  globalTeardown: './e2e/support/globalTeardown.ts',
   use: {
     baseURL: E2E_FRONTEND_ORIGIN,
     trace: 'on-first-retry',
@@ -30,16 +31,20 @@ export default defineConfig({
       url: `${E2E_BACKEND_ORIGIN}/__e2e/health`,
       reuseExistingServer: false,
       timeout: 30_000,
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
     },
     {
-      command: 'node node_modules/vite/bin/vite.js --host 127.0.0.1 --open false',
+      command:
+        'node --conditions=development ../backend/node_modules/tsx/dist/cli.mjs e2e/support/frontend.ts',
       cwd: import.meta.dirname,
       env: {
+        MODELFUSE_E2E_RUN_ID: runId,
         VITE_API_BASE_URL: E2E_API_BASE_URL,
       },
       url: E2E_FRONTEND_ORIGIN,
       reuseExistingServer: false,
       timeout: 30_000,
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
     },
   ],
 });

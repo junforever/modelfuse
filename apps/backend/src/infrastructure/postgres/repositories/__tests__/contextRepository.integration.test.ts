@@ -110,7 +110,7 @@ async function insertTurn(
   prompt: string
 ): Promise<void> {
   const namespace = conversationId === CONVERSATION_ID ? '71' : '72';
-  const suffix = String(ordinal).padStart(10, '0');
+  const suffix = String(ordinal).padStart(12, '0');
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
@@ -136,13 +136,14 @@ async function insertResponse(
   isStale = false
 ): Promise<void> {
   const namespace = conversationId === CONVERSATION_ID ? '71' : '72';
-  const turnSuffix = String(ordinal).padStart(10, '0');
+  const turnSuffix = String(ordinal).padStart(12, '0');
   await pool.query(
     `INSERT INTO model_responses
        (id, turn_id, slot, role, provider, model, status, content, error_code,
         error_recoverable, is_stale, attempt_no, completed_at, created_at, updated_at)
-     VALUES (gen_random_uuid(), $1, $2, $3, $2, $2 || '-model', $4, $5, $6,
-             false, $7, 1, $8, $8, $8)`,
+     VALUES (gen_random_uuid(), $1::uuid, $2::varchar, $3::varchar, $2::varchar,
+             $2::text || '-model', $4::varchar, $5::text, $6::varchar,
+             false, $7::boolean, 1, $8::timestamptz, $8::timestamptz, $8::timestamptz)`,
     [
       `${namespace}100000-0000-4000-8000-${turnSuffix}`,
       slot,
