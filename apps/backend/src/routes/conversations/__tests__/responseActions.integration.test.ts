@@ -12,6 +12,7 @@ import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
+  dropIntegrationSchema,
 } from '../../../test/integration/testDatabase.js';
 
 const CONVERSATION_ID = '20000000-0000-4000-8000-000000000043';
@@ -23,7 +24,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
   let pool: Pool;
 
   beforeAll(async () => {
-    pool = createIntegrationPool();
+    pool = createIntegrationPool({ schema: 'response_actions' });
     await assertModelFuseSchema(pool);
   });
 
@@ -36,6 +37,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
   });
 
   afterAll(async () => {
+    await dropIntegrationSchema(pool);
     await pool?.end();
   });
 

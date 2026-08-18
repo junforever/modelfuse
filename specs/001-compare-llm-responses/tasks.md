@@ -322,9 +322,9 @@ tema mediante un control accesible y visible en el header.
 - [ ] T118 [UX] Ejecutar SC-003 y SC-004 con el grupo predefinido en T117 y registrar por separado muestra prevista, al menos diez participantes válidos, exclusiones justificadas, numerador, denominador, porcentaje y `pass`/`fail` frente al 90% en `specs/001-compare-llm-responses/usability/sc-004-results.md` (depende de T117); tipo: aceptación Product/UX sin reconfiguración retrospectiva de la muestra.
 - [x] T119 [INTEGRATION] Ejecutar sobre PostgreSQL desechable migrate-from-zero, Liquibase validate, rollback explícito, comprobación del estado anterior, reaplicación de changesets y Liquibase validate final con `docker-compose.yml` y `db/changelogs/db.changelog-master.xml` (depende de T154); tipo: integration DB y quality gate técnico de Liquibase, nunca rollback de producto ni sobre datos que deban conservarse, sin corregir fallos dentro de esta tarea.
 - [x] T120 [P] [UNIT] Ejecutar las suites unitarias backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T154, T148); registrar fallos como tareas concretas.
-- [ ] T121 [P] [INTEGRATION] Ejecutar las suites de integración backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T154, T148); registrar fallos como tareas concretas.
+- [x] T121 [P] [INTEGRATION] Ejecutar las suites de integración backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T154, T148); registrar fallos como tareas concretas.
 - [x] T122 [E2E] Ejecutar Playwright con fakes desde `apps/frontend/playwright.config.ts` (depende de T154, T148 y de las historias implementadas); evidencia final: T174 ejecuta los siete specs y nueve tests con Chromium, 0 retries, exit 0 y cleanup completo.
-- [ ] T123 [P] [BE] Reejecutar `pnpm --filter backend build` desde `package.json` después de T175 (owner: `backend-builder`; depende de T154 y T175); prueba mínima: comando exitoso, sin errores TypeScript ni fallos de compilación.
+- [x] T123 [P] [BE] Reejecutar `pnpm --filter backend build` desde `package.json` después de T175 (owner: `backend-builder`; depende de T154 y T175); prueba mínima: comando exitoso, sin errores TypeScript ni fallos de compilación.
 - [x] T124 [P] [FE] Ejecutar `pnpm --filter frontend typecheck`, `pnpm --filter frontend lint`, `pnpm --filter frontend build`, `pnpm --filter @workspace/ui typecheck` y `pnpm --filter @workspace/ui lint` desde `package.json` (owner: `frontend-builder`; depende de T148); prueba mínima: cinco comandos exitosos, sin corregir hallazgos aquí.
 
 ### Correctivas generadas por T124
@@ -334,13 +334,14 @@ tema mediante un control accesible y visible en el header.
 
 ### Correctivas generadas por T123
 
-- [ ] T175 [INTEGRATION] Corregir el narrowing TypeScript de `idle` en `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts` (línea 204), manteniendo el cleanup determinista y sin modificar producción; prueba mínima: la suite focalizada de `conversationCreation.integration.test.ts` pasa y `pnpm --filter backend build` queda listo para reejecutarse (generada por T123).
+- [x] T175 [INTEGRATION] Corregir el narrowing TypeScript de `idle` en `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts` (línea 204), manteniendo el cleanup determinista y sin modificar producción; prueba mínima: la suite focalizada de `conversationCreation.integration.test.ts` pasa y `pnpm --filter backend build` queda listo para reejecutarse (generada por T123).
 
 ### Correctivas generadas por T121
 
 - [x] T159 [INTEGRATION] Corregir el escenario de nueva suscripción SSE en `apps/frontend/src/features/conversations/__tests__/conversation-continuation.test.tsx` para que el fixture seguido represente un turno realmente activo (`pending`/`running` y `hasWorkInProgress=true`) antes de esperar un `EventSource`, conservando por separado el contrato T142 que no abre streams para turnos terminales (generada por T121); prueba mínima: `conversation-continuation.test.tsx` y `useTurnEvents.test.tsx` exitosos mediante el script frontend; desbloquea la reejecución de T121.
 - [x] T160 [INTEGRATION] Corregir los fixtures PostgreSQL de `apps/backend/src/infrastructure/postgres/repositories/__tests__/contextRepository.integration.test.ts`, `conversationHistoryRepository.integration.test.ts` y `apps/backend/src/routes/conversations/__tests__/conversationManagement.integration.test.ts` para usar UUIDs válidos, `create_client_request_id` únicos y parámetros SQL con tipos compatibles, sin cambiar producción (generada por T121); prueba mínima: las tres suites focalizadas pasan contra PostgreSQL desechable migrado; desbloquea la reejecución de T121.
 - [x] T161 [INTEGRATION] Hacer deterministas `apps/backend/src/__tests__/app-lifecycle.test.ts`, `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts` y `conversationContinuation.integration.test.ts` mediante gates observables y cleanup explícito, sin sleeps, serialización ni aumento global del timeout (generada por T121); prueba mínima: las tres suites pasan con workers normales, sin retries ni handles abiertos, contra PostgreSQL desechable migrado; desbloquea la reejecución de T121.
+- [x] T176 [INTEGRATION] Corregir el arranque de workers de Vitest en `apps/frontend/vitest.config.ts` o su infraestructura de prueba para que la suite frontend de integración inicie de forma determinista bajo el runtime fijado, sin ocultar tests, serializar la suite ni añadir retries; prueba mínima: la suite frontend completa se ejecuta mediante el script declarado y todos los tests descubiertos pasan, desbloqueando la reejecución de T121 (generada por T121).
 
 ### Correctivas generadas por T122
 
@@ -352,7 +353,7 @@ tema mediante un control accesible y visible en el header.
 
 ### Correctivas generadas por las reejecuciones de T121 y T166
 
-- [ ] T167 [INTEGRATION] Aislar los fixtures PostgreSQL compartidos por `recovery.integration.test.ts`, `conversationManagement.integration.test.ts` y `responseActions.integration.test.ts` para eliminar deadlocks, contaminación de filas y carreras CAS entre suites con workers normales, sin serializar ni añadir retries (generada por la reejecución de T121); prueba mínima: las nueve suites backend pasan 37/37 contra PostgreSQL desechable migrado y la suite frontend conserva 23/23; desbloquea una nueva reejecución de T121.
+- [x] T167 [INTEGRATION] Aislar los fixtures PostgreSQL compartidos por `recovery.integration.test.ts`, `conversationManagement.integration.test.ts` y `responseActions.integration.test.ts` para eliminar deadlocks, contaminación de filas y carreras CAS entre suites con workers normales, sin serializar ni añadir retries (generada por la reejecución de T121); prueba mínima: las suites backend pasan sin deadlocks, contaminación ni carreras CAS contra PostgreSQL desechable migrado y la suite frontend conserva todos sus tests; desbloquea una nueva reejecución de T121.
 - [x] T168 [INTEGRATION] Reproducir con wiring HTTP y PostgreSQL reales la creación de un turno mientras la conversación sigue busy, demostrando `409 CONVERSATION_BUSY`, cuerpo seguro y cero mutaciones/providers adicionales (generada por T166); evidencia: `conversationContinuation.integration.test.ts`, 2/2 tests pasan contra PostgreSQL/Liquibase desechable y el POST concurrente devuelve 409 sin SQLSTATE.
 - [x] T169 [BE] Cerrar sin cambio de backend la hipótesis de traducción/frontera transaccional de la continuación durante trabajo activo: T168 pasa y el `500` observado originalmente solo en E2E se atribuyó a resolución mezclada `src`/`dist`, corregida en `apps/frontend/playwright.config.ts` mediante `NODE_OPTIONS=--conditions=development`; no se requiere modificación productiva.
 - [x] T170 [INTEGRATION] Revalidar el Retry posterior a Continue-without mediante el wiring y la forma de request usados por E2E, después de unificar la resolución de módulos del backend Playwright; evidencia: Continue-without `200`, Retry `409 RESPONSE_NOT_RETRYABLE`, cuerpo seguro, estado PostgreSQL inmutable y cero llamadas provider adicionales contra PostgreSQL/Liquibase desechable.
@@ -411,7 +412,7 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
 - Quality gates: `T154 → T114–T116/T119/T123`; `T148 → T117/T124`;
   `T154/T148 → T120–T122`; `T117 → T118`.
 - Correctivas de quality gates: `T157/T158 → reejecutar T124`; `T175 → reejecutar T123`;
-  `T159/T160/T161 → reejecutar T121 → T167 → reejecutar T121`;
+  `T159/T160/T161 → reejecutar T121 → T167/T176 → reejecutar T121`;
   `T163 → T164`; `T162/T164/T165 → T166`;
   `T168 → T169`; `T170 → T171`; `T172 → T173`;
   `T169/T171/T173 → T174 → cerrar T166/T122`.

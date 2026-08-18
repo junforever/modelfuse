@@ -201,6 +201,9 @@ describe('conversation creation REST/PostgreSQL', () => {
       expect(providers.minimax.calls).toHaveLength(1);
 
       releases.forEach(({ resolve }) => resolve());
+      if (!idle) {
+        throw new Error('Expected an idle observation for the accepted replay');
+      }
       await idle.promise;
     } finally {
       releases.forEach(({ resolve }) => resolve());

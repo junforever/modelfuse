@@ -8,6 +8,7 @@ import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
+  dropIntegrationSchema,
 } from '../../../test/integration/testDatabase.js';
 
 const IDLE_ID = '91000000-0000-4000-8000-000000000091';
@@ -20,7 +21,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
   let app: ReturnType<typeof createIntegrationBackend>['app'];
 
   beforeAll(async () => {
-    pool = createIntegrationPool();
+    pool = createIntegrationPool({ schema: 'conversation_management' });
     await assertModelFuseSchema(pool);
     app = createIntegrationBackend(pool, createControlledProviders()).app;
   });
@@ -36,6 +37,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
   });
 
   afterAll(async () => {
+    await dropIntegrationSchema(pool);
     await pool?.end();
   });
 

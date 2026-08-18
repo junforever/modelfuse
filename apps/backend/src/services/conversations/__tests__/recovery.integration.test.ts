@@ -9,6 +9,7 @@ import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
+  dropIntegrationSchema,
 } from '../../../test/integration/testDatabase.js';
 import {
   RECOVERY_FIXTURE_VERSION,
@@ -24,7 +25,7 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
   let pool: Pool;
 
   beforeAll(async () => {
-    pool = createIntegrationPool();
+    pool = createIntegrationPool({ schema: 'recovery' });
     await assertModelFuseSchema(pool);
   });
 
@@ -38,6 +39,7 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
   });
 
   afterAll(async () => {
+    await dropIntegrationSchema(pool);
     await pool?.end();
   });
 
