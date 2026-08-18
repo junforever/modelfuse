@@ -18,13 +18,6 @@ export function createTurnEventsController(
   return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
     const { conversationId, turnId } = (request as ValidatedRequest).validatedParams as TurnParams;
 
-    try {
-      await conversationService.getTurn(conversationId, turnId);
-    } catch (error) {
-      next(error);
-      return;
-    }
-
     const buffer: TurnEvent[] = [];
     let opening = true;
     let closed = false;

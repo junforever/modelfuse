@@ -48,7 +48,7 @@ describe('turn SSE protocol/PostgreSQL', () => {
     await seedTurn(pool, CONVERSATION_ID, TURN_ID, 'completed');
     await seedTurn(pool, OTHER_CONVERSATION_ID, OTHER_TURN_ID, 'completed');
     const backend = createIntegrationBackend(pool, createControlledProviders());
-    const unsubscribe = observeUnsubscribe(backend.publisher);
+    const observation = observeUnsubscribe(backend.publisher);
 
     const mismatch = await request(backend.app).get(
       `/api/v1/conversations/${CONVERSATION_ID}/turns/${OTHER_TURN_ID}/events`
@@ -90,7 +90,11 @@ describe('turn SSE protocol/PostgreSQL', () => {
         'Final minimax response',
         'Final qwen response',
       ]);
-      expect(unsubscribe).toHaveBeenCalledOnce();
+      expect(observation.subscribed.mock.calls.map(([turnId]) => turnId)).toEqual([
+        OTHER_TURN_ID,
+        TURN_ID,
+      ]);
+      expect(observation.unsubscribed).toHaveBeenCalledTimes(2);
     } finally {
       await stream.close();
     }
@@ -161,8 +165,16 @@ describe('turn SSE protocol/PostgreSQL', () => {
     let subscribed = false;
     const snapshotRead = gateSnapshotConversationRead(pool, () => subscribed);
     const backend = createIntegrationBackend(snapshotRead.pool, createControlledProviders());
-    const unsubscribe = observeUnsubscribe(backend.publisher, () => {
+    const observation = observeUnsubscribe(backend.publisher, () => {
       subscribed = true;
+      backend.publisher.publish({
+        event: 'slot_update',
+        data: {
+          conversationId: CONVERSATION_ID,
+          turnId: TURN_ID,
+          response: response('openai', 'pending', null, UPDATED_AT, 0),
+        },
+      });
     });
     const opening = openSse(
       backend.app,
@@ -196,6 +208,24 @@ describe('turn SSE protocol/PostgreSQL', () => {
       client.release();
     }
 
+    backend.publisher.publish({
+      event: 'slot_update',
+      data: {
+        conversationId: CONVERSATION_ID,
+        turnId: TURN_ID,
+        response: response('openai', 'completed', 'Old openai response', '2026-08-07T09:59:59.000Z', 99),
+      },
+    });
+    for (const content of ['Concurrent openai response 1', 'Concurrent openai response 2']) {
+      backend.publisher.publish({
+        event: 'slot_update',
+        data: {
+          conversationId: CONVERSATION_ID,
+          turnId: TURN_ID,
+          response: response('openai', 'completed', content, CONCURRENT_UPDATED_AT, 1),
+        },
+      });
+    }
     for (const slot of ['openai', 'google', 'minimax', 'qwen'] as const) {
       backend.publisher.publish({
         event: 'slot_update',
@@ -227,9 +257,10 @@ describe('turn SSE protocol/PostgreSQL', () => {
 
     const stream = await opening;
     try {
+      expect(snapshotRead.subscribedBeforeRead()).toBe(true);
       const snapshot = await readEvents(stream.nextEvent, 6);
       const drained = await readUntilClosed(stream.nextEvent);
-      expect(snapshot.map(({ data }) => data.eventSequence)).toEqual([0, 0, 0, 0, 0, 0]);
+      expect(snapshot.map(({ data }) => data.eventSequence)).toEqual([1, 1, 1, 1, 1, 1]);
       expect(snapshot.at(-1)).toMatchObject({
         event: 'busy_update',
         data: { hasWorkInProgress: true },
@@ -244,10 +275,25 @@ describe('turn SSE protocol/PostgreSQL', () => {
         'slot_update',
         'slot_update',
         'slot_update',
+        'slot_update',
+        'slot_update',
         'turn_update',
         'busy_update',
       ]);
-      expect(drained.map(({ data }) => data.eventSequence)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(drained.map(({ data }) => data.eventSequence)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(
+        drained
+          .filter(
+            item =>
+              item.event === 'slot_update' &&
+              (item.data.response as ModelResponse).slot === 'openai',
+          )
+          .map(({ data }) => (data.response as ModelResponse).content),
+      ).toEqual([
+        'Concurrent openai response 1',
+        'Concurrent openai response 2',
+        'Concurrent openai',
+      ]);
       expect(drained.at(-1)).toMatchObject({
         event: 'busy_update',
         data: { hasWorkInProgress: false },
@@ -256,7 +302,8 @@ describe('turn SSE protocol/PostgreSQL', () => {
       snapshotRead.release();
       await stream.close();
     }
-    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(observation.subscribed).toHaveBeenCalledOnce();
+    expect(observation.unsubscribed).toHaveBeenCalledOnce();
   });
 });
 
@@ -266,17 +313,19 @@ function observeUnsubscribe(
   },
   onSubscribe?: () => void
 ) {
+  const subscribed = vi.fn<(turnId: string) => void>();
   const unsubscribed = vi.fn();
   const subscribe = publisher.subscribe.bind(publisher);
   vi.spyOn(publisher, 'subscribe').mockImplementation((turnId, listener) => {
-    onSubscribe?.();
+    subscribed(turnId);
     const unsubscribe = subscribe(turnId, listener);
+    onSubscribe?.();
     return () => {
       unsubscribe();
       unsubscribed();
     };
   });
-  return unsubscribed;
+  return { subscribed, unsubscribed };
 }
 
 async function readEvents(
@@ -308,7 +357,8 @@ function response(
   slot: ResponseSlot,
   status: 'pending' | 'running' | 'completed',
   content: string | null,
-  updatedAt = UPDATED_AT
+  updatedAt = UPDATED_AT,
+  attemptNo = 1,
 ): ModelResponse {
   return {
     slot,
@@ -321,7 +371,7 @@ function response(
     recoverable: false,
     continuedWithout: false,
     isStale: false,
-    attemptNo: 1,
+    attemptNo,
     metadata: null,
     startedAt: status === 'pending' ? null : updatedAt,
     completedAt: status === 'completed' ? updatedAt : null,
@@ -334,6 +384,7 @@ function gateSnapshotConversationRead(pool: Pool, isSubscribed: () => boolean) {
   const entered = deferred();
   const release = deferred();
   let gated = false;
+  let subscribedBeforeRead = false;
   type Query = (...args: unknown[]) => Promise<unknown>;
 
   const wrapQuery =
@@ -347,8 +398,9 @@ function gateSnapshotConversationRead(pool: Pool, isSubscribed: () => boolean) {
           : typeof config === 'object' && config !== null && 'text' in config
             ? String(config.text)
             : '';
-      if (!gated && isSubscribed() && /^\s*SELECT\b/i.test(text)) {
+      if (!gated && /^\s*SELECT\b/i.test(text)) {
         gated = true;
+        subscribedBeforeRead = isSubscribed();
         entered.resolve();
         await release.promise;
       }
@@ -381,7 +433,12 @@ function gateSnapshotConversationRead(pool: Pool, isSubscribed: () => boolean) {
     },
   });
 
-  return { pool: guardedPool, entered: entered.promise, release: release.resolve };
+  return {
+    pool: guardedPool,
+    entered: entered.promise,
+    release: release.resolve,
+    subscribedBeforeRead: () => subscribedBeforeRead,
+  };
 }
 
 async function seedTurn(

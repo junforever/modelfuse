@@ -3,6 +3,8 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import type { TurnEvent } from '../../../types/sse.js';
+import type { LlmErrorCode } from '../../../types/llm.js';
+import type { ResponseSlot } from '../../../types/conversations.js';
 import {
   createControlledProviders,
   deferred,
@@ -208,6 +210,163 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
       providerCallsBeforeRetry.length
     );
   });
+
+  it.each(['openai', 'google', 'minimax'] as const)(
+    'makes Continue-without irreversible for %s without changing its failure classification',
+    async slot => {
+      await seedFailedTurn(pool, { slot, recoverable: true, errorCode: 'rate_limited' });
+      const providers = createControlledProviders();
+      const backend = createIntegrationBackend(pool, providers);
+
+      const continued = await request(backend.app).post(actionPath(slot, 'continue-without'));
+      expect(continued.status).toBe(200);
+
+      const afterContinue = await readPersistedActionState(pool);
+      const selected = afterContinue.find(row => row.slot === slot);
+      expect(selected).toMatchObject({
+        status: 'failed',
+        error_code: 'rate_limited',
+        error_recoverable: true,
+        attempt_no: 1,
+      });
+      expect(selected?.continued_without_at).toBeInstanceOf(Date);
+
+      const retry = await request(backend.app).post(actionPath(slot, 'retry'));
+      expect(retry.status).toBe(409);
+      expect(retry.body.code).toBe('RESPONSE_NOT_RETRYABLE');
+      expect(await readPersistedActionState(pool)).toEqual(afterContinue);
+      expect(Object.values(providers).flatMap(({ calls }) => calls)).toHaveLength(0);
+    },
+  );
+
+  it('accepts an exclusive Qwen retry without invoking base providers', async () => {
+    await seedFailedTurn(pool, { slot: 'qwen', recoverable: true, errorCode: 'timeout' });
+    const providers = createControlledProviders();
+    providers.qwen.enqueueResult('Qwen retry answer');
+    const backend = createIntegrationBackend(pool, providers);
+    const idle = waitForIdle(backend.publisher, TURN_ID);
+
+    const retry = await request(backend.app).post(actionPath('qwen', 'retry'));
+    expect(retry.status).toBe(202);
+    await providers.qwen.waitUntilCalled();
+    await idle;
+
+    const persisted = await pool.query<{ status: string; content: string; attempt_no: number; error_recoverable: boolean }>(
+      `SELECT status, content, attempt_no, error_recoverable
+         FROM model_responses WHERE turn_id = $1 AND slot = 'qwen'`,
+      [TURN_ID],
+    );
+    expect(persisted.rows[0]).toEqual({
+      status: 'completed',
+      content: 'Qwen retry answer',
+      attempt_no: 2,
+      error_recoverable: false,
+    });
+    expect(providers.qwen.calls).toHaveLength(1);
+    expect(providers.openai.calls).toHaveLength(0);
+    expect(providers.google.calls).toHaveLength(0);
+    expect(providers.minimax.calls).toHaveLength(0);
+  });
+
+  it('keeps the CAS winner when a late result from attempt one arrives', async () => {
+    await seedFailedTurn(pool, { slot: 'openai', recoverable: true, errorCode: 'timeout' });
+    const providers = createControlledProviders();
+    const release = deferred();
+    providers.openai.enqueueBlocked(release.promise, 'Attempt two answer');
+    const backend = createIntegrationBackend(pool, providers);
+    const events: TurnEvent[] = [];
+    const unsubscribe = backend.publisher.subscribe(TURN_ID, event => events.push(event));
+    const idle = waitForIdle(backend.publisher, TURN_ID);
+
+    try {
+      const retry = await request(backend.app).post(actionPath('openai', 'retry'));
+      expect(retry.status).toBe(202);
+      await providers.openai.waitUntilCalled();
+      const eventsBeforeLateResult = events.length;
+
+      const late = await backend.turnRepository.persistResponseAttempt({
+        turnId: TURN_ID,
+        slot: 'openai',
+        attemptNo: 1,
+        status: 'completed',
+        content: 'Stale attempt one answer',
+        startedAt: NOW,
+        completedAt: NOW,
+      });
+      expect(late).toBeNull();
+      expect(events).toHaveLength(eventsBeforeLateResult);
+
+      const active = await pool.query<{ status: string; content: string | null; attempt_no: number }>(
+        `SELECT status, content, attempt_no FROM model_responses
+          WHERE turn_id = $1 AND slot = 'openai'`,
+        [TURN_ID],
+      );
+      expect(active.rows[0]).toMatchObject({ status: 'running', content: null, attempt_no: 2 });
+    } finally {
+      release.resolve();
+      await idle;
+      unsubscribe();
+    }
+  });
+
+  it('derives busy from an active slot even when the other turn is terminal', async () => {
+    await seedFailedTurn(pool, {
+      slot: 'openai',
+      recoverable: true,
+      otherTurnBusy: true,
+      otherTurnStatus: 'completed',
+      otherTurnResponseActive: true,
+    });
+    const providers = createControlledProviders();
+    const backend = createIntegrationBackend(pool, providers);
+
+    const retry = await request(backend.app).post(actionPath('openai', 'retry'));
+    expect(retry.status).toBe(409);
+    expect(retry.body.code).toBe('CONVERSATION_BUSY');
+    expect(Object.values(providers).flatMap(({ calls }) => calls)).toHaveLength(0);
+  });
+
+  it.each([
+    ['authentication', false],
+    ['rate_limited', true],
+    ['timeout', true],
+    ['connectivity', true],
+    ['content_blocked', false],
+    ['invalid_prompt_size', false],
+    ['invalid_response', false],
+    ['provider_transient_error', true],
+    ['provider_error', false],
+  ] as const)('maps %s to recoverable=%s and preserves it through Continue-without', async (errorCode, recoverable) => {
+    await seedPendingTurn(pool);
+    const providers = createControlledProviders();
+    providers.openai.enqueueError({ code: errorCode, safeMessage: `Safe ${errorCode}` });
+    const backend = createIntegrationBackend(pool, providers);
+
+    await backend.orchestrator.executeTurn({
+      conversationId: CONVERSATION_ID,
+      turnId: TURN_ID,
+      prompt: 'Classify provider failures',
+      signal: new AbortController().signal,
+    });
+
+    const before = await readPersistedActionState(pool);
+    const failed = before.find(row => row.slot === 'openai');
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error_code: errorCode,
+      error_recoverable: recoverable,
+      attempt_no: 1,
+    });
+    const continued = await request(backend.app).post(actionPath('openai', 'continue-without'));
+    expect(continued.status).toBe(200);
+    const after = await readPersistedActionState(pool);
+    expect(after.find(row => row.slot === 'openai')).toMatchObject({
+      status: 'failed',
+      error_code: errorCode,
+      error_recoverable: recoverable,
+      attempt_no: 1,
+    });
+  });
 });
 
 function actionPath(slot: string, action: 'retry' | 'continue-without') {
@@ -248,10 +407,13 @@ async function readPersistedActionState(pool: Pool): Promise<Record<string, unkn
 async function seedFailedTurn(
   pool: Pool,
   options: {
-    slot: 'openai' | 'google' | 'minimax';
+    slot: ResponseSlot;
     recoverable: boolean;
+    errorCode?: LlmErrorCode;
     otherTurnBusy?: boolean;
     responseActive?: boolean;
+    otherTurnStatus?: 'pending' | 'completed';
+    otherTurnResponseActive?: boolean;
   }
 ): Promise<void> {
   const turnStatus = options.responseActive ? 'running' : 'partial';
@@ -287,7 +449,7 @@ async function seedFailedTurn(
         `${slot}-test-model`,
         status,
         content,
-        status === 'failed' ? 'timeout' : null,
+        status === 'failed' ? options.errorCode ?? 'timeout' : null,
         status === 'failed' ? 'Safe provider timeout' : null,
         status === 'failed' ? options.recoverable : false,
         active || status === 'completed' ? NOW : null,
@@ -301,8 +463,49 @@ async function seedFailedTurn(
     await pool.query(
       `INSERT INTO turns
          (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
-       VALUES ($1, $2, '40000000-0000-4000-8000-000000000044', 2, 'Other active prompt', 'pending', $3, $3)`,
-      [OTHER_TURN_ID, CONVERSATION_ID, NOW]
+       VALUES ($1, $2, '40000000-0000-4000-8000-000000000044', 2, 'Other active prompt', $3, $4, $4)`,
+      [OTHER_TURN_ID, CONVERSATION_ID, options.otherTurnStatus ?? 'pending', NOW]
+    );
+    if (options.otherTurnResponseActive) {
+      await pool.query(
+        `INSERT INTO model_responses
+           (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
+            is_stale, attempt_no, started_at, completed_at, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, 'openai', 'base', 'openai-fake', 'openai-test-model',
+                 'running', NULL, false, false, 1, $2, NULL, $2, $2)`,
+        [OTHER_TURN_ID, NOW],
+      );
+    }
+  }
+}
+
+async function seedPendingTurn(pool: Pool): Promise<void> {
+  await pool.query(
+    `INSERT INTO conversations (id, create_client_request_id, title, created_at, updated_at)
+     VALUES ($1, '10000000-0000-4000-8000-000000000243', 'Classification integration', $2, $2)`,
+    [CONVERSATION_ID, NOW],
+  );
+  await pool.query(
+    `INSERT INTO turns
+       (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
+     VALUES ($1, $2, '40000000-0000-4000-8000-000000000043', 1, 'Classification prompt', 'pending', $3, $3)`,
+    [TURN_ID, CONVERSATION_ID, NOW],
+  );
+  for (const slot of ['openai', 'google', 'minimax', 'qwen'] as const) {
+    await pool.query(
+      `INSERT INTO model_responses
+         (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
+          is_stale, attempt_no, started_at, completed_at, created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'pending', NULL, false,
+               false, 0, NULL, NULL, $6, $6)`,
+      [
+        TURN_ID,
+        slot,
+        slot === 'qwen' ? 'consolidator' : 'base',
+        `${slot}-fake`,
+        `${slot}-test-model`,
+        NOW,
+      ],
     );
   }
 }
