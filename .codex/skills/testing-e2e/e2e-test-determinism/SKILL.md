@@ -21,6 +21,21 @@ Before editing:
 
 Do not diagnose from the final cascade when an earlier action or setup step failed.
 
+### Cross-layer HTTP discrepancies
+
+If a browser E2E request returns a different status than the same contract in a
+browserless/integration path, capture the safe status, body, request ID,
+exception type/code/status, and database/SQLSTATE evidence before assigning a
+product owner. Then compare the exact request payload, launch command, Node
+conditions, TypeScript loader, environment, and `src`/`dist` module resolution.
+
+- If integration passes and E2E fails, classify the first hypothesis as
+  runtime, launcher, module-resolution, or fixture mismatch until disproved.
+- Do not create or delegate a backend product fix from the HTTP status alone.
+- If custom conditions or a `tsx` loader are involved, require the E2E child
+  process to receive the same conditions as the parent and prove that duplicate
+  source/dist class identities are impossible before continuing.
+
 ### 2. Classify the nondeterminism
 
 Assign one primary category before fixing:
@@ -65,6 +80,13 @@ Prefer a signal that represents the intended state:
 5. Explicit application readiness boundary already supported by the test environment.
 
 Never use `page.waitForTimeout()` in committed tests. Do not use `networkidle` as a general readiness condition for applications with streams, analytics, polling, or background requests.
+
+When cleanup follows an auxiliary conversation or turn, observe the product's
+terminal signals before destructive deletion: a terminal turn state and
+`busy_update=false`. Do not treat `APIResponse.finished()` or HTTP body
+completion as terminal unless the endpoint contract explicitly promises stream
+closure. Do not replace the terminal signal with sleeps, unbounded waits, or
+polling.
 
 ### Register before triggering
 

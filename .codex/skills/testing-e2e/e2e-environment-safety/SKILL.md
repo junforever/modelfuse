@@ -7,6 +7,35 @@ description: Protect Playwright end-to-end execution environments, credentials, 
 
 Fail closed before a browser starts. Run only when every mutable target is explicitly identified as non-production and every cleanup operation is limited to resources owned by the current run.
 
+## Mandatory Tool and Runtime Gate
+
+Before creating, editing, or executing an E2E test, derive the required
+executables, package-manager scripts, browser, services, database/migration
+preconditions, and ports from the repository's Playwright configuration and the
+requested journey. Verify each one with a concrete presence, version, health,
+reachability, or readiness check.
+
+At minimum, when the project uses them, check the pinned Node and pnpm
+runtimes, the Playwright browser executable, Docker daemon, PostgreSQL
+container, Liquibase/migration runner, frontend/backend launch scripts, and
+every configured loopback port.
+
+- If any required tool or service is missing, inactive, inaccessible, or
+  incompatible, stop all work before changing files or starting a partial run.
+  Request explicit installation, activation, permission, or environment
+  correction.
+- Do not silently substitute a different binary, CLI, browser, database,
+  migration mechanism, or package-manager command.
+- After a prerequisite is corrected, repeat the complete gate. “Available in
+  principle” is not evidence that the required tool is installed and active.
+
+When the backend E2E server uses TypeScript loaders, `package.json`
+`imports`/`exports`, custom Node conditions, aliases, or both `src` and `dist`,
+verify before startup that the parent and child processes receive the same
+conditions and resolve one coherent module graph. If source/dist coherence
+cannot be proven, stop and report a runtime-configuration blocker; do not fix
+the symptom by weakening production error classification.
+
 ## Safety Gate
 
 Perform this gate before starting services, seeding data, loading authentication state, or opening a browser:

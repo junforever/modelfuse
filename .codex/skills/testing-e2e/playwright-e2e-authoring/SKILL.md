@@ -171,6 +171,13 @@ await responsePromise;
 - Do not switch a suite to serial execution merely to hide shared-state collisions.
 - Annotate deliberate skips with a concrete environment capability or blocker and a follow-up owner; never use skip as a substitute for fixing a regression.
 
+If the task names an exact repository command, run that command through its
+declared package script with the requested path, project, workers, and retries.
+Do not append an extra `--`, replace the script with `pnpm exec` or a direct
+binary, or call a result from a different launcher equivalent. If the declared
+command cannot start because of a shim or runtime problem, stop and report the
+launcher blocker with its exit status before trying any alternative.
+
 ## Reuse Rules
 
 Extract only after repetition appears:

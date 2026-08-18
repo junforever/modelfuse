@@ -72,6 +72,32 @@ Do not create an E2E test when a unit or integration test can prove the same beh
 - A future skill may specialize one concern, but it must not expand this agent into unit, integration-only, performance, or production testing.
 - Prefer at most one specialized skill per task. Combine skills only when the journey genuinely crosses their concerns.
 
+🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
+- Before creating, editing, or executing any E2E test, enumerate every tool,
+  service, browser, package-manager script, database, migration mechanism, and
+  port required by the repository's Playwright configuration and the requested
+  journey.
+- At minimum, when the project uses them, check the pinned Node and pnpm
+  runtimes, the Playwright browser executable, Docker daemon, PostgreSQL
+  container, Liquibase/migration runner, frontend/backend launch scripts, and
+  every configured loopback port.
+- Verify each prerequisite with a concrete check before changing a file or
+  starting a process: executable presence and version, browser installation,
+  service health, database reachability/schema readiness, and port availability.
+- If any prerequisite is missing, inactive, inaccessible, or version-incompatible,
+  STOP ALL WORK. Do not edit tests, start partial services, substitute another
+  binary/CLI/browser/database, bypass the configured script, or continue with
+  partial evidence. Request explicit installation, activation, permission, or
+  environment correction from the coordinator.
+- After the requested prerequisite correction, repeat the complete preflight;
+  a tool that might be installable is not considered available until its check
+  succeeds.
+- If a task specifies an exact repository command, execute that command through
+  the repository script. Do not append an extra argument separator or replace it
+  with a direct binary invocation. If the exact command cannot run, report the
+  launcher/runtime blocker instead of calling an equivalent command the same
+  validation.
+
 🔍 REPOSITORY AND DOCUMENTATION DISCOVERY
 Before changing tests:
 1. Inspect the repository instructions and the feature specification or acceptance criteria in scope.
@@ -175,6 +201,27 @@ For failures:
 - Use Playwright traces as the primary debugging artifact when available.
 - Review screenshot, video, browser console, failed requests, and server logs only as needed.
 - Keep diagnostics free of secrets and sensitive payloads.
+- If an E2E HTTP response is `5xx` where the contract expects a typed `4xx`,
+  capture the raw status, safe response body, request ID, backend exception
+  type/code/status, and PostgreSQL/SQLSTATE evidence before classifying it as a
+  product defect. Do not infer a backend defect from the status code alone.
+- If the same request passes in an integration/browserless path but fails in
+  E2E, classify the discrepancy as runtime, module-resolution, launcher, or
+  fixture evidence first. Before delegating a backend correction, compare the
+  exact payload, command, environment, custom Node conditions, tsx loader, and
+  `src`/`dist` resolution. Do not modify production error handling to mask an
+  unresolved E2E runtime mismatch.
+- If the backend package uses `package.json` `imports`/`exports`, custom
+  conditions, aliases, `tsx`, or both `src` and `dist`, prove that the E2E
+  web-server process resolves one coherent module graph. Propagate the required
+  Node conditions to the child process (for example through `NODE_OPTIONS`) and
+  stop if source/dist coherence cannot be proven.
+- If a test creates an auxiliary turn and later deletes its conversation while
+  providers or SSE may still be active, wait for the documented terminal
+  events (turn terminal plus `busy_update=false`) before deletion. Do not use
+  HTTP response-body completion as a terminal signal unless the endpoint
+  contract explicitly guarantees stream closure, and do not use sleeps or
+  polling to guess completion.
 - Fix test defects within E2E-owned files.
 - Report product defects to the appropriate builder with reproduction steps, expected behavior, actual behavior, affected test, and relevant evidence.
 - Do not weaken assertions, skip tests, add arbitrary retries, or mark failures expected to obtain a green suite.
@@ -208,6 +255,10 @@ For failures:
 - Respect configured worker counts unless isolation defects require a diagnostic single-worker run.
 - A single-worker diagnostic does not prove parallel safety; rerun under the normal configuration before declaring success when parallel execution is expected.
 - Record the exact command and exit status.
+- A focused result is valid only when the command, launcher, environment,
+  browser, and worker/retry options match the requested validation. If any of
+  those differ, label the result diagnostic-only and report the difference;
+  never present an equivalent substitute as the requested gate.
 
 📝 OUTPUT FORMAT
 Always conclude with exactly these sections:
