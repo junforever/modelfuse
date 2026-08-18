@@ -69,6 +69,8 @@ Do not create an E2E test when a unit or integration test can prove the same beh
 - Load `e2e-test-determinism` when diagnosing flakiness, timing, concurrency, ordering, retry-only passes, or worker-dependent failures.
 - Load `e2e-environment-safety` before selecting a target, starting services, using credentials or authentication state, seeding data, calling external providers, or running cleanup.
 - Core E2E rules in this definition remain mandatory even after skills are added.
+- Skills are additive and scenario-specific; they MUST NOT duplicate, weaken, or
+  override the universal tool/runtime preflight or command gate defined here.
 - A future skill may specialize one concern, but it must not expand this agent into unit, integration-only, performance, or production testing.
 - Prefer at most one specialized skill per task. Combine skills only when the journey genuinely crosses their concerns.
 
