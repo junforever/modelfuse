@@ -324,13 +324,17 @@ tema mediante un control accesible y visible en el header.
 - [x] T120 [P] [UNIT] Ejecutar las suites unitarias backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T154, T148); registrar fallos como tareas concretas.
 - [ ] T121 [P] [INTEGRATION] Ejecutar las suites de integración backend y frontend desde `apps/backend/package.json` y `apps/frontend/package.json` (depende de T154, T148); registrar fallos como tareas concretas.
 - [x] T122 [E2E] Ejecutar Playwright con fakes desde `apps/frontend/playwright.config.ts` (depende de T154, T148 y de las historias implementadas); evidencia final: T174 ejecuta los siete specs y nueve tests con Chromium, 0 retries, exit 0 y cleanup completo.
-- [x] T123 [P] [BE] Ejecutar `pnpm --filter backend build` desde `package.json` (owner: `backend-builder`; depende de T154); prueba mínima: comando exitoso, sin corregir hallazgos aquí.
+- [ ] T123 [P] [BE] Reejecutar `pnpm --filter backend build` desde `package.json` después de T175 (owner: `backend-builder`; depende de T154 y T175); prueba mínima: comando exitoso, sin errores TypeScript ni fallos de compilación.
 - [x] T124 [P] [FE] Ejecutar `pnpm --filter frontend typecheck`, `pnpm --filter frontend lint`, `pnpm --filter frontend build`, `pnpm --filter @workspace/ui typecheck` y `pnpm --filter @workspace/ui lint` desde `package.json` (owner: `frontend-builder`; depende de T148); prueba mínima: cinco comandos exitosos, sin corregir hallazgos aquí.
 
 ### Correctivas generadas por T124
 
 - [x] T157 [UNIT] Resolver los falsos positivos de argumentos `_url` mediante `argsIgnorePattern: '^_'` en la configuración ESLint de frontend/UI, manteniendo las variables locales bajo validación (generada por T124); prueba mínima: `pnpm --filter frontend lint` exitoso; desbloquea la reejecución de T124.
 - [x] T158 [UI] Configurar el override de `react-refresh/only-export-components` únicamente para `packages/ui/src/components/**/*.{ts,tsx}`, preservando la validación del resto del paquete y sin cambiar el comportamiento de los componentes (generada por T124); prueba mínima: `pnpm --filter @workspace/ui typecheck` y `pnpm --filter @workspace/ui lint` exitosos; desbloquea la reejecución de T124.
+
+### Correctivas generadas por T123
+
+- [ ] T175 [INTEGRATION] Corregir el narrowing TypeScript de `idle` en `apps/backend/src/routes/conversations/__tests__/conversationCreation.integration.test.ts` (línea 204), manteniendo el cleanup determinista y sin modificar producción; prueba mínima: la suite focalizada de `conversationCreation.integration.test.ts` pasa y `pnpm --filter backend build` queda listo para reejecutarse (generada por T123).
 
 ### Correctivas generadas por T121
 
@@ -406,7 +410,7 @@ Setup → Foundational → US1 (MVP) → US2 → US3 → US4
   `T143 → T144`; `T145 → T146`; luego `T148 → T155 → T156`.
 - Quality gates: `T154 → T114–T116/T119/T123`; `T148 → T117/T124`;
   `T154/T148 → T120–T122`; `T117 → T118`.
-- Correctivas de quality gates: `T157/T158 → reejecutar T124`;
+- Correctivas de quality gates: `T157/T158 → reejecutar T124`; `T175 → reejecutar T123`;
   `T159/T160/T161 → reejecutar T121 → T167 → reejecutar T121`;
   `T163 → T164`; `T162/T164/T165 → T166`;
   `T168 → T169`; `T170 → T171`; `T172 → T173`;
