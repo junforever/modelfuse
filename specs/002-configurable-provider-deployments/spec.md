@@ -105,6 +105,7 @@ Como operador de la aplicación, quiero que cada deployment se ejecute mediante 
 2. **Given** una respuesta de OpenRouter con métricas de tokens, **When** se normaliza, **Then** se producen `inputTokens`, `outputTokens` y `totalTokens` con la misma semántica que los providers existentes.
 3. **Given** una cancelación, timeout o error de OpenRouter, **When** se procesa el resultado, **Then** se conserva el contrato normalizado sin fallback ni reintento automático.
 4. **Given** un adapter directo, **When** ejecuta su deployment, **Then** conserva su protocolo propio y no comparte el payload externo de otro provider.
+5. **Given** cualquier deployment resuelto, **When** el adapter construye el intento, **Then** envía el `maxOutputTokens` exacto mediante el parámetro nativo del provider; OpenRouter usa `max_tokens`.
 
 ---
 
@@ -130,10 +131,12 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - El mismo `deploymentId` aparece en más de un slot: se aplica la unicidad al identificador completo, aunque los slots sean diferentes.
 - Dos deployments diferentes pertenecen al mismo provider o apuntan al mismo modelo por rutas distintas: la selección sigue siendo válida mientras sus `deploymentId` sean distintos.
 - El catálogo o la configuración del proceso cambia después de crear una conversación: la conversación y sus turnos conservan la instantánea original.
-- El cuerpo de un 403 de OpenRouter indica bloqueo de contenido: se normaliza como `content_blocked`; cualquier otro 403 se normaliza como `provider_error`.
+- Un error de OpenRouter contiene `error.metadata.error_type` igual a `content_policy_violation` o `refusal`, o un 403 contiene `error.metadata.reasons` o `error.metadata.patterns` como arrays no vacíos: se normaliza como `content_blocked`; cualquier otro 403 se normaliza como `provider_error`, sin inspeccionar texto libre.
 - OpenRouter devuelve 402: se normaliza como `provider_error` con mensaje seguro y sin modelar ni exponer créditos.
 - El upstream no informa métricas de tokens: solo se normalizan `inputTokens`, `outputTokens` y `totalTokens` cuando están disponibles.
 - El payload mínimo ya excede el umbral de contexto del deployment: se detiene la ejecución antes de cualquier llamada externa.
+- Un provider rechaza el `maxOutputTokens` configurado: el intento termina como `provider_error`, sin reducción, negociación ni retry automático.
+- Una petición, evento SSE o fila intenta usar `openai`, `google`, `minimax` o `qwen` como slot: se rechaza porque solo `base-1`, `base-2`, `base-3` y `consolidator` pertenecen al contrato nuevo.
 
 ## Requirements *(mandatory)*
 
@@ -141,7 +144,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 
 #### Slots, selección y creación
 
-- **FR-001**: Cada conversación MUST conservar exactamente cuatro slots lógicos: `base-1`, `base-2`, `base-3` y `consolidator`.
+- **FR-001**: Cada conversación MUST conservar exactamente cuatro slots lógicos: `base-1`, `base-2`, `base-3` y `consolidator`. Estos identificadores reemplazan por completo a `openai`, `google`, `minimax` y `qwen`, que MUST ser inválidos en API, persistencia, SSE y UI sin aliases ni traducción de compatibilidad.
 - **FR-002**: El usuario MUST poder asignar cualquier deployment disponible a cualquiera de los cuatro slots únicamente durante la creación de una conversación.
 - **FR-003**: El endpoint existente de creación MUST aceptar el campo opcional `deploymentIds` como objeto cuyas claves exactas sean `base-1`, `base-2`, `base-3` y `consolidator`, cada una asociada con un `deploymentId`.
 - **FR-004**: Cuando `deploymentIds` esté presente, el sistema MUST exigir las cuatro claves, MUST rechazar claves adicionales y MUST rechazar valores vacíos o `null`.
@@ -155,7 +158,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 #### Catálogo y disponibilidad
 
 - **FR-011**: El catálogo MUST ser estático en el backend y MUST NOT consultarse ni actualizarse desde un endpoint externo durante el arranque o una conversación.
-- **FR-012**: Cada deployment MUST contener un `deploymentId` público, estable y único; `displayName`; `providerId`; `modelId`; `contextLimitTokens`; `maxOutputTokens` cuando exista; capacidades de entrada y salida declaradas; y la credencial requerida para determinar disponibilidad.
+- **FR-012**: Cada deployment MUST contener un `deploymentId` público, estable y único; `displayName`; `providerId`; `modelId`; `contextLimitTokens`; `maxOutputTokens`; `inputModalities`; `outputModalities`; y la credencial requerida para determinar disponibilidad.
 - **FR-013**: El catálogo MUST NOT contener claves, endpoints secretos, prompts ni precios.
 - **FR-014**: El catálogo inicial MUST contener exactamente estas definiciones:
 
@@ -172,6 +175,25 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 | `openai-5.6-terra` | GPT-5.6 Terra | `openai` | `gpt-5.6-terra` | 1050000 | 128000 |
 | `openai-5.6-luna` | GPT-5.6 Luna | `openai` | `gpt-5.6-luna` | 1050000 | 128000 |
 
+Los `maxOutputTokens` de esta tabla son valores operativos iniciales normativos,
+incluidos los aprobados para MiniMax M2.7, Kimi K3 y GLM 5.2. No son límites de
+entrada ni autorizan ajuste dinámico.
+
+Las capacidades iniciales exactas son:
+
+| deploymentId | inputModalities | outputModalities |
+|---|---|---|
+| `openrouter-minimax-m3` | `text`, `image`, `video` | `text` |
+| `openrouter-minimax-m2.7` | `text` | `text` |
+| `openrouter-qwen-3.8-max` | `text`, `image`, `video` | `text` |
+| `openrouter-kimi-k3` | `text`, `image`, `video` | `text` |
+| `openrouter-glm-5.2` | `text` | `text` |
+| `openrouter-deepseek-v4-flash-0731` | `text` | `text` |
+| `gemini-3.7-flash` | `text`, `image`, `video`, `audio`, `pdf` | `text` |
+| `openai-5.6-sol` | `text`, `image` | `text` |
+| `openai-5.6-terra` | `text`, `image` | `text` |
+| `openai-5.6-luna` | `text`, `image` | `text` |
+
 - **FR-015**: Para deployments de OpenRouter, `contextLimitTokens` MUST representar `top_provider.context_length`, la cota efectiva de la ruta seleccionada.
 - **FR-016**: El catálogo inicial MUST NOT incluir variantes `:batch`, `:free`, aliases `latest` ni modelos distintos de los diez definidos; GLM MUST usar `z-ai/glm-5.2` y DeepSeek MUST usar `deepseek/deepseek-v4-flash-0731`.
 - **FR-017**: Los adapters soportados por la arquitectura MUST ser `openai`, `google`, `minimax`, `qwen` y `openrouter`; MiniMax y Qwen directos MUST permanecer disponibles como extensiones del registro, sin deployments iniciales en el catálogo.
@@ -183,7 +205,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 
 #### Persistencia e inmutabilidad
 
-- **FR-023**: La creación MUST persistir, dentro de una transacción y antes de iniciar cualquier provider, una fila por slot con `conversationId`, `slot`, `deploymentId`, `providerId`, `modelId`, `displayName`, `contextLimitTokens` y timestamps de creación y actualización.
+- **FR-023**: La creación MUST persistir, dentro de una transacción y antes de iniciar cualquier provider, una fila por slot con `conversationId`, `slot`, `deploymentId`, `providerId`, `modelId`, `displayName`, `contextLimitTokens`, `maxOutputTokens`, `inputModalities`, `outputModalities` y timestamps de creación y actualización.
 - **FR-024**: La instantánea MUST tener clave primaria `(conversationId, slot)` y restricción única `(conversationId, deploymentId)`.
 - **FR-025**: Las cuatro filas de la instantánea MUST ser inmutables después de crear la conversación.
 - **FR-026**: Los turnos posteriores MUST reutilizar la instantánea persistida y MUST NOT volver a resolver el catálogo mutable ni una variable de entorno de modelo por nombre de slot.
@@ -216,16 +238,22 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - **FR-044**: Si el payload mínimo excede el umbral de contexto, el sistema MUST rechazarlo antes de llamar al provider.
 - **FR-045**: El sistema MUST NOT persistir prompts compuestos ni conteos de tokens.
 - **FR-046**: El sistema MUST NOT añadir, registrar ni persistir métricas de precio, costo, moneda, billing, créditos, presupuesto o consumo económico para OpenRouter.
-- **FR-047**: Los errores HTTP de OpenRouter MUST normalizarse así: 401 = `authentication`; 429 = `rate_limited`; 408, 502 y 503 = `provider_transient_error`; 403 = `content_blocked` solo cuando el cuerpo indique bloqueo de contenido y `provider_error` en los demás casos; 402 = `provider_error` con mensaje seguro y sin exponer ni modelar créditos.
+- **FR-047**: Los errores HTTP de OpenRouter MUST normalizarse así: 401 = `authentication`; 429 = `rate_limited`; 408, 502 y 503 = `provider_transient_error`; 402 = `provider_error` con mensaje seguro y sin exponer ni modelar créditos. Un error MUST ser `content_blocked` únicamente cuando `error.metadata.error_type` sea `content_policy_violation` o `refusal`, o cuando un 403 contenga `error.metadata.reasons` o `error.metadata.patterns` como arrays no vacíos. Cualquier otro 403 MUST ser `provider_error`. La clasificación MUST NOT inspeccionar texto libre y MUST descartar toda metadata upstream después de clasificarla.
 - **FR-048**: Ningún error MUST exponer headers o bodies upstream, stacks, claves o prompts.
 
 #### Límite de alcance
 
-- **FR-049**: Esta feature MUST validarse sobre una base limpia y MUST NOT incluir migración de conversaciones de producción.
+- **FR-049**: Esta feature MUST validarse sobre una base limpia y MUST NOT incluir backfill ni conversión de conversaciones de producción. MUST incluir la migración de esquema necesaria para persistir las instantáneas y reemplazar los constraints de slot por `base-1`, `base-2`, `base-3` y `consolidator`.
+
+#### Reglas operativas complementarias
+
+- **FR-050**: Cada adapter MUST enviar el `maxOutputTokens` exacto del deployment mediante el parámetro nativo equivalente; OpenRouter MUST usar `max_tokens`. El valor MUST NOT participar en el cálculo del límite de entrada ni provocar truncamiento local de la respuesta.
+- **FR-051**: Si el provider rechaza `maxOutputTokens`, el adapter MUST normalizar el intento como `provider_error` y MUST NOT reducir, negociar, descubrir, reintentar ni sustituir automáticamente el valor.
+- **FR-052**: `GET /api/v1/model-catalog` MUST exponer las `inputModalities` y `outputModalities` exactas de la tabla normativa. Esta feature MUST conservar entradas de usuario exclusivamente de texto y MUST NOT añadir carga de imagen, audio, video o PDF.
 
 ### Key Entities
 
-- **Deployment**: Configuración estática e identificable disponible para asignación. Contiene el identificador público estable, datos visibles, adapter y modelo exactos, límites técnicos, capacidades declaradas y la credencial que determina disponibilidad; no contiene secretos, prompts, endpoints secretos ni precios.
+- **Deployment**: Configuración estática e identificable disponible para asignación. Contiene el identificador público estable, datos visibles, adapter y modelo exactos, límite de entrada, límite operativo de salida, modalidades exactas y la credencial que determina disponibilidad; no contiene secretos, prompts, endpoints secretos ni precios.
 - **Provider adapter**: Encapsula el protocolo externo y la credencial de un provider bajo el contrato normalizado `LlmProvider`. Se identifica por `providerId`.
 - **Catálogo de deployments**: Conjunto estático de los diez deployments iniciales. La vista disponible se obtiene filtrando por credenciales configuradas y ordenando por `displayName`.
 - **Asignación de deployments de conversación**: Objeto de creación que relaciona exactamente los cuatro slots lógicos con cuatro `deploymentId` distintos.
@@ -247,10 +275,15 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - **SC-009**: Ninguna prueba de registros o persistencia encuentra precios, créditos, billing, presupuesto, moneda, costos o consumo económico de OpenRouter.
 - **SC-010**: Para cada uno de los 10 límites exactos del catálogo, un payload mínimo sobre el umbral se rechaza antes de llamar al provider.
 - **SC-011**: El 100% de las respuestas de creación y detalle presenta por slot los cuatro datos visibles persistidos: `deploymentId`, `providerId`, `modelId` y `displayName`.
+- **SC-012**: El 100% de los contract tests de deployments verifica que cada intento envía el `maxOutputTokens` exacto y que su rechazo no genera ajuste ni retry automático.
+- **SC-013**: El catálogo devuelve al 100% las modalidades exactas de la tabla normativa y ningún flujo de esta feature permite adjuntar contenido distinto de texto.
+- **SC-014**: El 100% de las validaciones de API, persistencia, SSE y UI acepta únicamente `base-1`, `base-2`, `base-3` y `consolidator` como slots.
+- **SC-015**: La migración de esquema se aplica correctamente sobre una base limpia y no ejecuta backfill ni conversión de conversaciones.
 
 ## Assumptions
 
 - El entorno actual todavía no contiene conversaciones de usuario; la validación de esta feature se realiza sobre una base limpia y no requiere migración de conversaciones de producción.
 - Las credenciales de provider se configuran por instalación y son opcionales; la disponibilidad observable deriva exclusivamente de si está configurada la credencial declarada por cada adapter.
-- Los slots lógicos, la semántica de conversación, el ratio técnico de contexto, el medidor exacto o cota superior y la matriz normalizada de providers ya existentes se conservan sin cambios salvo por las decisiones explícitas de esta especificación.
+- La semántica de cuatro slots, la semántica de conversación, el ratio técnico de contexto, el medidor exacto o cota superior y la matriz normalizada de providers ya existentes se conservan. Los identificadores anteriores de slot se reemplazan por los cuatro identificadores lógicos definidos en esta especificación.
 - El catálogo inicial es la tabla cerrada de diez deployments de esta especificación; MiniMax y Qwen directos se conservan solo como extensiones del registro, sin entradas iniciales.
+- Los valores iniciales de `maxOutputTokens` son normativos para esta versión y solo se cambian mediante una modificación explícita del catálogo después de obtener evidencia de rechazo del provider.

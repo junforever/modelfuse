@@ -25,6 +25,14 @@ feature. Todas las decisiones de este documento son normativas.
 - No hay migración de conversaciones de producción en el alcance de esta
   feature; el entorno actual aún no tiene conversaciones de usuario y la nueva
   implementación se valida sobre una base limpia.
+- Los identificadores de slot anteriores `openai`, `google`, `minimax` y `qwen`
+  dejan de formar parte del contrato. La API, persistencia, SSE y UI usan
+  únicamente `base-1`, `base-2`, `base-3` y `consolidator`; no existe alias ni
+  traducción de compatibilidad para los identificadores anteriores.
+- La ausencia de migración de conversaciones significa que no se implementa
+  backfill ni conversión de datos existentes. La feature sí debe incluir la
+  migración de esquema necesaria para crear la instantánea, actualizar los
+  constraints de slot y soportar el nuevo contrato sobre una base limpia.
 
 ## Terminología y límites de responsabilidad
 
@@ -60,8 +68,9 @@ Un deployment es una configuración estática e identificable que contiene:
 - `providerId`: adapter que ejecuta la llamada.
 - `modelId`: identificador exacto enviado al provider.
 - `contextLimitTokens`: límite técnico de entrada usado por `ContextBuilder`.
-- `maxOutputTokens`: límite técnico documentado del provider, cuando exista.
-- capacidades de entrada/salida declaradas por el modelo.
+- `maxOutputTokens`: límite operativo de salida enviado al provider en cada
+  intento.
+- `inputModalities` y `outputModalities`: capacidades declaradas por el modelo.
 - credencial requerida para determinar disponibilidad.
 
 El catálogo no contiene claves, endpoints secretos, prompts ni precios.
@@ -86,6 +95,34 @@ identificadores estables:
 | `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 |          128000 |
 | `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 |          128000 |
 | `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 |          128000 |
+
+Los valores de `maxOutputTokens` de la tabla son los límites operativos
+iniciales normativos, incluidos los valores aprobados para MiniMax M2.7, Kimi K3
+y GLM 5.2. Cada adapter debe enviarlos mediante el parámetro nativo equivalente
+del provider; OpenRouter usa `max_tokens`. El campo no participa en el cálculo
+del límite de entrada, no causa truncamiento local de una respuesta y no se
+negocia ni ajusta dinámicamente. Si un provider rechaza el valor, el intento se
+normaliza como `provider_error`, sin retry ni reducción automática, y cualquier
+ajuste posterior se realiza modificando explícitamente el catálogo estático.
+
+Las capacidades iniciales exactas son:
+
+| deploymentId | inputModalities | outputModalities |
+|---|---|---|
+| `openrouter-minimax-m3` | `text`, `image`, `video` | `text` |
+| `openrouter-minimax-m2.7` | `text` | `text` |
+| `openrouter-qwen-3.8-max` | `text`, `image`, `video` | `text` |
+| `openrouter-kimi-k3` | `text`, `image`, `video` | `text` |
+| `openrouter-glm-5.2` | `text` | `text` |
+| `openrouter-deepseek-v4-flash-0731` | `text` | `text` |
+| `gemini-3.7-flash` | `text`, `image`, `video`, `audio`, `pdf` | `text` |
+| `openai-5.6-sol` | `text`, `image` | `text` |
+| `openai-5.6-terra` | `text`, `image` | `text` |
+| `openai-5.6-luna` | `text`, `image` | `text` |
+
+Estas capacidades se exponen como metadata del catálogo. Esta feature conserva
+el composer de texto actual y no incorpora carga de imágenes, audio, video o
+PDF; declarar una modalidad no habilita por sí mismo una entrada nueva en la UI.
 
 Para los deployments de OpenRouter, `contextLimitTokens` usa el límite de
 `top_provider.context_length`, que es la cota efectiva de la ruta seleccionada,
@@ -192,6 +229,9 @@ provider, una fila por slot con:
 - `modelId`;
 - `displayName`;
 - `contextLimitTokens`;
+- `maxOutputTokens`;
+- `inputModalities`;
+- `outputModalities`;
 - timestamps de creación y actualización.
 
 La clave primaria es `(conversationId, slot)` y existe una restricción única
@@ -221,6 +261,7 @@ deployment resuelto por slot. Para OpenRouter:
 - se usa `POST https://openrouter.ai/api/v1/chat/completions`;
 - se envía `Authorization: Bearer $OPENROUTER_API_KEY`;
 - `model` es el `modelId` exacto del catálogo;
+- `max_tokens` es el `maxOutputTokens` exacto del deployment;
 - se conserva el contrato normalizado de mensajes, cancelación, timeout y una
   sola llamada externa por intento;
 - no se usan fallbacks automáticos, variantes `:free` ni reintentos automáticos.
@@ -241,9 +282,13 @@ compatible con el formato de OpenAI.
   el contrato. No se persisten prompts compuestos ni conteos de tokens.
 - Los errores de OpenRouter se normalizan a la matriz existente: 401 es
   `authentication`, 429 es `rate_limited`, 408/502/503 son
-  `provider_transient_error`, 403 es `content_blocked` cuando el cuerpo indica
-  bloqueo de contenido y `provider_error` en los demás casos; 402 se normaliza
-  como `provider_error` con mensaje seguro, sin exponer ni modelar créditos.
+  `provider_transient_error` y 402 es `provider_error` con mensaje seguro, sin
+  exponer ni modelar créditos. Un error se clasifica como `content_blocked` solo
+  si `error.metadata.error_type` es `content_policy_violation` o `refusal`, o si
+  un 403 contiene `error.metadata.reasons` o `error.metadata.patterns` como
+  arrays no vacíos. Cualquier otro 403 es `provider_error`. La clasificación
+  inspecciona únicamente esos campos estructurados, nunca texto libre, y
+  descarta toda metadata upstream después de clasificarla.
 - Ningún error expone headers, bodies upstream, stacks, claves o prompts.
 
 ## Aceptación obligatoria
@@ -270,12 +315,22 @@ La feature solo está completa cuando se demuestra todo lo siguiente:
    billing o presupuesto.
 10. Las pruebas de contexto usan los límites exactos de la tabla y comprueban que
     no se llama al provider cuando el payload mínimo excede el umbral.
+11. Los contract tests verifican que cada intento envía el
+    `maxOutputTokens` exacto y que un rechazo upstream no provoca ajuste ni retry
+    automático.
+12. El catálogo expone exactamente las modalidades declaradas y la UI continúa
+    aceptando únicamente texto.
+13. API, persistencia, SSE y UI rechazan los identificadores de slot anteriores
+    y usan exclusivamente los cuatro identificadores lógicos nuevos.
+14. La migración de esquema se aplica correctamente sobre una base limpia sin
+    ejecutar backfill de conversaciones.
 
 ## Fuentes oficiales consultadas
 
 - [Catálogo y API de modelos de OpenRouter](https://openrouter.ai/docs/api/api-reference/models/get-models)
 - [Catálogo actual de modelos de OpenRouter](https://openrouter.ai/api/v1/models)
 - [Endpoint Chat Completions de OpenRouter](https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request)
+- [Errores tipados y metadata de moderación de OpenRouter](https://openrouter.ai/docs/api/reference/errors-and-debugging)
 - [Modelos de OpenAI](https://developers.openai.com/api/docs/models)
 - [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
 - [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)

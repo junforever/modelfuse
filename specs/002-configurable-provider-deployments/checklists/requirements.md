@@ -32,5 +32,9 @@
 ## Notes
 
 - Validation iteration 1: all checklist items pass.
+- Validation iteration 2: direct review fixed the operational meaning of
+  `maxOutputTokens`, the structured OpenRouter 403 predicate, exact model
+  modalities, replacement of legacy slot identifiers, and the distinction
+  between schema migration and production-data backfill. All items remain pass.
 - The exact endpoint, request shape, identifiers, environment-variable names, persistence constraints and OpenRouter protocol details are normative product and integration contracts from `requirements-brief.md`; they are retained without selecting a language, framework, database product or implementation structure.
 - No clarification markers were required because the normative brief resolves the feature scope and behavior.
