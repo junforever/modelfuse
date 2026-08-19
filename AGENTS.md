@@ -3,7 +3,7 @@
 Para contexto adicional sobre tecnologías, estructura del proyecto, comandos y demás
 información relevante, usa como fuentes autoritativas:
 `.specify/memory/constitution.md` y
-`specs/001-compare-llm-responses/plan.md`.
+`specs/002-configurable-provider-deployments/plan.md`.
 
 - El agente principal/coordinador debe leer ambos documentos completos una sola vez, antes de la primera delegación de cada bloque de implementación, y conservar un resumen verificable de sus secciones aplicables.
 - Tras esa lectura inicial, el coordinador y los subagentes deben localizar encabezados con búsqueda y leer únicamente los rangos que correspondan a la tarea. Una nueva lectura completa solo se permite cuando uno de esos documentos cambió desde la lectura inicial o una instrucción explícita exige el documento completo.

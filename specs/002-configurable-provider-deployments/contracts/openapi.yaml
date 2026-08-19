@@ -1,0 +1,454 @@
+openapi: 3.1.0
+info:
+  title: ModelFuse configurable provider deployments
+  version: 1.0.0
+  description: Normative REST delta for the configurable provider deployments feature.
+servers:
+  - url: /api/v1
+paths:
+  /model-catalog:
+    get:
+      operationId: listAvailableDeployments
+      summary: List static deployments whose provider credential is configured
+      responses:
+        '200':
+          description: Available safe catalog entries sorted by displayName
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelCatalogResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /conversations:
+    post:
+      operationId: createConversation
+      summary: Create a conversation with one immutable deployment per canonical slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '201':
+          description: Conversation and first pending turn created transactionally
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationTurnResponse'
+        '422':
+          description: Invalid, incomplete, duplicate, unavailable, or unknown deployment assignment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: The omitted assignment cannot use the complete normative default profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultProfileUnavailableError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /conversations/{conversationId}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      operationId: getConversation
+      summary: Read a conversation and its immutable deployment assignment
+      responses:
+        '200':
+          description: Conversation detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '404':
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  parameters:
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    InternalError:
+      description: Safe internal error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    CanonicalSlot:
+      type: string
+      enum:
+        - base-1
+        - base-2
+        - base-3
+        - consolidator
+    ProviderId:
+      type: string
+      enum:
+        - openai
+        - google
+        - minimax
+        - qwen
+        - openrouter
+    Modality:
+      type: string
+      enum:
+        - text
+        - image
+        - video
+        - audio
+        - pdf
+    DeploymentCatalogItem:
+      type: object
+      additionalProperties: false
+      required:
+        - deploymentId
+        - providerId
+        - modelId
+        - displayName
+        - contextLimitTokens
+        - maxOutputTokens
+        - inputModalities
+        - outputModalities
+      properties:
+        deploymentId:
+          type: string
+          minLength: 1
+        providerId:
+          $ref: '#/components/schemas/ProviderId'
+        modelId:
+          type: string
+          minLength: 1
+        displayName:
+          type: string
+          minLength: 1
+        contextLimitTokens:
+          type: integer
+          minimum: 1
+        maxOutputTokens:
+          type: integer
+          minimum: 1
+        inputModalities:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Modality'
+        outputModalities:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Modality'
+    ModelCatalogResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeploymentCatalogItem'
+    DeploymentIds:
+      type: object
+      additionalProperties: false
+      required:
+        - base-1
+        - base-2
+        - base-3
+        - consolidator
+      properties:
+        base-1:
+          type: string
+          minLength: 1
+        base-2:
+          type: string
+          minLength: 1
+        base-3:
+          type: string
+          minLength: 1
+        consolidator:
+          type: string
+          minLength: 1
+    CreateConversationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - clientRequestId
+        - prompt
+      properties:
+        clientRequestId:
+          type: string
+          format: uuid
+        prompt:
+          type: string
+          minLength: 1
+        deploymentIds:
+          $ref: '#/components/schemas/DeploymentIds'
+    ConversationDeploymentSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - slot
+        - deploymentId
+        - providerId
+        - modelId
+        - displayName
+      properties:
+        slot:
+          $ref: '#/components/schemas/CanonicalSlot'
+        deploymentId:
+          type: string
+          minLength: 1
+        providerId:
+          $ref: '#/components/schemas/ProviderId'
+        modelId:
+          type: string
+          minLength: 1
+        displayName:
+          type: string
+          minLength: 1
+    DeploymentSummaryTuple:
+      type: array
+      prefixItems:
+        - $ref: '#/components/schemas/ConversationDeploymentSummary'
+        - $ref: '#/components/schemas/ConversationDeploymentSummary'
+        - $ref: '#/components/schemas/ConversationDeploymentSummary'
+        - $ref: '#/components/schemas/ConversationDeploymentSummary'
+      minItems: 4
+      maxItems: 4
+      description: Ordered as base-1, base-2, base-3, consolidator; each slot occurs exactly once.
+    ConversationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - hasWorkInProgress
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        hasWorkInProgress:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ConversationDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - hasWorkInProgress
+        - createdAt
+        - updatedAt
+        - deployments
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        hasWorkInProgress:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deployments:
+          $ref: '#/components/schemas/DeploymentSummaryTuple'
+    ResponseRole:
+      type: string
+      enum:
+        - base
+        - consolidator
+    ResponseStatus:
+      type: string
+      enum:
+        - pending
+        - running
+        - completed
+        - failed
+    ModelResponse:
+      type: object
+      required:
+        - slot
+        - role
+        - provider
+        - model
+        - status
+        - content
+        - error
+        - recoverable
+        - continuedWithout
+        - isStale
+        - attemptNo
+        - metadata
+        - startedAt
+        - completedAt
+        - createdAt
+        - updatedAt
+      properties:
+        slot:
+          $ref: '#/components/schemas/CanonicalSlot'
+        role:
+          $ref: '#/components/schemas/ResponseRole'
+        provider:
+          type: string
+        model:
+          type: string
+        status:
+          $ref: '#/components/schemas/ResponseStatus'
+        content:
+          type:
+            - string
+            - 'null'
+        error:
+          type:
+            - object
+            - 'null'
+        recoverable:
+          type: boolean
+        continuedWithout:
+          type: boolean
+        isStale:
+          type: boolean
+        attemptNo:
+          type: integer
+          minimum: 1
+        metadata:
+          type:
+            - object
+            - 'null'
+        startedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Turn:
+      type: object
+      required:
+        - id
+        - clientRequestId
+        - ordinal
+        - prompt
+        - status
+        - responses
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientRequestId:
+          type: string
+          format: uuid
+        ordinal:
+          type: integer
+          minimum: 1
+        prompt:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - partial
+            - completed
+            - failed
+        responses:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/ModelResponse'
+          description: Ordered as base-1, base-2, base-3, consolidator; each slot occurs exactly once.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ConversationTurnResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - conversation
+        - turn
+      properties:
+        conversation:
+          $ref: '#/components/schemas/ConversationDetail'
+        turn:
+          $ref: '#/components/schemas/Turn'
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - requestId
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        requestId:
+          type: string
+    DefaultProfileUnavailableError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - requestId
+        - missingDeploymentIds
+      properties:
+        code:
+          const: DEFAULT_PROFILE_UNAVAILABLE
+        message:
+          type: string
+          description: Safe client-facing message with no credential or upstream details.
+        requestId:
+          type: string
+        missingDeploymentIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
