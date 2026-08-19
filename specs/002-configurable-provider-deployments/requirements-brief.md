@@ -1,0 +1,284 @@
+# Requerimiento: catálogo de deployments y asignación por conversación
+
+## Propósito
+
+Desacoplar los slots lógicos de los proveedores y modelos concretos. El usuario
+debe poder elegir, al crear una conversación, qué deployment usa cada slot y
+debe poder combinar APIs directas con OpenRouter sin cambiar la orquestación ni
+la semántica de la conversación.
+
+Este documento es la fuente de entrada para `speckit specify` de la nueva
+feature. Todas las decisiones de este documento son normativas.
+
+## Alcance fijo
+
+- La aplicación conserva cuatro slots lógicos por conversación:
+  `base-1`, `base-2`, `base-3` y `consolidator`.
+- Cualquier deployment disponible en el catálogo puede asignarse a cualquiera
+  de los cuatro slots.
+- La asignación se realiza únicamente al crear una conversación.
+- La asignación de una conversación es inmutable: ningún endpoint ni control de
+  la UI puede cambiar un slot después de creado el primer turno.
+- Cada conversación persiste una instantánea de sus cuatro deployments. Los
+  turnos posteriores siempre reutilizan esa instantánea y no vuelven a resolver
+  el catálogo mutable.
+- No hay migración de conversaciones de producción en el alcance de esta
+  feature; el entorno actual aún no tiene conversaciones de usuario y la nueva
+  implementación se valida sobre una base limpia.
+
+## Terminología y límites de responsabilidad
+
+### Provider adapter
+
+Un adapter encapsula un protocolo externo y su credencial. La orquestación solo
+conoce el contrato normalizado `LlmProvider`; nunca ramifica por nombre de
+provider ni construye payloads externos.
+
+Los adapters soportados por la arquitectura son:
+
+- `openai`: API directa de OpenAI.
+- `google`: API directa de Google Gemini.
+- `minimax`: API directa de MiniMax, conservada para extensibilidad.
+- `qwen`: API directa de Qwen, conservada para extensibilidad.
+- `openrouter`: gateway OpenRouter.
+
+La primera versión expone en el catálogo únicamente los deployments listados en
+la sección siguiente. Los adapters directos de MiniMax y Qwen permanecen
+disponibles como extensiones del registro, pero no tienen un deployment inicial
+en el catálogo.
+
+Agregar un provider futuro requiere solamente implementar el contrato del
+adapter, declarar su credencial y registrar sus deployments; no requiere crear
+un slot ni modificar el orquestador.
+
+### Deployment
+
+Un deployment es una configuración estática e identificable que contiene:
+
+- `deploymentId`: identificador público estable y único.
+- `displayName`: nombre mostrado al usuario.
+- `providerId`: adapter que ejecuta la llamada.
+- `modelId`: identificador exacto enviado al provider.
+- `contextLimitTokens`: límite técnico de entrada usado por `ContextBuilder`.
+- `maxOutputTokens`: límite técnico documentado del provider, cuando exista.
+- capacidades de entrada/salida declaradas por el modelo.
+- credencial requerida para determinar disponibilidad.
+
+El catálogo no contiene claves, endpoints secretos, prompts ni precios.
+
+## Catálogo inicial exacto
+
+El catálogo es estático en el backend. No se consulta ni se actualiza desde un
+endpoint externo durante el arranque o durante una conversación.
+
+Los `deploymentId` son exactamente los siguientes y deben conservarse como
+identificadores estables:
+
+| deploymentId                        | displayName            | providerId   | modelId enviado al provider       | contextLimitTokens | maxOutputTokens |
+| ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------: |
+| `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 |          512000 |
+| `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 |          204800 |
+| `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 |          131072 |
+| `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 |         1048576 |
+| `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 |         1048576 |
+| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 |          393216 |
+| `gemini-3.7-flash`                  | Gemini 3.7 Flash       | `google`     | `gemini-3.7-flash`                |            1048576 |           65536 |
+| `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 |          128000 |
+| `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 |          128000 |
+| `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 |          128000 |
+
+Para los deployments de OpenRouter, `contextLimitTokens` usa el límite de
+`top_provider.context_length`, que es la cota efectiva de la ruta seleccionada,
+no el límite máximo agregado que OpenRouter publica para el modelo.
+
+La lista no incluye variantes `:batch`, `:free`, aliases `latest` ni otros
+modelos. Para GLM se usa exactamente `z-ai/glm-5.2`; para DeepSeek se usa
+exactamente la versión fechada `deepseek/deepseek-v4-flash-0731`.
+
+## Perfil por defecto
+
+Cuando el usuario crea una conversación sin especificar asignaciones, el backend
+aplica exactamente este perfil:
+
+| Slot           | Deployment por defecto    |
+| -------------- | ------------------------- |
+| `base-1`       | `openai-5.6-sol`          |
+| `base-2`       | `gemini-3.7-flash`        |
+| `base-3`       | `openrouter-minimax-m3`   |
+| `consolidator` | `openrouter-qwen-3.8-max` |
+
+El perfil por defecto solo puede aplicarse si las cuatro credenciales requeridas
+están configuradas. Si falta cualquiera, la creación sin asignaciones se
+rechaza con `503 DEFAULT_PROFILE_UNAVAILABLE`; el cuerpo contiene únicamente un
+mensaje seguro y los `deploymentId` faltantes, nunca el secreto ni la respuesta
+del provider.
+
+## Credenciales y disponibilidad
+
+Cada adapter declara una credencial requerida:
+
+| providerId   | Variable de entorno  |
+| ------------ | -------------------- |
+| `openai`     | `OPENAI_API_KEY`     |
+| `google`     | `GOOGLE_API_KEY`     |
+| `minimax`    | `MINIMAX_API_KEY`    |
+| `qwen`       | `QWEN_API_KEY`       |
+| `openrouter` | `OPENROUTER_API_KEY` |
+
+Las credenciales son opcionales a nivel de instalación. El backend no debe
+fallar al arrancar porque falte una credencial opcional.
+
+`GET /api/v1/model-catalog` devuelve únicamente deployments cuya credencial
+requerida está configurada. No devuelve entradas no disponibles con un valor
+falso ni expone la razón interna de disponibilidad.
+
+Si una petición de creación contiene un `deploymentId` que no está disponible,
+el backend responde `422 DEPLOYMENT_UNAVAILABLE`. La UI solo presenta para
+selección las entradas devueltas por el catálogo, pero la validación del backend
+es obligatoria.
+
+## Regla de unicidad por conversación
+
+Una misma conversación no puede asignar el mismo `deploymentId` a dos slots.
+La validación se ejecuta en frontend y backend, y el backend la refuerza en la
+transacción de creación.
+
+La regla se aplica al identificador de deployment completo, no al modelo
+subyacente ni al nombre mostrado. Por tanto:
+
+- repetir `openrouter-glm-5.2` en dos slots es inválido;
+- usar un deployment directo de GLM y otro deployment de GLM vía OpenRouter es
+  válido si tienen `deploymentId` distintos;
+- usar deployments del mismo provider en slots diferentes es válido si sus
+  `deploymentId` son distintos.
+
+Una selección duplicada responde `422 DUPLICATE_DEPLOYMENT_ASSIGNMENT` y no crea
+filas ni inicia llamadas externas.
+
+## Contrato de selección de una conversación nueva
+
+El endpoint existente de creación de conversación acepta un campo opcional con
+esta forma exacta:
+
+```json
+{
+  "deploymentIds": {
+    "base-1": "openai-5.6-sol",
+    "base-2": "gemini-3.7-flash",
+    "base-3": "openrouter-minimax-m3",
+    "consolidator": "openrouter-qwen-3.8-max"
+  }
+}
+```
+
+Las cuatro claves son obligatorias cuando `deploymentIds` está presente. No se
+aceptan claves adicionales, valores vacíos ni `null`. Si el campo está ausente,
+se usa el perfil por defecto. La respuesta de creación y el detalle de la
+conversación incluyen, por slot, `deploymentId`, `providerId`, `modelId` y
+`displayName` provenientes de la instantánea persistida.
+
+Ningún endpoint de turnos, retry, recovery, rename o eliminación acepta cambios
+de `deploymentIds`.
+
+## Instantánea persistida
+
+La creación debe persistir en una transacción, antes de iniciar cualquier
+provider, una fila por slot con:
+
+- `conversationId`;
+- `slot`;
+- `deploymentId`;
+- `providerId`;
+- `modelId`;
+- `displayName`;
+- `contextLimitTokens`;
+- timestamps de creación y actualización.
+
+La clave primaria es `(conversationId, slot)` y existe una restricción única
+`(conversationId, deploymentId)`. Las filas son inmutables después de la
+creación. `model_responses` y `ContextBuilder` consumen esta instantánea; no
+leen una variable de entorno de modelo ni resuelven un deployment por nombre de
+slot.
+
+## API del catálogo y UI
+
+- `GET /api/v1/model-catalog` devuelve las entradas disponibles ordenadas por
+  `displayName` y sin secretos, precios, créditos ni datos de billing.
+- La pantalla de nueva conversación muestra cuatro selectores, uno por slot,
+  preseleccionados con el perfil por defecto cuando está disponible.
+- Cada selector muestra `displayName` y `providerId`.
+- Los cuatro selectores pueden elegir cualquier entrada disponible.
+- La UI bloquea duplicados y muestra el error de validación antes de enviar.
+- Una conversación existente muestra su asignación como solo lectura.
+- La UI no ofrece un control para reemplazar un deployment durante una
+  conversación.
+
+## Ejecución de providers
+
+El registro pasa a estar indexado por `providerId` y el orquestador recibe un
+deployment resuelto por slot. Para OpenRouter:
+
+- se usa `POST https://openrouter.ai/api/v1/chat/completions`;
+- se envía `Authorization: Bearer $OPENROUTER_API_KEY`;
+- `model` es el `modelId` exacto del catálogo;
+- se conserva el contrato normalizado de mensajes, cancelación, timeout y una
+  sola llamada externa por intento;
+- no se usan fallbacks automáticos, variantes `:free` ni reintentos automáticos.
+
+Los adapters directos conservan sus protocolos propios. Ningún adapter comparte
+payloads externos con otro provider por el solo hecho de que OpenRouter sea
+compatible con el formato de OpenAI.
+
+## Métricas, contexto y errores
+
+- OpenRouter debe producir exactamente las mismas métricas normalizadas que los
+  providers existentes: `inputTokens`, `outputTokens` y `totalTokens` cuando el
+  upstream las informe.
+- No se añaden ni persisten métricas de precio, costo, moneda, billing, créditos,
+  presupuesto ni consumo económico para OpenRouter.
+- La protección técnica de contexto usa el `contextLimitTokens` del deployment,
+  el ratio técnico existente y el medidor exacto o cota superior ya exigidos por
+  el contrato. No se persisten prompts compuestos ni conteos de tokens.
+- Los errores de OpenRouter se normalizan a la matriz existente: 401 es
+  `authentication`, 429 es `rate_limited`, 408/502/503 son
+  `provider_transient_error`, 403 es `content_blocked` cuando el cuerpo indica
+  bloqueo de contenido y `provider_error` en los demás casos; 402 se normaliza
+  como `provider_error` con mensaje seguro, sin exponer ni modelar créditos.
+- Ningún error expone headers, bodies upstream, stacks, claves o prompts.
+
+## Aceptación obligatoria
+
+La feature solo está completa cuando se demuestra todo lo siguiente:
+
+1. El catálogo devuelve exactamente los diez deployments iniciales disponibles
+   cuando están configuradas sus tres credenciales (`OPENAI_API_KEY`,
+   `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`).
+2. El perfil por defecto crea la asignación exacta indicada y la persiste como
+   instantánea.
+3. Una conversación puede asignar cualquier deployment disponible a cualquier
+   slot, siempre que no repita `deploymentId`.
+4. La duplicación de deployment se rechaza atómicamente y no llama providers.
+5. Una conversación creada conserva sus deployments aunque cambie el catálogo o
+   la configuración del proceso; sus turnos posteriores usan la instantánea.
+6. La UI y la API rechazan el reemplazo de un deployment después de crear la
+   conversación.
+7. Falta de credencial filtra el deployment del catálogo y rechaza una selección
+   directa con el código definido.
+8. El adapter OpenRouter normaliza contenido, métricas, cancelación, timeout y
+   errores con los mismos contract tests que los adapters existentes.
+9. Las pruebas verifican que no se registran ni persisten precios, créditos,
+   billing o presupuesto.
+10. Las pruebas de contexto usan los límites exactos de la tabla y comprueban que
+    no se llama al provider cuando el payload mínimo excede el umbral.
+
+## Fuentes oficiales consultadas
+
+- [Catálogo y API de modelos de OpenRouter](https://openrouter.ai/docs/api/api-reference/models/get-models)
+- [Catálogo actual de modelos de OpenRouter](https://openrouter.ai/api/v1/models)
+- [Endpoint Chat Completions de OpenRouter](https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request)
+- [Modelos de OpenAI](https://developers.openai.com/api/docs/models)
+- [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+- [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
+- [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+- [Catálogo de modelos Gemini](https://ai.google.dev/gemini-api/docs/models)
+- [Gemini 3.7 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.7-flash)
