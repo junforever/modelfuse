@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rate Limit Security Audit"
+  short_description: "Audit rate limits, CORS, headers, and payload limits"
+  default_prompt: "Use $rate-limit-security-audit to audit this backend HTTP boundary for rate limiting and security defects."
+
+policy:
+  allow_implicit_invocation: false

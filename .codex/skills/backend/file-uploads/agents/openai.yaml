@@ -1,0 +1,7 @@
+interface:
+  display_name: "Secure File Uploads"
+  short_description: "Implement validated and secure backend file uploads"
+  default_prompt: "Use $file-uploads to implement secure validation and lifecycle handling for this file upload flow."
+
+policy:
+  allow_implicit_invocation: false

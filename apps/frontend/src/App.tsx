@@ -1,3 +1,5 @@
+import { ConversationWorkspace } from './features/conversations/components/ConversationWorkspace';
+
 export function App() {
-  return <></>;
+  return <ConversationWorkspace withHistory />;
 }

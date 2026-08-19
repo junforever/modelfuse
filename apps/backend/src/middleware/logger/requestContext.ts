@@ -12,10 +12,9 @@ export function requestContextMiddleware(req: Request, res: Response, next: Next
   // Request input log
   req.log.info({
     message: 'Request started',
+    operation: 'request_started',
     method: req.method,
     route: req.route?.path || req.path,
-    userAgent: req.headers['user-agent'],
-    ip: req.ip,
   });
 
   const startTime = Date.now();
@@ -25,6 +24,7 @@ export function requestContextMiddleware(req: Request, res: Response, next: Next
     const durationMs = Date.now() - startTime;
     req.log.info({
       message: 'Request completed',
+      operation: 'request_completed',
       method: req.method,
       route: req.route?.path || req.path,
       statusCode: res.statusCode,

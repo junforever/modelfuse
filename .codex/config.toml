@@ -1,0 +1,32 @@
+[agents]
+max_threads = 5      # Permite ejecutar tus 4 agentes en paralelo si es necesario
+max_depth = 1        # Evita bucles infinitos (el agente raíz genera subagentes, pero ellos no pueden generar más)
+
+# Opcional: Si quieres registrar globalmente las rutas base de tus plugins/skills
+[[skills.config]]
+path = ".codex/skills/backend"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/frontend"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/product-ux"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/testing"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/testing-e2e"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/testing-integration"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/testing-performance"
+enabled = true

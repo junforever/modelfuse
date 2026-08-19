@@ -8,6 +8,9 @@
     "start": "node dist/index.js",
     "build": "tsc",
     "test": "vitest",
+    "test:consolidation-eval": "tsx src/acceptance/consolidationEvaluation.ts",
+    "test:acceptance-terminal": "vitest run src/acceptance/terminalStates.acceptance.test.ts",
+    "test:acceptance-latency": "vitest run src/acceptance/latency.acceptance.test.ts",
     "dev": "tsx watch --env-file .env --conditions development src/index.ts"
   },
   "keywords": [],

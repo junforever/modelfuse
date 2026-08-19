@@ -1,0 +1,7 @@
+interface:
+  display_name: "E2E Environment Safety"
+  short_description: "Protect E2E environments, secrets, and test data"
+  default_prompt: "Use $e2e-environment-safety to validate and secure this Playwright test environment before running the journey."
+
+policy:
+  allow_implicit_invocation: false

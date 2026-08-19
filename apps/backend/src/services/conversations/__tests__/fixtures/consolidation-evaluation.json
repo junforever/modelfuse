@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "complementary-facts",
+      "prompt": "Resume el plan operativo conservando los aportes complementarios.",
+      "baseResponses": {
+        "openai": "El despliegue azul reduce el riesgo del cambio.",
+        "google": "Las copias de seguridad se ejecutan cada seis horas.",
+        "minimax": "El equipo debe vigilar la latencia durante el despliegue."
+      },
+      "missingSlots": [],
+      "checks": [
+        { "type": "includes", "pattern": "despliegue azul" },
+        { "type": "includes", "pattern": "cada seis horas" },
+        { "type": "includes", "pattern": "vigilar la latencia" },
+        { "type": "no_duplicate_paragraphs" }
+      ]
+    },
+    {
+      "id": "declared-missing-slot",
+      "prompt": "Consolida solamente las respuestas disponibles.",
+      "baseResponses": {
+        "openai": "El plan incluye una revisión semanal.",
+        "google": "Este contenido pertenece al slot ausente.",
+        "minimax": "Las alertas deben tener un responsable asignado."
+      },
+      "missingSlots": ["google"],
+      "checks": [
+        { "type": "includes", "pattern": "revisión semanal" },
+        { "type": "includes", "pattern": "responsable asignado" },
+        { "type": "excludes", "pattern": "contenido pertenece al slot ausente" },
+        { "type": "no_duplicate_paragraphs" }
+      ]
+    },
+    {
+      "id": "no-invented-contradiction",
+      "prompt": "Combina las recomendaciones sin añadir una frecuencia diaria.",
+      "baseResponses": {
+        "openai": "Revisar el informe al cierre de cada semana.",
+        "google": "Mantener un registro de decisiones.",
+        "minimax": "Confirmar las acciones pendientes con sus responsables."
+      },
+      "missingSlots": [],
+      "checks": [
+        { "type": "includes", "pattern": "registro de decisiones" },
+        { "type": "excludes", "pattern": "revisión diaria" },
+        { "type": "no_duplicate_paragraphs" }
+      ]
+    }
+  ]
+}

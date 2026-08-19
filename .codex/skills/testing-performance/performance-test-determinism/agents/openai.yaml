@@ -1,0 +1,7 @@
+interface:
+  display_name: "Performance Test Determinism"
+  short_description: "Stabilize performance measurements without masking regressions"
+  default_prompt: "Use $performance-test-determinism to make this performance measurement reproducible without weakening its workload or threshold."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Component Quality"
+  short_description: "Improve React component structure and state design"
+  default_prompt: "Use $react-component-quality to improve the structure, state ownership, and maintainability of this React component."
+
+policy:
+  allow_implicit_invocation: false

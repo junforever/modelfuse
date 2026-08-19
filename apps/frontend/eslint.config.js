@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['node_modules', 'dist', 'build', 'coverage', '*.min.js']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -20,6 +20,9 @@ export default defineConfig([
       parserOptions: {
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
 ]);

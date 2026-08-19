@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Patterns Audit"
+  short_description: "Audit hooks, state, and React component architecture"
+  default_prompt: "Use $react-patterns-audit to audit this React code for hook, state, and component architecture defects."
+
+policy:
+  allow_implicit_invocation: false

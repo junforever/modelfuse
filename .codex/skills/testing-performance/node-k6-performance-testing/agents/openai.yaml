@@ -1,0 +1,7 @@
+interface:
+  display_name: "Node and k6 Performance Testing"
+  short_description: "Author bounded Node.js and k6 performance tests"
+  default_prompt: "Use $node-k6-performance-testing to implement and run the smallest approved Node.js or k6 performance scenario."
+
+policy:
+  allow_implicit_invocation: false

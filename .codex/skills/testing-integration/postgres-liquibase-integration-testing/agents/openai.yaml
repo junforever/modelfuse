@@ -1,0 +1,7 @@
+interface:
+  display_name: "PostgreSQL & Liquibase Integration"
+  short_description: "Verify PostgreSQL behavior and Liquibase rollback"
+  default_prompt: "Use $postgres-liquibase-integration-testing to verify this PostgreSQL behavior and its Liquibase migration and rollback."
+
+policy:
+  allow_implicit_invocation: false

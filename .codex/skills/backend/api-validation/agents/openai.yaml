@@ -1,0 +1,7 @@
+interface:
+  display_name: "API Validation"
+  short_description: "Validate Express APIs and configuration with Zod"
+  default_prompt: "Use $api-validation to implement type-safe Zod validation for this Express API boundary."
+
+policy:
+  allow_implicit_invocation: false

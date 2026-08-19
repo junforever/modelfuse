@@ -1,0 +1,7 @@
+interface:
+  display_name: "Performance Environment Safety"
+  short_description: "Guard targets, load, data, secrets, and cleanup"
+  default_prompt: "Use $performance-environment-safety to validate the target, workload bounds, dependencies, data ownership, and cleanup before running performance tests."
+
+policy:
+  allow_implicit_invocation: false

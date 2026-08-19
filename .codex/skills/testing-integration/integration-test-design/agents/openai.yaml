@@ -1,0 +1,7 @@
+interface:
+  display_name: "Integration Test Design"
+  short_description: "Design focused tests across real component boundaries"
+  default_prompt: "Use $integration-test-design to design the smallest integration test that proves this component boundary."
+
+policy:
+  allow_implicit_invocation: false

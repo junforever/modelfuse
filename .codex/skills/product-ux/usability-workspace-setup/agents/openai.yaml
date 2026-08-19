@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Usability Workspace Setup'
+  short_description: 'Create or verify standard usability folder structure for a feature'
+  default_prompt: 'Use $usability-workspace-setup to ensure the required folder structure exists for this feature.'
+
+policy:
+  allow_implicit_invocation: false

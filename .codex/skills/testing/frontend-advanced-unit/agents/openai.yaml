@@ -1,0 +1,7 @@
+interface:
+  display_name: "Advanced Frontend Unit Testing"
+  short_description: "Test complex React behavior in isolation"
+  default_prompt: "Use $frontend-advanced-unit to implement focused unit tests for this complex React component or hook."
+
+policy:
+  allow_implicit_invocation: false

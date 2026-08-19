@@ -1,0 +1,7 @@
+interface:
+  display_name: "Frontend Performance Audit"
+  short_description: "Audit React rendering and bundle performance risks"
+  default_prompt: "Use $performance-audit to audit this frontend change for measurable rendering and bundle performance risks."
+
+policy:
+  allow_implicit_invocation: false

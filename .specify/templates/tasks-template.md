@@ -8,15 +8,38 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests**: Tests are REQUIRED for non-trivial behavior. Use the lowest sufficient
+level; add integration coverage for changed boundaries and end-to-end coverage for
+critical cross-product journeys.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
-## Format: `[ID] [P?] [Story] Description`
+## Format: `[ID] [P?] [Story] [Domain] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
+- **[Domain]**: Primary owner: `FE`, `BE`, `UI`, `DB`, `FE-AUDIT`, `BE-AUDIT`,
+  `UNIT`, `INTEGRATION`, `E2E`, `PERF`, or `SHARED`
+- `FE-AUDIT` and `BE-AUDIT` belong exclusively to `frontend-auditor` and
+  `backend-auditor`; they emit an agent report and never modify files or execute
+  tests.
+- `UNIT`, `INTEGRATION`, `E2E`, and `PERF` belong exclusively to
+  `unit-test-runner`, `integration-test-runner`, `e2e-test-runner`, and
+  `performance-test-runner`. Any other testing discipline must name its own
+  specialized owner.
+- Every agent owner named in a concrete generated task MUST match a configured
+  `.codex/agents/*.toml` file; do not invent free-form aliases such as
+  `integration-owner`. Human owners MUST be named explicitly (for example,
+  `Product/UX`).
+- Builders do not author, modify, or execute tests. Auditors remain read-only;
+  blocking findings create a separate builder task followed by re-audit.
+- Every production task with an automated minimum-test criterion MUST reference
+  one or more explicit test task IDs owned by `UNIT`, `INTEGRATION`, `E2E`,
+  `PERF`, or another specialized test domain; a test path or description inside
+  a builder task is not a test task and does not transfer ownership.
 - Include exact file paths in descriptions
+- Split cross-domain work into independently reviewable tasks and add one explicit
+  integration task. A `SHARED` task must name its responsible owner.
 
 ## Path Conventions
 
@@ -48,9 +71,9 @@ description: "Task list template for feature implementation"
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize [language] project with [framework] dependencies
-- [ ] T003 [P] Configure linting and formatting tools
+- [ ] T001 [SHARED] Create project structure per implementation plan (owner: [agent])
+- [ ] T002 [SHARED] Initialize [language] project with [framework] dependencies (owner: [agent])
+- [ ] T003 [P] [SHARED] Configure linting and formatting tools (owner: [agent])
 
 ---
 
@@ -62,12 +85,12 @@ description: "Task list template for feature implementation"
 
 Examples of foundational tasks (adjust based on your project):
 
-- [ ] T004 Setup database schema and migrations framework
-- [ ] T005 [P] Implement authentication/authorization framework
-- [ ] T006 [P] Setup API routing and middleware structure
-- [ ] T007 Create base models/entities that all stories depend on
-- [ ] T008 Configure error handling and logging infrastructure
-- [ ] T009 Setup environment configuration management
+- [ ] T004 [DB] Create Liquibase-formatted schema changes and wire the module changelog into `db/changelogs/db.changelog-master.xml`
+- [ ] T005 [P] [BE] Implement authentication/authorization framework
+- [ ] T006 [P] [BE] Setup API routing and middleware structure
+- [ ] T007 [BE] Create base models/entities that all stories depend on
+- [ ] T008 [BE] Configure error handling and logging infrastructure
+- [ ] T009 [BE] Setup validated environment configuration management
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -79,21 +102,21 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 1 *(required for non-trivial behavior)* ⚠️
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T010 [P] [US1] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
+- [ ] T011 [P] [US1] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
-- [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
-- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
-- [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T016 [US1] Add validation and error handling
-- [ ] T017 [US1] Add logging for user story 1 operations
+- [ ] T012 [P] [US1] [BE] Create [Entity1] model in [exact path]
+- [ ] T013 [P] [US1] [BE] Create [Entity2] model in [exact path]
+- [ ] T014 [US1] [BE] Implement [Service] in [exact path] (depends on T012, T013)
+- [ ] T015 [US1] [BE] Implement [endpoint/feature] in [exact path]
+- [ ] T016 [US1] [BE] Add validation and error handling
+- [ ] T017 [US1] [BE] Add logging for user story 1 operations
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -105,17 +128,17 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 2 *(required for non-trivial behavior)* ⚠️
 
-- [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T018 [P] [US2] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
+- [ ] T019 [P] [US2] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] Create [Entity] model in src/models/[entity].py
-- [ ] T021 [US2] Implement [Service] in src/services/[service].py
-- [ ] T022 [US2] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
+- [ ] T020 [P] [US2] [BE] Create [Entity] model in [exact path]
+- [ ] T021 [US2] [BE] Implement [Service] in [exact path]
+- [ ] T022 [US2] [BE] Implement [endpoint/feature] in [exact path]
+- [ ] T023 [US2] [SHARED] Integrate with User Story 1 components (owner: [agent])
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
@@ -127,16 +150,16 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 3 *(required for non-trivial behavior)* ⚠️
 
-- [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T024 [P] [US3] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
+- [ ] T025 [P] [US3] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]
 
 ### Implementation for User Story 3
 
-- [ ] T026 [P] [US3] Create [Entity] model in src/models/[entity].py
-- [ ] T027 [US3] Implement [Service] in src/services/[service].py
-- [ ] T028 [US3] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T026 [P] [US3] [BE] Create [Entity] model in [exact path]
+- [ ] T027 [US3] [BE] Implement [Service] in [exact path]
+- [ ] T028 [US3] [BE] Implement [endpoint/feature] in [exact path]
 
 **Checkpoint**: All user stories should now be independently functional
 
@@ -146,16 +169,29 @@ Examples of foundational tasks (adjust based on your project):
 
 ---
 
-## Phase N: Polish & Cross-Cutting Concerns
+## Phase N: Read-Only Constitutional Audits
+
+**Purpose**: Review all completed production changes before final validation.
+
+- [ ] TXXX [P] [BE-AUDIT] Review `apps/backend/` and `db/changelogs/` against spec, plan, contracts, and applicable constitution principles (owner: `backend-auditor`); output an agent report with pass/fail, severity, file, and line; do not modify files or execute tests
+- [ ] TXXX [P] [FE-AUDIT] Review `apps/frontend/` and `packages/ui/` against spec, plan, contracts, and applicable constitution principles (owner: `frontend-auditor`); output an agent report with pass/fail, severity, file, and line; do not modify files or execute tests
+
+**Audit gate**: Blocking findings create focused builder tasks and require
+re-audit before final validation continues.
+
+---
+
+## Phase N+1: Polish & Cross-Cutting Concerns
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] TXXX [P] Documentation updates in docs/
-- [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories
-- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
-- [ ] TXXX Security hardening
-- [ ] TXXX Run quickstart.md validation
+- [ ] TXXX [P] [SHARED] Documentation updates in docs/ (owner: [agent])
+- [ ] TXXX [SHARED] Code cleanup and refactoring (owner: [agent])
+- [ ] TXXX [SHARED] Performance optimization across all stories (owner: [agent])
+- [ ] TXXX [P] [UNIT|INTEGRATION|E2E|PERF] Additional behavior-focused tests in [exact test path] (owner: [test owner])
+- [ ] TXXX [SHARED] Security hardening (owner: [agent])
+- [ ] TXXX [DOMAIN] Review applicable quickstart.md sections without executing tests (owner: [configured auditor or explicit human owner])
+- [ ] TXXX [DOMAIN] Execute each quickstart.md scenario once in the task owned by its applicable specialized runner or explicitly named human owner
 
 ---
 
@@ -168,7 +204,8 @@ Examples of foundational tasks (adjust based on your project):
 - **User Stories (Phase 3+)**: All depend on Foundational phase completion
   - User stories can then proceed in parallel (if staffed)
   - Or sequentially in priority order (P1 → P2 → P3)
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
+- **Audits**: Depend on all production work in their respective domain
+- **Polish (Final Phase)**: Depends on completed audits without blocking findings
 
 ### User Story Dependencies
 
@@ -178,11 +215,14 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Within Each User Story
 
-- Tests (if included) MUST be written and FAIL before implementation
+- UNIT, INTEGRATION, and E2E tests MUST be written by their owning runners and
+  fail before implementation
 - Models before services
 - Services before endpoints
 - Core implementation before integration
 - Story complete before moving to next priority
+- Domain production complete before its read-only audit; blocking findings before
+  final validation
 
 ### Parallel Opportunities
 
@@ -192,6 +232,8 @@ Examples of foundational tasks (adjust based on your project):
 - All tests for a user story marked [P] can run in parallel
 - Models within a story marked [P] can run in parallel
 - Different user stories can be worked on in parallel by different team members
+- Backend and frontend audits can run in parallel after their production
+  dependencies complete
 
 ---
 
@@ -199,12 +241,13 @@ Examples of foundational tasks (adjust based on your project):
 
 ```bash
 # Launch all tests for User Story 1 together (if tests requested):
-Task: "Contract test for [endpoint] in tests/contract/test_[name].py"
-Task: "Integration test for [user journey] in tests/integration/test_[name].py"
+Task: "[UNIT] Contract-unit test for [contract] in [exact test path]"
+Task: "[INTEGRATION] Browserless integration test for [boundary] in [exact test path]"
+Task: "[E2E] Playwright test for [critical journey] in [exact test path]"
 
 # Launch all models for User Story 1 together:
-Task: "Create [Entity1] model in src/models/[entity1].py"
-Task: "Create [Entity2] model in src/models/[entity2].py"
+Task: "[BE] Create [Entity1] model in [exact path]"
+Task: "[BE] Create [Entity2] model in [exact path]"
 ```
 
 ---
@@ -244,8 +287,11 @@ With multiple developers:
 
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
+- [Domain] names the specialized owner and review boundary
 - Each user story should be independently completable and testable
 - Verify tests fail before implementing
+- Auditors emit reports only; fixes belong to new builder tasks and require
+  re-audit
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence

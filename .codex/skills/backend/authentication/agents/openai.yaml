@@ -1,0 +1,7 @@
+interface:
+  display_name: "Backend Authentication"
+  short_description: "Implement secure backend authentication flows"
+  default_prompt: "Use $authentication to implement the secure authentication flow for this Express backend."
+
+policy:
+  allow_implicit_invocation: false

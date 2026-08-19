@@ -1,0 +1,7 @@
+interface:
+  display_name: "E2E Test Determinism"
+  short_description: "Stabilize and diagnose flaky Playwright journeys"
+  default_prompt: "Use $e2e-test-determinism to diagnose and remove nondeterminism from this flaky Playwright journey."
+
+policy:
+  allow_implicit_invocation: false

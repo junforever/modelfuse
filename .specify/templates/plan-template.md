@@ -31,7 +31,31 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] Work is assigned to the owning monorepo boundary (`apps/frontend`,
+      `apps/backend`, `packages/ui`, or `db`) without cross-application imports.
+- [ ] Backend work preserves the `index.ts`/`app.ts`, route, controller,
+      middleware, infrastructure, utility, and contract responsibilities.
+- [ ] LLM work uses environment configuration, provider adapters, and normalized
+      response contracts; consolidation does not consume provider-specific data.
+- [ ] Conversation data remains in PostgreSQL, and each model's context is
+      isolated; any window, summary, or compression rule is explicit.
+- [ ] Reusable visual primitives live in `packages/ui`; application routing,
+      state, and business behavior remain in `apps/frontend`.
+- [ ] Every schema change is Liquibase-formatted SQL in a module changelog that is
+      included by `db/changelogs/db.changelog-master.xml`.
+- [ ] Secrets remain outside source, frontend bundles, logs, and conversation
+      data; environment configuration has a validated boundary.
+- [ ] Non-trivial behavior has the smallest sufficient automated test, with
+      integration or end-to-end coverage for affected boundaries and critical
+      journeys.
+- [ ] Unit, integration, E2E, and performance test tasks name
+      `unit-test-runner`, `integration-test-runner`, `e2e-test-runner`, or
+      `performance-test-runner` respectively; any other testing discipline names
+      a separate specialized owner.
+- [ ] Builders own production changes and testability seams but do not author,
+      modify, or execute tests; auditors remain read-only.
+- [ ] Any violation is justified in Complexity Tracking and approved before
+      implementation.
 
 ## Project Structure
 
@@ -49,46 +73,28 @@ specs/[###-feature]/
 
 ### Source Code (repository root)
 <!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
+  ACTION REQUIRED: Keep the constitutional ownership boundaries below and expand
+  only the directories touched by this feature. Remove untouched child paths.
 -->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+apps/
+├── frontend/
+│   └── src/
+└── backend/
+    └── src/
+        ├── controllers/
+        ├── routes/
+        ├── middleware/
+        ├── infrastructure/
+        ├── utils/
+        └── types/
+packages/
+└── ui/
+    └── src/
+db/
+└── changelogs/
+    └── db.changelog-master.xml
 ```
 
 **Structure Decision**: [Document the selected structure and reference the real

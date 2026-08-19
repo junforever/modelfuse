@@ -1,0 +1,7 @@
+interface:
+  display_name: "Advanced Accessibility"
+  short_description: "Implement accessible complex UI interaction patterns"
+  default_prompt: "Use $advanced-a11y to implement accessible keyboard, focus, and screen-reader behavior for this complex UI."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "React Form Validation"
+  short_description: "Implement accessible React form validation flows"
+  default_prompt: "Use $form-validation to implement accessible validation and submission behavior for this React form."
+
+policy:
+  allow_implicit_invocation: false

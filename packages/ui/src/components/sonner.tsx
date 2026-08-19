@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useTheme } from './theme-provider';
 import { Toaster as Sonner, toast, type ToasterProps } from 'sonner';
 import {
