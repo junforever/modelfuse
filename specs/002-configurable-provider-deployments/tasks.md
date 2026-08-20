@@ -278,7 +278,7 @@ Setup T001-T002
 - Relevant backend and frontend production plus UNIT tasks precede each INTEGRATION task.
 - T016 precedes T017 where acceptance utilities import the shared backend fake; both precede T061–T065.
 - T065 integration approval precedes all E2E fixture/spec work.
-- T068 precedes T069/T070; any production correction after either audit invalidates both audits and requires revalidation before coordinator gates.
+- T067 and T068 precede T069/T070; any production correction after either audit invalidates both audits and requires revalidation before coordinator gates.
 
 ### Parallel opportunities by User Story
 
@@ -358,13 +358,13 @@ integration-test-runner: T060 after both unit tasks
 ```text
 unit-test-runner: T016
 integration-test-runner: T017 after T016
-backend-builder: T061 after T017
-frontend-builder: T062 and T063 after T017
+backend-builder: T061 after T060 and T017
+frontend-builder: T062 and T063 after T060 and T017
 unit-test-runner: T064 after T061-T063
 integration-test-runner: T065 after T064
 e2e-test-runner: T066, then T067 and T068 in parallel
-backend-auditor: T069 after T068
-frontend-auditor: T070 after T068
+backend-auditor: T069 after T067 and T068
+frontend-auditor: T070 after T067 and T068
 coordinator: G1, G2, and final shutdown gate after T069/T070
 ```
 
