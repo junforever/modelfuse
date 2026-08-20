@@ -1,8 +1,14 @@
 import type { Pool } from 'pg';
+import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEPLOYMENT_CATALOG } from '../../../llm/deploymentCatalog.js';
 import { ConversationRepository } from '../conversationRepository.js';
+import {
+  ControlledLlmProvider,
+  deferred,
+} from '../../../../test/integration/controlledLlmProviders.js';
+import { createIntegrationBackend } from '../../../../test/integration/createIntegrationBackend.js';
 import {
   assertModelFuseSchema,
   createIntegrationPool,
@@ -13,8 +19,16 @@ import type {
   DeploymentDefinition,
   ResponseSlot,
 } from '../../../../types/conversations.js';
+import type { ProviderRegistry } from '../../../../types/llm.js';
 
 const CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000031';
+const IMMUTABLE_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000032';
+const REPLAY_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000033';
+const OWNED_CLIENT_REQUEST_IDS = [
+  CLIENT_REQUEST_ID,
+  IMMUTABLE_CLIENT_REQUEST_ID,
+  REPLAY_CLIENT_REQUEST_ID,
+] as const;
 const FAILURE_FUNCTION = 't030_fail_consolidator_response';
 const FAILURE_TRIGGER = 't030_fail_consolidator_response_trigger';
 const DEPLOYMENTS = [
@@ -35,12 +49,12 @@ describe('ConversationRepository explicit deployment transaction', () => {
   });
 
   beforeEach(async () => {
-    await deleteOwnedConversationRequests(pool, [CLIENT_REQUEST_ID]);
+    await deleteOwnedConversationRequests(pool, OWNED_CLIENT_REQUEST_IDS);
   });
 
   afterEach(async () => {
     await dropFailureTrigger(pool);
-    await deleteOwnedConversationRequests(pool, [CLIENT_REQUEST_ID]);
+    await deleteOwnedConversationRequests(pool, OWNED_CLIENT_REQUEST_IDS);
   });
 
   afterAll(async () => {
@@ -104,7 +118,127 @@ describe('ConversationRepository explicit deployment transaction', () => {
       responses: 0,
     });
   });
+
+  it('persists four immutable canonical snapshots and rejects every direct update', async () => {
+    const created = await repository.createConversation({
+      clientRequestId: IMMUTABLE_CLIENT_REQUEST_ID,
+      prompt: 'Persist immutable deployment snapshots.',
+      title: 'Persist immutable deployment snapshots.',
+      deployments: DEPLOYMENTS,
+    });
+    expect(created.kind).toBe('created');
+    if (created.kind !== 'created') throw new Error('Expected a newly created conversation');
+
+    const before = await readDeploymentRows(pool, created.conversationId);
+    expect(before).toHaveLength(4);
+    expect(before.map(row => row.slot)).toEqual([
+      'base-1',
+      'base-2',
+      'base-3',
+      'consolidator',
+    ]);
+    before.forEach(row => expect(row.updatedAt).toEqual(row.createdAt));
+
+    await expect(
+      pool.query(
+        `UPDATE conversation_deployments
+            SET display_name = 'Replacement forbidden'
+          WHERE conversation_id = $1 AND slot = 'base-1'`,
+        [created.conversationId],
+      ),
+    ).rejects.toThrow('conversation deployments are immutable');
+    expect(await readDeploymentRows(pool, created.conversationId)).toEqual(before);
+  });
+
+  it('returns the original snapshots on replay after catalog/configuration change and does not relaunch', async () => {
+    const gates = [deferred(), deferred(), deferred()] as const;
+    const openai = new ControlledLlmProvider('base-1');
+    const google = new ControlledLlmProvider('base-2');
+    const openrouter = new ControlledLlmProvider('base-3', [], {
+      providerId: 'openrouter',
+      provider: 'openrouter-fake',
+      model: 'openrouter-test-model',
+    });
+    openai.enqueueBlocked(gates[0].promise);
+    google.enqueueBlocked(gates[1].promise);
+    openrouter.enqueueBlocked(gates[2].promise);
+    openrouter.enqueueResult('Consolidated response');
+    const providers: ProviderRegistry = { openai, google, openrouter };
+    const initial = createIntegrationBackend(pool, providers);
+
+    try {
+      const payload = {
+        clientRequestId: REPLAY_CLIENT_REQUEST_ID,
+        prompt: 'Replay must preserve the original snapshots.',
+        deploymentIds: Object.fromEntries(
+          DEPLOYMENTS.map(({ slot, deploymentId }) => [slot, deploymentId]),
+        ),
+      };
+      const created = await request(initial.app).post('/api/v1/conversations').send(payload);
+      expect(created.status).toBe(201);
+      await Promise.all([
+        openai.waitUntilCalled(),
+        google.waitUntilCalled(),
+        openrouter.waitUntilCalled(),
+      ]);
+      const callsBeforeReplay = [
+        openai.calls.length,
+        google.calls.length,
+        openrouter.calls.length,
+      ];
+
+      const changed = createIntegrationBackend(pool, providers, []);
+      const replayed = await request(changed.app)
+        .post('/api/v1/conversations')
+        .send({
+          ...payload,
+          deploymentIds: {
+            'base-1': 'removed-from-catalog-1',
+            'base-2': 'removed-from-catalog-2',
+            'base-3': 'removed-from-catalog-3',
+            consolidator: 'removed-from-catalog-4',
+          },
+        });
+
+      expect(replayed.status).toBe(201);
+      expect(replayed.body.conversation.id).toBe(created.body.conversation.id);
+      expect(replayed.body.turn.id).toBe(created.body.turn.id);
+      expect(replayed.body.conversation.deployments).toEqual(
+        created.body.conversation.deployments,
+      );
+      expect(replayed.body.conversation.deployments.map(({ slot }: { slot: string }) => slot)).toEqual(
+        ['base-1', 'base-2', 'base-3', 'consolidator'],
+      );
+      expect([openai.calls.length, google.calls.length, openrouter.calls.length]).toEqual(
+        callsBeforeReplay,
+      );
+      await changed.conversationService.stop();
+    } finally {
+      gates.forEach(gate => gate.resolve());
+      await initial.conversationService.stop();
+    }
+  });
 });
+
+async function readDeploymentRows(pool: Pool, conversationId: string) {
+  const result = await pool.query<{
+    slot: ResponseSlot;
+    deploymentId: string;
+    displayName: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>(
+    `SELECT slot, deployment_id AS "deploymentId", display_name AS "displayName",
+            created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM conversation_deployments
+      WHERE conversation_id = $1
+      ORDER BY CASE slot
+        WHEN 'base-1' THEN 1 WHEN 'base-2' THEN 2
+        WHEN 'base-3' THEN 3 WHEN 'consolidator' THEN 4 END`,
+    [conversationId],
+  );
+  return result.rows;
+}
 
 async function dropFailureTrigger(pool: Pool): Promise<void> {
   await pool.query(`DROP TRIGGER IF EXISTS ${FAILURE_TRIGGER} ON model_responses`);

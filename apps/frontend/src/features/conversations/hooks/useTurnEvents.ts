@@ -112,6 +112,7 @@ export function useTurnEvents({
                 current
                   ? {
                       ...current,
+                      deployments: snapshot.deployments,
                       hasWorkInProgress: busyUpdate.hasWorkInProgress,
                       updatedAt: busyUpdate.updatedAt,
                     }

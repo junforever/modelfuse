@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConversationWorkspace } from '../components/ConversationWorkspace';
 import { conversationKeys } from '../queries/conversation-keys';
-import type { ConversationTurnResponse } from '../types/conversation';
+import type {
+  ConversationTurnResponse,
+  DeploymentIds,
+  DeploymentSummaryTuple,
+} from '../types/conversation';
 import { eventTime, modelResponse, turnFixture } from '../../../test/conversation-fixtures';
 import { renderWithQueryClient } from '../../../test/query-test-utils';
 
@@ -12,6 +16,9 @@ const api = vi.hoisted(() => ({
   createConversation: vi.fn(),
   createTurn: vi.fn(),
   getTurnSnapshot: vi.fn(),
+  listAvailableDeployments: vi.fn(),
+  listConversations: vi.fn(),
+  retryResponse: vi.fn(),
 }));
 
 vi.mock('../api/conversationsApi', async importOriginal => ({
@@ -19,6 +26,9 @@ vi.mock('../api/conversationsApi', async importOriginal => ({
   createConversation: api.createConversation,
   createTurn: api.createTurn,
   getTurnSnapshot: api.getTurnSnapshot,
+  listAvailableDeployments: api.listAvailableDeployments,
+  listConversations: api.listConversations,
+  retryResponse: api.retryResponse,
 }));
 
 const CONVERSATION_ID = '123e4567-e89b-42d3-a456-426614174078';
@@ -26,6 +36,51 @@ const FIRST_TURN_ID = '223e4567-e89b-42d3-a456-426614174078';
 const SECOND_TURN_ID = '223e4567-e89b-42d3-a456-426614174079';
 const FIRST_REQUEST_ID = '323e4567-e89b-42d3-a456-426614174078';
 const SECOND_REQUEST_ID = '323e4567-e89b-42d3-a456-426614174079';
+const DEPLOYMENT_IDS: DeploymentIds = {
+  'base-1': 'openai-5.6-sol',
+  'base-2': 'gemini-3.7-flash',
+  'base-3': 'openrouter-minimax-m3',
+  consolidator: 'openrouter-qwen-3.8-max',
+};
+const DEPLOYMENTS: DeploymentSummaryTuple = [
+  {
+    slot: 'base-1',
+    deploymentId: DEPLOYMENT_IDS['base-1'],
+    providerId: 'openai',
+    modelId: 'gpt-5.6',
+    displayName: 'GPT-5.6 Sol',
+  },
+  {
+    slot: 'base-2',
+    deploymentId: DEPLOYMENT_IDS['base-2'],
+    providerId: 'google',
+    modelId: 'gemini-3.7-flash',
+    displayName: 'Gemini 3.7 Flash',
+  },
+  {
+    slot: 'base-3',
+    deploymentId: DEPLOYMENT_IDS['base-3'],
+    providerId: 'openrouter',
+    modelId: 'minimax/m3',
+    displayName: 'MiniMax M3',
+  },
+  {
+    slot: 'consolidator',
+    deploymentId: DEPLOYMENT_IDS.consolidator,
+    providerId: 'openrouter',
+    modelId: 'qwen/qwen-3.8-max',
+    displayName: 'Qwen 3.8 Max',
+  },
+];
+const CATALOG = {
+  items: DEPLOYMENTS.map(deployment => ({
+    ...deployment,
+    contextLimitTokens: 128_000,
+    maxOutputTokens: 8_192,
+    inputModalities: ['text'] as const,
+    outputModalities: ['text'] as const,
+  })),
+};
 
 type Listener = (event: MessageEvent<string>) => void;
 
@@ -68,6 +123,11 @@ describe('conversation continuation frontend integration', () => {
     api.createConversation.mockReset();
     api.createTurn.mockReset();
     api.getTurnSnapshot.mockReset();
+    api.listAvailableDeployments.mockReset();
+    api.listConversations.mockReset();
+    api.retryResponse.mockReset();
+    api.listAvailableDeployments.mockResolvedValue(CATALOG);
+    api.listConversations.mockResolvedValue({ items: [], nextCursor: null });
     ControlledEventSource.instances = [];
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test/api/v1');
     vi.stubGlobal('EventSource', ControlledEventSource);
@@ -82,7 +142,7 @@ describe('conversation continuation frontend integration', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps both turns cached by ID and opens one SSE stream for the active follow-up', async () => {
+  it('keeps both turns cached while continuation omits the stored assignment', async () => {
     const user = userEvent.setup();
     const first = result(FIRST_TURN_ID, FIRST_REQUEST_ID, 1, 'Primer prompt', false);
     const second = result(SECOND_TURN_ID, SECOND_REQUEST_ID, 2, 'Segundo prompt', true);
@@ -107,11 +167,13 @@ describe('conversation continuation frontend integration', () => {
     const { queryClient, unmount } = renderWithQueryClient(<ConversationWorkspace />);
 
     await user.type(screen.getByLabelText('Prompt'), 'Primer prompt');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Enviar' }));
     expect(await screen.findByRole('heading', { name: 'Turno 1' })).toBeInTheDocument();
     expect(api.createConversation).toHaveBeenCalledWith(expect.anything(), {
       clientRequestId: FIRST_REQUEST_ID,
       prompt: 'Primer prompt',
+      deploymentIds: DEPLOYMENT_IDS,
     });
     expect(ControlledEventSource.instances).toHaveLength(0);
 
@@ -148,7 +210,60 @@ describe('conversation continuation frontend integration', () => {
     expect(ControlledEventSource.instances[0]!.listenerCount()).toBe(0);
     queryClient.clear();
   });
+
+  it('retries the canonical slot without sending a replacement assignment', async () => {
+    const user = userEvent.setup();
+    const failed = failedFirstResponse();
+    api.createConversation.mockResolvedValue(failed);
+    api.retryResponse.mockResolvedValue(
+      result(FIRST_TURN_ID, FIRST_REQUEST_ID, 1, 'Primer prompt', false)
+    );
+    const { queryClient, unmount } = renderWithQueryClient(<ConversationWorkspace />);
+
+    await user.type(screen.getByLabelText('Prompt'), 'Primer prompt');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+    const retry = await screen.findByRole('button', {
+      name: 'Reintentar Base 1 · GPT-5.6 Sol',
+    });
+    await user.click(retry);
+
+    await waitFor(() => expect(api.retryResponse).toHaveBeenCalledOnce());
+    expect(api.retryResponse).toHaveBeenCalledWith(
+      expect.anything(),
+      CONVERSATION_ID,
+      FIRST_TURN_ID,
+      'base-1'
+    );
+    expect(api.retryResponse.mock.calls[0]).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ deploymentIds: expect.anything() })])
+    );
+
+    unmount();
+    queryClient.clear();
+  });
 });
+
+function failedFirstResponse(): ConversationTurnResponse {
+  const completed = result(FIRST_TURN_ID, FIRST_REQUEST_ID, 1, 'Primer prompt', false);
+  return {
+    ...completed,
+    turn: {
+      ...completed.turn,
+      status: 'partial',
+      responses: [
+        modelResponse('base-1', {
+          status: 'failed',
+          error: { code: 'timeout', message: 'El deployment tardó demasiado.' },
+          recoverable: true,
+        }),
+        modelResponse('base-2', { status: 'completed', content: 'base-2' }),
+        modelResponse('base-3', { status: 'completed', content: 'base-3' }),
+        modelResponse('consolidator', { status: 'completed', content: 'consolidator' }),
+      ],
+    },
+  };
+}
 
 function result(
   turnId: string,
@@ -161,6 +276,7 @@ function result(
     conversation: {
       id: CONVERSATION_ID,
       title: 'Conversación',
+      deployments: DEPLOYMENTS,
       hasWorkInProgress,
       createdAt: eventTime,
       updatedAt: eventTime,
@@ -172,21 +288,21 @@ function result(
       prompt,
       status: hasWorkInProgress ? 'running' : 'completed',
       responses: [
-        modelResponse('openai', {
+        modelResponse('base-1', {
           status: hasWorkInProgress ? 'running' : 'completed',
-          content: hasWorkInProgress ? null : 'openai',
+          content: hasWorkInProgress ? null : 'base-1',
         }),
-        modelResponse('google', {
+        modelResponse('base-2', {
           status: hasWorkInProgress ? 'running' : 'completed',
-          content: hasWorkInProgress ? null : 'google',
+          content: hasWorkInProgress ? null : 'base-2',
         }),
-        modelResponse('minimax', {
+        modelResponse('base-3', {
           status: hasWorkInProgress ? 'running' : 'completed',
-          content: hasWorkInProgress ? null : 'minimax',
+          content: hasWorkInProgress ? null : 'base-3',
         }),
-        modelResponse('qwen', {
+        modelResponse('consolidator', {
           status: hasWorkInProgress ? 'pending' : 'completed',
-          content: hasWorkInProgress ? null : 'qwen',
+          content: hasWorkInProgress ? null : 'consolidator',
         }),
       ],
     }),

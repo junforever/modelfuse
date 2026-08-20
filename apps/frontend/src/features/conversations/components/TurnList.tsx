@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 
 import type { RuntimeStages } from '../hooks/useTurnEvents';
-import type { ResponseSlot, Turn } from '../types/conversation';
+import type { DeploymentSummaryTuple, ResponseSlot, Turn } from '../types/conversation';
 import { TurnCard } from './TurnCard';
 
 interface TurnListProps {
+  readonly deployments: DeploymentSummaryTuple;
   readonly turns: readonly Turn[];
   readonly activeTurnId?: string;
   readonly hasWorkInProgress: boolean;
@@ -16,6 +17,7 @@ interface TurnListProps {
 }
 
 export function TurnList({
+  deployments,
   turns,
   activeTurnId,
   hasWorkInProgress,
@@ -32,6 +34,7 @@ export function TurnList({
         {turns.map(turn => (
           <li key={turn.id}>
             <TurnCard
+              deployments={deployments}
               turn={turn}
               hasWorkInProgress={hasWorkInProgress}
               runtimeStages={turn.id === activeTurnId ? runtimeStages : {}}

@@ -8,6 +8,10 @@ import {
 } from '../../../test/integration/controlledLlmProviders.js';
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
 import {
+  insertConversationDeployments,
+  TEST_DEPLOYMENT_SUMMARIES,
+} from '../../../test/integration/conversationDeploymentFixtures.js';
+import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
@@ -44,16 +48,16 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
     const providers = createControlledProviders();
     const gates = Array.from({ length: 6 }, () => deferred());
     for (const [index, slot] of [
-      'openai',
-      'google',
-      'minimax',
-      'openai',
-      'google',
-      'minimax',
+      'base-1',
+      'base-2',
+      'base-3',
+      'base-1',
+      'base-2',
+      'base-3',
     ].entries()) {
-      providers[slot as 'openai' | 'google' | 'minimax'].enqueueBlocked(gates[index]!.promise);
+      providers[slot as 'base-1' | 'base-2' | 'base-3'].enqueueBlocked(gates[index]!.promise);
     }
-    const { app, publisher } = createIntegrationBackend(pool, providers);
+    const { app, publisher } = createIntegrationBackend(pool, providers, []);
     const secondPayload = { clientRequestId: SECOND_REQUEST_ID, prompt: 'Segundo turno' };
     const idleObservations: IdleObservation[] = [];
 
@@ -68,12 +72,14 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
       if (secondIdle) idleObservations.push(secondIdle);
       expect(created.status).toBe(202);
       expect(created.body.turn).toMatchObject({ ordinal: 2, ...secondPayload });
+      expect(created.body.conversation.deployments).toEqual(TEST_DEPLOYMENT_SUMMARIES);
 
       const replay = await request(app)
         .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
         .send(secondPayload);
       expect(replay.status).toBe(202);
       expect(replay.body.turn.id).toBe(created.body.turn.id);
+      expect(replay.body.conversation.deployments).toEqual(TEST_DEPLOYMENT_SUMMARIES);
 
       const busy = await request(app)
         .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
@@ -82,9 +88,9 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
       expect(busy.body.code).toBe('CONVERSATION_BUSY');
 
       await Promise.all([
-        providers.openai.waitUntilCalled(1),
-        providers.google.waitUntilCalled(1),
-        providers.minimax.waitUntilCalled(1),
+        providers['base-1'].waitUntilCalled(1),
+        providers['base-2'].waitUntilCalled(1),
+        providers['base-3'].waitUntilCalled(1),
       ]);
       gates.slice(0, 3).forEach(gate => gate.resolve());
       await secondIdle?.promise;
@@ -123,10 +129,20 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
         { ordinal: 2, client_request_id: SECOND_REQUEST_ID, status: 'completed' },
         { ordinal: 3, client_request_id: THIRD_REQUEST_ID, status: 'completed' },
       ]);
-      expect(providers.openai.calls).toHaveLength(2);
-      expect(providers.google.calls).toHaveLength(2);
-      expect(providers.minimax.calls).toHaveLength(2);
-      expect(providers.qwen.calls).toHaveLength(2);
+      expect(providers['base-1'].calls).toHaveLength(2);
+      expect(providers['base-2'].calls).toHaveLength(2);
+      expect(providers['base-3'].calls).toHaveLength(2);
+      expect(providers.consolidator.calls).toHaveLength(2);
+      Object.values(providers).forEach(provider => {
+        expect(provider.calls.map(call => call.deployment)).toEqual(
+          provider.calls.map(() =>
+            expect.objectContaining({
+              deploymentId: `integration-${provider.slot}`,
+              slot: provider.slot,
+            }),
+          ),
+        );
+      });
     } finally {
       gates.forEach(gate => gate.resolve());
       await Promise.all(idleObservations.map(({ promise }) => promise));
@@ -138,17 +154,32 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
     const providers = createControlledProviders();
     const baseGates = Array.from({ length: 3 }, () => deferred());
     const qwenGate = deferred();
-    providers.openai.enqueueBlocked(baseGates[0]!.promise);
-    providers.google.enqueueBlocked(baseGates[1]!.promise);
-    providers.minimax.enqueueBlocked(baseGates[2]!.promise);
-    providers.qwen.enqueueBlocked(qwenGate.promise);
+    providers['base-1'].enqueueBlocked(baseGates[0]!.promise);
+    providers['base-2'].enqueueBlocked(baseGates[1]!.promise);
+    providers['base-3'].enqueueBlocked(baseGates[2]!.promise);
+    providers.consolidator.enqueueBlocked(qwenGate.promise);
 
-    const backend = createIntegrationBackend(pool, providers);
+    const backend = createIntegrationBackend(pool, providers, []);
     const secondPayload = { clientRequestId: SECOND_REQUEST_ID, prompt: 'Turn activo' };
     let secondIdle: IdleObservation | undefined;
     let firstPostgresError: string | undefined;
 
     try {
+      const assignmentChange = await request(backend.app)
+        .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
+        .send({
+          clientRequestId: SECOND_REQUEST_ID,
+          prompt: 'Turn activo',
+          deploymentIds: {
+            'base-1': 'replacement-1',
+            'base-2': 'replacement-2',
+            'base-3': 'replacement-3',
+            consolidator: 'replacement-4',
+          },
+        });
+      expect(assignmentChange.status).toBe(422);
+      expect(Object.values(providers).flatMap(provider => provider.calls)).toEqual([]);
+
       const created = await request(backend.app)
         .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
         .send(secondPayload);
@@ -157,9 +188,9 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
       secondIdle = observeIdle(backend.publisher, created.body.turn.id);
 
       await Promise.all([
-        providers.openai.waitUntilCalled(),
-        providers.google.waitUntilCalled(),
-        providers.minimax.waitUntilCalled(),
+        providers['base-1'].waitUntilCalled(),
+        providers['base-2'].waitUntilCalled(),
+        providers['base-3'].waitUntilCalled(),
       ]);
 
       // Start the contender before releasing provider gates. This leaves the
@@ -174,7 +205,7 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
         });
       baseGates.forEach(gate => gate.resolve());
 
-      await providers.qwen.waitUntilCalled();
+      await providers.consolidator.waitUntilCalled();
       qwenGate.resolve();
       const [busy] = await Promise.all([busyPromise, secondIdle.promise]);
 
@@ -185,10 +216,10 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
         status: 409,
         body: { code: 'CONVERSATION_BUSY' },
       });
-      expect(providers.openai.calls).toHaveLength(1);
-      expect(providers.google.calls).toHaveLength(1);
-      expect(providers.minimax.calls).toHaveLength(1);
-      expect(providers.qwen.calls).toHaveLength(1);
+      expect(providers['base-1'].calls).toHaveLength(1);
+      expect(providers['base-2'].calls).toHaveLength(1);
+      expect(providers['base-3'].calls).toHaveLength(1);
+      expect(providers.consolidator.calls).toHaveLength(1);
 
       const persisted = await pool.query<{
         ordinal: number;
@@ -265,6 +296,7 @@ async function seedCompletedConversation(pool: Pool): Promise<void> {
      VALUES ($1, '73000000-0000-4000-8000-000000000177', 'Conversación existente', $2, $2)`,
     [CONVERSATION_ID, NOW]
   );
+  await insertConversationDeployments(pool, CONVERSATION_ID);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
@@ -276,10 +308,10 @@ async function seedCompletedConversation(pool: Pool): Promise<void> {
        (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
         is_stale, attempt_no, completed_at, created_at, updated_at)
      SELECT gen_random_uuid(), $1, slot,
-            CASE WHEN slot = 'qwen' THEN 'consolidator' ELSE 'base' END,
+            CASE WHEN slot = 'consolidator' THEN 'consolidator' ELSE 'base' END,
             slot, slot || '-model', 'completed', slot || '-turn-1', false,
             false, 1, $2, $2, $2
-       FROM unnest(ARRAY['openai', 'google', 'minimax', 'qwen']) AS slot`,
+       FROM unnest(ARRAY['base-1', 'base-2', 'base-3', 'consolidator']) AS slot`,
     [FIRST_TURN_ID, NOW]
   );
 }

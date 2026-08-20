@@ -22,7 +22,7 @@ export async function recoverInterruptedTurns(pool: Pool): Promise<void> {
     const responses = await client.query<RecoveredResponseRow>(
       `UPDATE model_responses
           SET status = 'failed',
-              content = CASE WHEN slot = 'qwen' AND is_stale THEN content ELSE NULL END,
+              content = CASE WHEN slot = 'consolidator' AND is_stale THEN content ELSE NULL END,
               error_code = 'interrupted',
               error_message = 'The response was interrupted before completion.',
               error_recoverable = true,

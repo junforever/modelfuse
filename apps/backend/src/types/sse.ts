@@ -16,6 +16,11 @@ export interface SlotUpdateData<Slot extends ResponseSlot = ResponseSlot> {
   runtimeStage?: string;
 }
 
+export type SlotUpdateEvent<Slot extends ResponseSlot = ResponseSlot> = {
+  event: 'slot_update';
+  data: SlotUpdateData<Slot>;
+};
+
 export interface TurnUpdateData {
   conversationId: string;
   turnId: string;
@@ -32,7 +37,7 @@ export interface BusyUpdateData {
 }
 
 export type TurnEvent =
-  | { event: 'slot_update'; data: SlotUpdateData }
+  | SlotUpdateEvent
   | { event: 'turn_update'; data: TurnUpdateData }
   | { event: 'busy_update'; data: BusyUpdateData };
 

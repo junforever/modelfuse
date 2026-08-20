@@ -11,6 +11,11 @@ import {
 } from '../../../test/integration/controlledLlmProviders.js';
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
 import {
+  CANONICAL_SLOTS,
+  insertConversationDeployments,
+  TEST_DEPLOYMENT_SNAPSHOTS,
+} from '../../../test/integration/conversationDeploymentFixtures.js';
+import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
@@ -44,14 +49,14 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
   });
 
   it('accepts one concurrent retry by CAS, increments attempt_no and reconsolidates only after base success', async () => {
-    await seedFailedTurn(pool, { slot: 'openai', recoverable: true });
+    await seedFailedTurn(pool, { slot: 'base-1', recoverable: true });
     const providers = createControlledProviders();
     const release = deferred();
     const releaseQwen = deferred();
-    providers.openai.enqueueBlocked(release.promise, 'Recovered OpenAI answer');
-    providers.qwen.enqueueBlocked(releaseQwen.promise, 'Re-consolidated answer');
+    providers['base-1'].enqueueBlocked(release.promise, 'Recovered OpenAI answer');
+    providers.consolidator.enqueueBlocked(releaseQwen.promise, 'Re-consolidated answer');
     const backend = createIntegrationBackend(pool, providers);
-    const path = actionPath('openai', 'retry');
+    const path = actionPath('base-1', 'retry');
     const events: TurnEvent[] = [];
     const unsubscribe = backend.publisher.subscribe(TURN_ID, event => events.push(event));
 
@@ -67,7 +72,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
 
       const active = await pool.query<{ status: string; attempt_no: number }>(
         `SELECT status, attempt_no FROM model_responses
-          WHERE turn_id = $1 AND slot = 'openai'`,
+          WHERE turn_id = $1 AND slot = 'base-1'`,
         [TURN_ID]
       );
       expect(active.rows[0]).toMatchObject({ attempt_no: 2 });
@@ -76,21 +81,21 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
       const idle = waitForIdle(backend.publisher, TURN_ID);
       release.resolve();
       const qwenStarted = await Promise.race([
-        providers.qwen.waitUntilCalled().then(() => true),
+        providers.consolidator.waitUntilCalled().then(() => true),
         new Promise<false>(resolve => setTimeout(() => resolve(false), 2_000)),
       ]);
 
       const qwenPending = events.findIndex(
         event =>
           event.event === 'slot_update' &&
-          event.data.response.slot === 'qwen' &&
+          event.data.response.slot === 'consolidator' &&
           event.data.response.status === 'pending' &&
           event.data.response.isStale === true
       );
       const qwenRunning = events.findIndex(
         event =>
           event.event === 'slot_update' &&
-          event.data.response.slot === 'qwen' &&
+          event.data.response.slot === 'consolidator' &&
           event.data.response.status === 'running'
       );
       expect(qwenPending).toBeGreaterThanOrEqual(0);
@@ -109,30 +114,30 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
       }>(
         `SELECT slot, status, content, attempt_no, is_stale
            FROM model_responses
-          WHERE turn_id = $1 AND slot IN ('openai', 'qwen')
+          WHERE turn_id = $1 AND slot IN ('base-1', 'consolidator')
           ORDER BY slot`,
         [TURN_ID]
       );
       expect(final.rows).toEqual([
         {
-          slot: 'openai',
+          slot: 'base-1',
           status: 'completed',
           content: 'Recovered OpenAI answer',
           attempt_no: 2,
           is_stale: false,
         },
         {
-          slot: 'qwen',
+          slot: 'consolidator',
           status: 'completed',
           content: 'Re-consolidated answer',
           attempt_no: 2,
           is_stale: false,
         },
       ]);
-      expect(providers.openai.calls).toHaveLength(1);
-      expect(providers.qwen.calls).toHaveLength(1);
-      expect(providers.google.calls).toHaveLength(0);
-      expect(providers.minimax.calls).toHaveLength(0);
+      expect(providers['base-1'].calls).toHaveLength(1);
+      expect(providers.consolidator.calls).toHaveLength(1);
+      expect(providers['base-2'].calls).toHaveLength(0);
+      expect(providers['base-3'].calls).toHaveLength(0);
     } finally {
       unsubscribe();
       release.resolve();
@@ -143,38 +148,47 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
   it('returns the three distinct 409 retry guards from committed state', async () => {
     const providers = createControlledProviders();
 
-    await seedFailedTurn(pool, { slot: 'openai', recoverable: true, otherTurnBusy: true });
+    await seedFailedTurn(pool, { slot: 'base-1', recoverable: true, otherTurnBusy: true });
     let backend = createIntegrationBackend(pool, providers);
-    const busy = await request(backend.app).post(actionPath('openai', 'retry'));
+    const replacement = await request(backend.app)
+      .post(actionPath('base-1', 'retry'))
+      .send({ deploymentIds: {} });
+    expect(replacement.status).toBe(422);
+    expect(Object.values(providers).flatMap(({ calls }) => calls)).toEqual([]);
+    const busy = await request(backend.app).post(actionPath('base-1', 'retry'));
     expect(busy.status).toBe(409);
     expect(busy.body.code).toBe('CONVERSATION_BUSY');
 
     await deleteOwnedConversations(pool, [CONVERSATION_ID]);
-    await seedFailedTurn(pool, { slot: 'openai', recoverable: true, responseActive: true });
+    await seedFailedTurn(pool, { slot: 'base-1', recoverable: true, responseActive: true });
     backend = createIntegrationBackend(pool, providers);
-    const active = await request(backend.app).post(actionPath('openai', 'retry'));
+    const active = await request(backend.app).post(actionPath('base-1', 'retry'));
     expect(active.status).toBe(409);
     expect(active.body.code).toBe('RESPONSE_RETRY_IN_PROGRESS');
 
     await deleteOwnedConversations(pool, [CONVERSATION_ID]);
-    await seedFailedTurn(pool, { slot: 'openai', recoverable: false });
+    await seedFailedTurn(pool, { slot: 'base-1', recoverable: false });
     backend = createIntegrationBackend(pool, providers);
-    const ineligible = await request(backend.app).post(actionPath('openai', 'retry'));
+    const ineligible = await request(backend.app).post(actionPath('base-1', 'retry'));
     expect(ineligible.status).toBe(409);
     expect(ineligible.body.code).toBe('RESPONSE_NOT_RETRYABLE');
   });
 
   it('persists Continue-without and rejects a later retry without mutation or provider calls', async () => {
-    await seedFailedTurn(pool, { slot: 'minimax', recoverable: true });
+    await seedFailedTurn(pool, { slot: 'base-3', recoverable: true });
     const providers = createControlledProviders();
     const backend = createIntegrationBackend(pool, providers);
 
-    const continued = await request(backend.app).post(actionPath('minimax', 'continue-without'));
+    const replacement = await request(backend.app)
+      .post(actionPath('base-3', 'continue-without'))
+      .send({ deploymentIds: {} });
+    expect(replacement.status).toBe(422);
+    const continued = await request(backend.app).post(actionPath('base-3', 'continue-without'));
     expect(continued.status).toBe(200);
     expect(continued.body.turn.responses).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          slot: 'minimax',
+          slot: 'base-3',
           status: 'failed',
           recoverable: true,
           continuedWithout: true,
@@ -188,7 +202,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
       continued_without_at: Date | null;
     }>(
       `SELECT status, error_recoverable, continued_without_at
-         FROM model_responses WHERE turn_id = $1 AND slot = 'minimax'`,
+         FROM model_responses WHERE turn_id = $1 AND slot = 'base-3'`,
       [TURN_ID]
     );
     expect(persisted.rows[0]).toMatchObject({ status: 'failed', error_recoverable: true });
@@ -198,7 +212,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     const providerCallsBeforeRetry = Object.values(providers).flatMap(({ calls }) => calls);
     expect(providerCallsBeforeRetry).toHaveLength(0);
 
-    const retry = await request(backend.app).post(actionPath('minimax', 'retry'));
+    const retry = await request(backend.app).post(actionPath('base-3', 'retry'));
     expect(retry.status).toBe(409);
     expect(retry.body).toEqual({
       code: 'RESPONSE_NOT_RETRYABLE',
@@ -211,7 +225,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     );
   });
 
-  it.each(['openai', 'google', 'minimax'] as const)(
+  it.each(['base-1', 'base-2', 'base-3'] as const)(
     'makes Continue-without irreversible for %s without changing its failure classification',
     async slot => {
       await seedFailedTurn(pool, { slot, recoverable: true, errorCode: 'rate_limited' });
@@ -239,21 +253,21 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     },
   );
 
-  it('accepts an exclusive Qwen retry without invoking base providers', async () => {
-    await seedFailedTurn(pool, { slot: 'qwen', recoverable: true, errorCode: 'timeout' });
+  it('accepts an exclusive consolidator retry without invoking base providers', async () => {
+    await seedFailedTurn(pool, { slot: 'consolidator', recoverable: true, errorCode: 'timeout' });
     const providers = createControlledProviders();
-    providers.qwen.enqueueResult('Qwen retry answer');
+    providers.consolidator.enqueueResult('Qwen retry answer');
     const backend = createIntegrationBackend(pool, providers);
     const idle = waitForIdle(backend.publisher, TURN_ID);
 
-    const retry = await request(backend.app).post(actionPath('qwen', 'retry'));
+    const retry = await request(backend.app).post(actionPath('consolidator', 'retry'));
     expect(retry.status).toBe(202);
-    await providers.qwen.waitUntilCalled();
+    await providers.consolidator.waitUntilCalled();
     await idle;
 
     const persisted = await pool.query<{ status: string; content: string; attempt_no: number; error_recoverable: boolean }>(
       `SELECT status, content, attempt_no, error_recoverable
-         FROM model_responses WHERE turn_id = $1 AND slot = 'qwen'`,
+         FROM model_responses WHERE turn_id = $1 AND slot = 'consolidator'`,
       [TURN_ID],
     );
     expect(persisted.rows[0]).toEqual({
@@ -262,31 +276,31 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
       attempt_no: 2,
       error_recoverable: false,
     });
-    expect(providers.qwen.calls).toHaveLength(1);
-    expect(providers.openai.calls).toHaveLength(0);
-    expect(providers.google.calls).toHaveLength(0);
-    expect(providers.minimax.calls).toHaveLength(0);
+    expect(providers.consolidator.calls).toHaveLength(1);
+    expect(providers['base-1'].calls).toHaveLength(0);
+    expect(providers['base-2'].calls).toHaveLength(0);
+    expect(providers['base-3'].calls).toHaveLength(0);
   });
 
   it('keeps the CAS winner when a late result from attempt one arrives', async () => {
-    await seedFailedTurn(pool, { slot: 'openai', recoverable: true, errorCode: 'timeout' });
+    await seedFailedTurn(pool, { slot: 'base-1', recoverable: true, errorCode: 'timeout' });
     const providers = createControlledProviders();
     const release = deferred();
-    providers.openai.enqueueBlocked(release.promise, 'Attempt two answer');
+    providers['base-1'].enqueueBlocked(release.promise, 'Attempt two answer');
     const backend = createIntegrationBackend(pool, providers);
     const events: TurnEvent[] = [];
     const unsubscribe = backend.publisher.subscribe(TURN_ID, event => events.push(event));
     const idle = waitForIdle(backend.publisher, TURN_ID);
 
     try {
-      const retry = await request(backend.app).post(actionPath('openai', 'retry'));
+      const retry = await request(backend.app).post(actionPath('base-1', 'retry'));
       expect(retry.status).toBe(202);
-      await providers.openai.waitUntilCalled();
+      await providers['base-1'].waitUntilCalled();
       const eventsBeforeLateResult = events.length;
 
       const late = await backend.turnRepository.persistResponseAttempt({
         turnId: TURN_ID,
-        slot: 'openai',
+        slot: 'base-1',
         attemptNo: 1,
         status: 'completed',
         content: 'Stale attempt one answer',
@@ -298,7 +312,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
 
       const active = await pool.query<{ status: string; content: string | null; attempt_no: number }>(
         `SELECT status, content, attempt_no FROM model_responses
-          WHERE turn_id = $1 AND slot = 'openai'`,
+          WHERE turn_id = $1 AND slot = 'base-1'`,
         [TURN_ID],
       );
       expect(active.rows[0]).toMatchObject({ status: 'running', content: null, attempt_no: 2 });
@@ -311,7 +325,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
 
   it('derives busy from an active slot even when the other turn is terminal', async () => {
     await seedFailedTurn(pool, {
-      slot: 'openai',
+      slot: 'base-1',
       recoverable: true,
       otherTurnBusy: true,
       otherTurnStatus: 'completed',
@@ -320,7 +334,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     const providers = createControlledProviders();
     const backend = createIntegrationBackend(pool, providers);
 
-    const retry = await request(backend.app).post(actionPath('openai', 'retry'));
+    const retry = await request(backend.app).post(actionPath('base-1', 'retry'));
     expect(retry.status).toBe(409);
     expect(retry.body.code).toBe('CONVERSATION_BUSY');
     expect(Object.values(providers).flatMap(({ calls }) => calls)).toHaveLength(0);
@@ -339,28 +353,29 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
   ] as const)('maps %s to recoverable=%s and preserves it through Continue-without', async (errorCode, recoverable) => {
     await seedPendingTurn(pool);
     const providers = createControlledProviders();
-    providers.openai.enqueueError({ code: errorCode, safeMessage: `Safe ${errorCode}` });
+    providers['base-1'].enqueueError({ code: errorCode, safeMessage: `Safe ${errorCode}` });
     const backend = createIntegrationBackend(pool, providers);
 
     await backend.orchestrator.executeTurn({
       conversationId: CONVERSATION_ID,
       turnId: TURN_ID,
       prompt: 'Classify provider failures',
+      deployments: TEST_DEPLOYMENT_SNAPSHOTS,
       signal: new AbortController().signal,
     });
 
     const before = await readPersistedActionState(pool);
-    const failed = before.find(row => row.slot === 'openai');
+    const failed = before.find(row => row.slot === 'base-1');
     expect(failed).toMatchObject({
       status: 'failed',
       error_code: errorCode,
       error_recoverable: recoverable,
       attempt_no: 1,
     });
-    const continued = await request(backend.app).post(actionPath('openai', 'continue-without'));
+    const continued = await request(backend.app).post(actionPath('base-1', 'continue-without'));
     expect(continued.status).toBe(200);
     const after = await readPersistedActionState(pool);
-    expect(after.find(row => row.slot === 'openai')).toMatchObject({
+    expect(after.find(row => row.slot === 'base-1')).toMatchObject({
       status: 'failed',
       error_code: errorCode,
       error_recoverable: recoverable,
@@ -422,6 +437,7 @@ async function seedFailedTurn(
      VALUES ($1, '10000000-0000-4000-8000-000000000243', 'Retry integration', $2, $2)`,
     [CONVERSATION_ID, NOW]
   );
+  await insertConversationDeployments(pool, CONVERSATION_ID);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
@@ -429,7 +445,7 @@ async function seedFailedTurn(
     [TURN_ID, CONVERSATION_ID, turnStatus, NOW]
   );
 
-  for (const slot of ['openai', 'google', 'minimax', 'qwen'] as const) {
+  for (const slot of CANONICAL_SLOTS) {
     const selected = slot === options.slot;
     const active = selected && options.responseActive;
     const status = active ? 'running' : selected ? 'failed' : 'completed';
@@ -444,7 +460,7 @@ async function seedFailedTurn(
       [
         TURN_ID,
         slot,
-        slot === 'qwen' ? 'consolidator' : 'base',
+        slot === 'consolidator' ? 'consolidator' : 'base',
         `${slot}-fake`,
         `${slot}-test-model`,
         status,
@@ -471,7 +487,7 @@ async function seedFailedTurn(
         `INSERT INTO model_responses
            (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
             is_stale, attempt_no, started_at, completed_at, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1, 'openai', 'base', 'openai-fake', 'openai-test-model',
+         VALUES (gen_random_uuid(), $1, 'base-1', 'base', 'openai-fake', 'openai-test-model',
                  'running', NULL, false, false, 1, $2, NULL, $2, $2)`,
         [OTHER_TURN_ID, NOW],
       );
@@ -485,13 +501,14 @@ async function seedPendingTurn(pool: Pool): Promise<void> {
      VALUES ($1, '10000000-0000-4000-8000-000000000243', 'Classification integration', $2, $2)`,
     [CONVERSATION_ID, NOW],
   );
+  await insertConversationDeployments(pool, CONVERSATION_ID);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
      VALUES ($1, $2, '40000000-0000-4000-8000-000000000043', 1, 'Classification prompt', 'pending', $3, $3)`,
     [TURN_ID, CONVERSATION_ID, NOW],
   );
-  for (const slot of ['openai', 'google', 'minimax', 'qwen'] as const) {
+  for (const slot of CANONICAL_SLOTS) {
     await pool.query(
       `INSERT INTO model_responses
          (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
@@ -501,7 +518,7 @@ async function seedPendingTurn(pool: Pool): Promise<void> {
       [
         TURN_ID,
         slot,
-        slot === 'qwen' ? 'consolidator' : 'base',
+        slot === 'consolidator' ? 'consolidator' : 'base',
         `${slot}-fake`,
         `${slot}-test-model`,
         NOW,

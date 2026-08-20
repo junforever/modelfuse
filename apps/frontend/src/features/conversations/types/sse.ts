@@ -1,4 +1,5 @@
 import type {
+  DeploymentSummaryTuple,
   IsoDateTime,
   ModelResponse,
   ResponseSlot,
@@ -38,6 +39,7 @@ export type TurnEvent =
 export interface TurnEventSnapshot {
   readonly conversationId: string;
   readonly turnId: string;
+  readonly deployments: DeploymentSummaryTuple;
   readonly turn: Turn;
   readonly hasWorkInProgress: boolean;
   readonly updatedAt: IsoDateTime;

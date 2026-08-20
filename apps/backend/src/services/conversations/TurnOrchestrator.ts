@@ -1,4 +1,3 @@
-import type { ResponseDefinition } from '../../infrastructure/postgres/repositories/conversationRepository.js';
 import type {
   PersistResponseAttemptInput,
   StoredTurnSnapshot,
@@ -76,11 +75,6 @@ export class TurnOrchestrator {
       contextBuilder?: unknown;
     },
   ) {}
-
-  // ponytail: T040 replaces this later-turn compatibility seam with persisted snapshot reads.
-  get responseDefinitions(): readonly ResponseDefinition[] {
-    throw new Error('Later-turn deployment reuse is not available yet');
-  }
 
   getLastEventSequence(turnId: string): number {
     return this.dependencies.publisher.getLastEventSequence?.(turnId) ?? 0;
@@ -333,13 +327,22 @@ export class TurnOrchestrator {
     input: Pick<ExecuteTurnInput, 'turnId'> & { slot: ResponseSlot },
     attempt: Omit<PersistResponseAttemptInput, 'turnId' | 'slot'>,
   ): Promise<void> {
+    const reconsolidateConsolidator =
+      input.slot !== 'consolidator' && attempt.status === 'completed' && attempt.attemptNo > 1;
     const snapshot = await this.dependencies.turnRepository.persistResponseAttempt({
       turnId: input.turnId,
       slot: input.slot,
       ...attempt,
+      reconsolidateConsolidator,
     });
-    if (snapshot) this.publishSnapshot(snapshot, input.slot);
-    else await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
+    if (snapshot) {
+      this.publishSnapshot(
+        snapshot,
+        reconsolidateConsolidator ? [input.slot, 'consolidator'] : input.slot,
+      );
+    } else {
+      await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
+    }
   }
 
   private async availableBases(turnId: string): Promise<ModelResponse[]> {

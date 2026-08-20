@@ -30,7 +30,7 @@ export interface RecoveryCase {
   turns: readonly RecoveryTurnCase[];
 }
 
-export const RECOVERY_FIXTURE_VERSION = 1;
+export const RECOVERY_FIXTURE_VERSION = 2;
 
 export const recoveryCases = [
   {
@@ -57,13 +57,13 @@ export const recoveryCases = [
         responses: [
           response(
             '92300000-0000-4000-8000-000000000005',
-            'openai',
+            'base-1',
             'completed',
-            'partial-2-openai',
+            'partial-2-base-1',
           ),
-          response('92300000-0000-4000-8000-000000000006', 'google', 'running'),
-          response('92300000-0000-4000-8000-000000000007', 'minimax', 'pending'),
-          response('92300000-0000-4000-8000-000000000008', 'qwen', 'pending'),
+          response('92300000-0000-4000-8000-000000000006', 'base-2', 'running'),
+          response('92300000-0000-4000-8000-000000000007', 'base-3', 'pending'),
+          response('92300000-0000-4000-8000-000000000008', 'consolidator', 'pending'),
         ],
       },
     ],
@@ -83,13 +83,13 @@ export const recoveryCases = [
         responses: [
           response(
             '92300000-0000-4000-8000-000000000009',
-            'openai',
+            'base-1',
             'completed',
-            'failed-1-openai',
+            'failed-1-base-1',
           ),
           response(
             '92300000-0000-4000-8000-000000000010',
-            'google',
+            'base-2',
             'failed',
             null,
             'provider_error',
@@ -97,15 +97,15 @@ export const recoveryCases = [
           ),
           response(
             '92300000-0000-4000-8000-000000000011',
-            'minimax',
+            'base-3',
             'completed',
-            'failed-1-minimax',
+            'failed-1-base-3',
           ),
           response(
             '92300000-0000-4000-8000-000000000012',
-            'qwen',
+            'consolidator',
             'completed',
-            'failed-1-qwen',
+            'failed-1-consolidator',
           ),
         ],
       },
@@ -117,10 +117,10 @@ export const recoveryCases = [
         status: 'running',
         expectedStatus: 'failed',
         responses: [
-          response('92300000-0000-4000-8000-000000000013', 'openai', 'running'),
-          response('92300000-0000-4000-8000-000000000014', 'google', 'pending'),
-          response('92300000-0000-4000-8000-000000000015', 'minimax', 'running'),
-          response('92300000-0000-4000-8000-000000000016', 'qwen', 'pending'),
+          response('92300000-0000-4000-8000-000000000013', 'base-1', 'running'),
+          response('92300000-0000-4000-8000-000000000014', 'base-2', 'pending'),
+          response('92300000-0000-4000-8000-000000000015', 'base-3', 'running'),
+          response('92300000-0000-4000-8000-000000000016', 'consolidator', 'pending'),
         ],
       },
     ],
@@ -131,7 +131,7 @@ function completedResponses(
   idPrefix: string,
   contentPrefix: string,
 ): readonly RecoveryResponseCase[] {
-  return (['openai', 'google', 'minimax', 'qwen'] as const).map((slot, index) =>
+  return (['base-1', 'base-2', 'base-3', 'consolidator'] as const).map((slot, index) =>
     response(`${idPrefix}${index + 1}`, slot, 'completed', `${contentPrefix}-${slot}`),
   );
 }

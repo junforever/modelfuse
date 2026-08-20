@@ -6,6 +6,7 @@ import {
   createConversationBodySchema,
   createTurnBodySchema,
   conversationIdParamsSchema,
+  emptyConversationOperationBodySchema,
   listConversationsQuerySchema,
   listTurnsQuerySchema,
   renameConversationBodySchema,
@@ -45,7 +46,10 @@ export function createConversationRoutes(dependencies: {
   );
   router.delete(
     '/:conversationId',
-    validateRequest({ params: conversationIdParamsSchema }),
+    validateRequest({
+      params: conversationIdParamsSchema,
+      body: emptyConversationOperationBodySchema,
+    }),
     controller.deleteConversation,
   );
   router.get(
@@ -70,12 +74,18 @@ export function createConversationRoutes(dependencies: {
   );
   router.post(
     '/:conversationId/turns/:turnId/responses/:slot/retry',
-    validateRequest({ params: responseSlotParamsSchema }),
+    validateRequest({
+      params: responseSlotParamsSchema,
+      body: emptyConversationOperationBodySchema,
+    }),
     controller.retryResponse,
   );
   router.post(
     '/:conversationId/turns/:turnId/responses/:slot/continue-without',
-    validateRequest({ params: responseSlotParamsSchema }),
+    validateRequest({
+      params: responseSlotParamsSchema,
+      body: emptyConversationOperationBodySchema,
+    }),
     controller.continueWithout,
   );
 

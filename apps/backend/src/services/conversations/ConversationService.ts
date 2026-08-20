@@ -48,6 +48,20 @@ export class ConversationService {
 
   async createConversation(input: CreateConversationRequest): Promise<ConversationTurnResponse> {
     const prompt = input.prompt.trim();
+    const replay = await this.dependencies.conversationRepository.findCreateReplay(
+      input.clientRequestId,
+      prompt,
+    );
+    if (replay) {
+      this.assertCreated(replay);
+      const committed = await this.requireCommittedTurn(
+        replay.conversationId,
+        replay.turnId,
+        replay.deployments,
+      );
+      this.logReplay(committed.response);
+      return committed.response;
+    }
     const catalog = this.dependencies.modelCatalogService;
     if (!catalog) throw new Error('Model catalog service is unavailable');
     let deployments: ConversationDeploymentSnapshotTuple;
@@ -75,7 +89,11 @@ export class ConversationService {
       deployments,
     });
     this.assertCreated(created);
-    const committed = await this.requireCommittedTurn(created.conversationId, created.turnId);
+    const committed = await this.requireCommittedTurn(
+      created.conversationId,
+      created.turnId,
+      created.deployments,
+    );
     if (created.kind === 'created') {
       this.launch(committed, false);
     } else {
@@ -91,7 +109,6 @@ export class ConversationService {
     const created = await this.dependencies.conversationRepository.createTurn(conversationId, {
       clientRequestId: input.clientRequestId,
       prompt: input.prompt.trim(),
-      responses: this.dependencies.orchestrator.responseDefinitions,
     });
     switch (created.kind) {
       case 'conversation_not_found':
@@ -108,7 +125,11 @@ export class ConversationService {
         throw new ConversationError(409, 'CLIENT_REQUEST_ID_CONFLICT', 'The request ID belongs to a different prompt.');
       case 'created':
       case 'replay': {
-        const committed = await this.requireCommittedTurn(created.conversationId, created.turnId);
+        const committed = await this.requireCommittedTurn(
+          created.conversationId,
+          created.turnId,
+          created.deployments,
+        );
         if (created.kind === 'created') this.launch(committed, false);
         else this.logReplay(committed.response);
         return committed.response;
@@ -217,7 +238,7 @@ export class ConversationService {
         throw new ConversationError(409, 'RESPONSE_NOT_RETRYABLE', 'The response is not retryable.');
       case 'accepted': {
         const committed = await this.completeSnapshot(prepared.snapshot);
-        this.dependencies.orchestrator.publishSnapshot(committed.response, slot);
+        this.dependencies.orchestrator.publishSnapshot(prepared.snapshot, slot);
         this.launch(committed, true, slot);
         return committed.response;
       }
@@ -243,7 +264,7 @@ export class ConversationService {
         throw new ConversationError(409, 'CONTINUE_WITHOUT_NOT_ALLOWED', 'Continue-without is not allowed.');
       case 'accepted': {
         const committed = await this.completeSnapshot(continued.snapshot);
-        this.dependencies.orchestrator.publishSnapshot(committed.response, slot);
+        this.dependencies.orchestrator.publishSnapshot(continued.snapshot, slot);
         return committed.response;
       }
     }
@@ -252,17 +273,17 @@ export class ConversationService {
   private async requireCommittedTurn(
     conversationId: string,
     turnId: string,
+    deployments?: ConversationDeploymentSnapshotTuple,
   ): Promise<CommittedTurn> {
     const snapshot = await this.dependencies.turnRepository.getTurnSnapshot(conversationId, turnId);
     if (!snapshot) throw new ConversationError(404, 'TURN_NOT_FOUND', 'Turn not found.');
-    return this.completeSnapshot(snapshot);
+    return this.completeSnapshot(snapshot, deployments);
   }
 
-  private async completeSnapshot(snapshot: StoredTurnSnapshot): Promise<CommittedTurn> {
-    const deployments = await this.dependencies.conversationRepository.getConversationDeployments(
-      snapshot.conversation.id,
-    );
-    if (!deployments) throw new Error('Conversation deployment snapshot is unavailable');
+  private completeSnapshot(
+    snapshot: StoredTurnSnapshot,
+    deployments: ConversationDeploymentSnapshotTuple = snapshot.deployments,
+  ): CommittedTurn {
     return {
       deployments,
       response: {

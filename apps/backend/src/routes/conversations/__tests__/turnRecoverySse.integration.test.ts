@@ -8,6 +8,10 @@ import {
   deferred,
 } from '../../../test/integration/controlledLlmProviders.js';
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
+import {
+  TEST_DEPLOYMENT_ASSIGNMENT,
+  TEST_DEPLOYMENT_DEFINITIONS,
+} from '../../../test/integration/conversationDeploymentFixtures.js';
 import { openSse } from '../../../test/integration/sseTestClient.js';
 import {
   assertModelFuseSchema,
@@ -41,18 +45,18 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
   it('converges a recoverable base plus partial Qwen to terminal state and closes the initial SSE', async () => {
     const providers = createControlledProviders();
     const baseGates = [deferred(), deferred()];
-    providers.openai.enqueueError({
+    providers['base-1'].enqueueError({
       code: 'timeout',
       safeMessage: 'The deterministic OpenAI provider timed out.',
-      provider: providers.openai.provider,
-      model: providers.openai.model,
+      provider: providers['base-1'].provider,
+      model: providers['base-1'].model,
       recoverable: true,
     });
-    providers.google.enqueueBlocked(baseGates[0]!.promise);
-    providers.minimax.enqueueBlocked(baseGates[1]!.promise);
-    providers.qwen.enqueueResult('Qwen partial response');
+    providers['base-2'].enqueueBlocked(baseGates[0]!.promise);
+    providers['base-3'].enqueueBlocked(baseGates[1]!.promise);
+    providers.consolidator.enqueueResult('Qwen partial response');
 
-    const backend = createIntegrationBackend(pool, providers);
+    const backend = createIntegrationBackend(pool, providers, TEST_DEPLOYMENT_DEFINITIONS);
     const unsubscribeCounts = { active: 0, total: 0 };
     const subscribe = backend.publisher.subscribe.bind(backend.publisher);
     vi.spyOn(backend.publisher, 'subscribe').mockImplementation((turnId, listener) => {
@@ -73,8 +77,9 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
       const created = await request(backend.app).post('/api/v1/conversations').send({
         clientRequestId: CLIENT_REQUEST_ID,
         prompt: 'Recover the first response and retain partial Qwen output.',
+        deploymentIds: TEST_DEPLOYMENT_ASSIGNMENT,
       });
-      expect(created.status).toBe(202);
+      expect(created.status).toBe(201);
       ownedConversationId = created.body.conversation.id as string;
       const turnId = created.body.turn.id as string;
 
@@ -82,9 +87,12 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
         backend.app,
         `/api/v1/conversations/${ownedConversationId}/turns/${turnId}/events`,
       );
-      await Promise.all([providers.google.waitUntilCalled(), providers.minimax.waitUntilCalled()]);
+      await Promise.all([
+        providers['base-2'].waitUntilCalled(),
+        providers['base-3'].waitUntilCalled(),
+      ]);
       baseGates.forEach(({ resolve }) => resolve());
-      await providers.qwen.waitUntilCalled();
+      await providers.consolidator.waitUntilCalled();
 
       const initialEvents = await readUntilClosed(stream.nextEvent);
       expect(initialEvents.at(-1)).toMatchObject({
@@ -96,7 +104,7 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
           event: 'slot_update',
           data: expect.objectContaining({
             response: expect.objectContaining({
-              slot: 'openai',
+              slot: 'base-1',
               status: 'failed',
               recoverable: true,
             }),
@@ -108,7 +116,7 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
           event: 'slot_update',
           data: expect.objectContaining({
             response: expect.objectContaining({
-              slot: 'qwen',
+              slot: 'consolidator',
               status: 'completed',
               content: 'Qwen partial response',
             }),
@@ -128,15 +136,15 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
       expect(initialState).toMatchObject({
         turnStatus: 'partial',
         hasWorkInProgress: false,
-        openaiStatus: 'failed',
-        openaiRecoverable: true,
-        qwenStatus: 'completed',
-        qwenContent: 'Qwen partial response',
-        qwenAttempt: 1,
+        base1Status: 'failed',
+        base1Recoverable: true,
+        consolidatorStatus: 'completed',
+        consolidatorContent: 'Qwen partial response',
+        consolidatorAttempt: 1,
       });
 
-      providers.openai.enqueueResult('OpenAI recovered response');
-      providers.qwen.enqueueResult('Qwen reconsolidated response');
+      providers['base-1'].enqueueResult('OpenAI recovered response');
+      providers.consolidator.enqueueResult('Qwen reconsolidated response');
       terminalPromise = new Promise(resolve => {
         terminalSubscription = backend.publisher.subscribe(turnId, (event: TurnEvent) => {
           if (event.event === 'busy_update' && !event.data.hasWorkInProgress) {
@@ -148,7 +156,7 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
       });
 
       const retried = await request(backend.app).post(
-        `/api/v1/conversations/${ownedConversationId}/turns/${turnId}/responses/openai/retry`,
+        `/api/v1/conversations/${ownedConversationId}/turns/${turnId}/responses/base-1/retry`,
       );
       expect(retried.status).toBe(202);
       await terminalPromise;
@@ -157,17 +165,17 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
       expect(finalState).toMatchObject({
         turnStatus: 'completed',
         hasWorkInProgress: false,
-        openaiStatus: 'completed',
-        openaiRecoverable: false,
-        openaiContent: 'OpenAI recovered response',
-        openaiAttempt: 2,
-        qwenStatus: 'completed',
-        qwenContent: 'Qwen reconsolidated response',
-        qwenAttempt: 2,
-        qwenStale: false,
+        base1Status: 'completed',
+        base1Recoverable: false,
+        base1Content: 'OpenAI recovered response',
+        base1Attempt: 2,
+        consolidatorStatus: 'completed',
+        consolidatorContent: 'Qwen reconsolidated response',
+        consolidatorAttempt: 2,
+        consolidatorStale: false,
       });
-      expect(providers.openai.calls).toHaveLength(2);
-      expect(providers.qwen.calls).toHaveLength(2);
+      expect(providers['base-1'].calls).toHaveLength(2);
+      expect(providers.consolidator.calls).toHaveLength(2);
     } finally {
       baseGates.forEach(({ resolve }) => resolve());
       terminalSubscription?.();
@@ -193,27 +201,30 @@ async function readTurnState(pool: Pool, turnId: string) {
   const result = await pool.query<{
     turnStatus: string;
     hasWorkInProgress: boolean;
-    openaiStatus: string;
-    openaiRecoverable: boolean | null;
-    openaiContent: string | null;
-    openaiAttempt: number;
-    qwenStatus: string;
-    qwenContent: string | null;
-    qwenAttempt: number;
-    qwenStale: boolean;
+    base1Status: string;
+    base1Recoverable: boolean | null;
+    base1Content: string | null;
+    base1Attempt: number;
+    consolidatorStatus: string;
+    consolidatorContent: string | null;
+    consolidatorAttempt: number;
+    consolidatorStale: boolean;
   }>(
     `SELECT t.status AS "turnStatus",
             EXISTS (
               SELECT 1 FROM model_responses active
                WHERE active.turn_id = t.id AND active.status IN ('pending', 'running')
             ) AS "hasWorkInProgress",
-            openai.status AS "openaiStatus", openai.error_recoverable AS "openaiRecoverable",
-            openai.content AS "openaiContent", openai.attempt_no AS "openaiAttempt",
-            qwen.status AS "qwenStatus", qwen.content AS "qwenContent",
-            qwen.attempt_no AS "qwenAttempt", qwen.is_stale AS "qwenStale"
+            base1.status AS "base1Status", base1.error_recoverable AS "base1Recoverable",
+            base1.content AS "base1Content", base1.attempt_no AS "base1Attempt",
+            consolidator.status AS "consolidatorStatus",
+            consolidator.content AS "consolidatorContent",
+            consolidator.attempt_no AS "consolidatorAttempt",
+            consolidator.is_stale AS "consolidatorStale"
        FROM turns t
-       JOIN model_responses openai ON openai.turn_id = t.id AND openai.slot = 'openai'
-       JOIN model_responses qwen ON qwen.turn_id = t.id AND qwen.slot = 'qwen'
+       JOIN model_responses base1 ON base1.turn_id = t.id AND base1.slot = 'base-1'
+       JOIN model_responses consolidator
+         ON consolidator.turn_id = t.id AND consolidator.slot = 'consolidator'
       WHERE t.id = $1`,
     [turnId],
   );

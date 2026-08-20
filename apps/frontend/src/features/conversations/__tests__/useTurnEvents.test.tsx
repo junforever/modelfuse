@@ -13,6 +13,43 @@ import {
   turnSnapshotFixture,
 } from '../../../test/conversation-fixtures';
 import { createTestQueryClient } from '../../../test/query-test-utils';
+import type { ConversationDetail, DeploymentSummaryTuple } from '../types/conversation';
+import type { TurnEventSnapshot } from '../types/sse';
+
+const DEPLOYMENTS: DeploymentSummaryTuple = [
+  {
+    slot: 'base-1',
+    deploymentId: 'stored-base-1',
+    providerId: 'openai',
+    modelId: 'stored-gpt',
+    displayName: 'Stored GPT',
+  },
+  {
+    slot: 'base-2',
+    deploymentId: 'stored-base-2',
+    providerId: 'google',
+    modelId: 'stored-gemini',
+    displayName: 'Stored Gemini',
+  },
+  {
+    slot: 'base-3',
+    deploymentId: 'stored-base-3',
+    providerId: 'openrouter',
+    modelId: 'stored-minimax',
+    displayName: 'Stored MiniMax',
+  },
+  {
+    slot: 'consolidator',
+    deploymentId: 'stored-consolidator',
+    providerId: 'openrouter',
+    modelId: 'stored-qwen',
+    displayName: 'Stored Qwen',
+  },
+];
+
+function snapshotFixture(overrides: Partial<TurnEventSnapshot> = {}): TurnEventSnapshot {
+  return turnSnapshotFixture({ deployments: DEPLOYMENTS, ...overrides });
+}
 
 type EventListener = (event: MessageEvent<string>) => void;
 
@@ -76,7 +113,7 @@ function TurnEventsProbe() {
 
   return (
     <>
-      <output aria-label="Etapa de OpenAI">{runtimeStages.openai ?? ''}</output>
+      <output aria-label="Etapa de Base 1">{runtimeStages['base-1'] ?? ''}</output>
       {error ? <p role="alert">{error}</p> : null}
     </>
   );
@@ -84,14 +121,14 @@ function TurnEventsProbe() {
 
 function slotUpdate(
   eventSequence: number,
-  overrides: Parameters<typeof modelResponse<'openai'>>[1] = {},
+  overrides: Parameters<typeof modelResponse<'base-1'>>[1] = {},
   runtimeStage?: string
 ) {
   return {
     conversationId,
     turnId,
     eventSequence,
-    response: modelResponse('openai', overrides),
+    response: modelResponse('base-1', overrides),
     ...(runtimeStage ? { runtimeStage } : {}),
   };
 }
@@ -112,11 +149,12 @@ describe('useTurnEvents integration', () => {
 
   it('uses one stream, orders canonical updates and converges once after terminal state', () => {
     const queryClient = createTestQueryClient();
-    const initial = turnSnapshotFixture();
+    const initial = snapshotFixture();
     queryClient.setQueryData(conversationKeys.turn(conversationId, turnId), initial);
     queryClient.setQueryData(conversationKeys.detail(conversationId), {
       id: conversationId,
       title: 'Comparación',
+      deployments: DEPLOYMENTS,
       hasWorkInProgress: true,
       createdAt: eventTime,
       updatedAt: eventTime,
@@ -138,7 +176,7 @@ describe('useTurnEvents integration', () => {
     act(() => {
       source.emit('slot_update', slotUpdate(11, {}, 'Pensando…'));
     });
-    expect(screen.getByLabelText('Etapa de OpenAI')).toHaveTextContent('Pensando…');
+    expect(screen.getByLabelText('Etapa de Base 1')).toHaveTextContent('Pensando…');
 
     act(() => {
       source.emit(
@@ -159,16 +197,17 @@ describe('useTurnEvents integration', () => {
       );
     });
 
-    const cached = queryClient.getQueryData<ReturnType<typeof turnSnapshotFixture>>(
+    const cached = queryClient.getQueryData<TurnEventSnapshot>(
       conversationKeys.turn(conversationId, turnId)
     );
     expect(cached?.lastEventSequence).toBe(12);
+    expect(cached?.deployments).toBe(DEPLOYMENTS);
     expect(cached?.turn.responses[0]).toMatchObject({
-      slot: 'openai',
+      slot: 'base-1',
       content: 'respuesta canónica',
       attemptNo: 1,
     });
-    expect(screen.getByLabelText('Etapa de OpenAI')).toBeEmptyDOMElement();
+    expect(screen.getByLabelText('Etapa de Base 1')).toBeEmptyDOMElement();
 
     act(() => {
       source.emit('turn_update', {
@@ -191,12 +230,16 @@ describe('useTurnEvents integration', () => {
     });
 
     expect(source.closeCalls).toBe(1);
-    expect(screen.getByLabelText('Etapa de OpenAI')).toBeEmptyDOMElement();
+    expect(screen.getByLabelText('Etapa de Base 1')).toBeEmptyDOMElement();
     expect(invalidate).toHaveBeenCalledTimes(2);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: conversationKeys.detail(conversationId) });
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: conversationKeys.turn(conversationId, turnId),
     });
+    expect(
+      queryClient.getQueryData<ConversationDetail>(conversationKeys.detail(conversationId))
+        ?.deployments
+    ).toBe(DEPLOYMENTS);
 
     view.unmount();
     expect(source.listenerCount()).toBe(0);
@@ -209,15 +252,15 @@ describe('useTurnEvents integration', () => {
     const previousTime = '2026-07-26T20:00:00.000Z';
     queryClient.setQueryData(
       conversationKeys.turn(conversationId, turnId),
-      turnSnapshotFixture({
+      snapshotFixture({
         turn: turnFixture({
           status: 'pending',
           updatedAt: previousTime,
           responses: [
-            modelResponse('openai', { status: 'pending', updatedAt: previousTime }),
-            modelResponse('google', { status: 'pending', updatedAt: previousTime }),
-            modelResponse('minimax', { status: 'pending', updatedAt: previousTime }),
-            modelResponse('qwen', { status: 'pending', updatedAt: previousTime }),
+            modelResponse('base-1', { status: 'pending', updatedAt: previousTime }),
+            modelResponse('base-2', { status: 'pending', updatedAt: previousTime }),
+            modelResponse('base-3', { status: 'pending', updatedAt: previousTime }),
+            modelResponse('consolidator', { status: 'pending', updatedAt: previousTime }),
           ],
         }),
         hasWorkInProgress: false,
@@ -228,6 +271,7 @@ describe('useTurnEvents integration', () => {
     queryClient.setQueryData(conversationKeys.detail(conversationId), {
       id: conversationId,
       title: 'Comparación',
+      deployments: DEPLOYMENTS,
       hasWorkInProgress: false,
       createdAt: previousTime,
       updatedAt: previousTime,
@@ -241,22 +285,22 @@ describe('useTurnEvents integration', () => {
     const source = ControlledEventSource.instances[0]!;
     const snapshotSequence = 20;
     const snapshotResponses = [
-      modelResponse('openai', {
+      modelResponse('base-1', {
         status: 'completed',
         content: 'snapshot OpenAI',
         completedAt: eventTime,
       }),
-      modelResponse('google', {
+      modelResponse('base-2', {
         status: 'completed',
         content: 'snapshot Google',
         completedAt: eventTime,
       }),
-      modelResponse('minimax', {
+      modelResponse('base-3', {
         status: 'failed',
         error: { code: 'authentication', message: 'snapshot MiniMax' },
         completedAt: eventTime,
       }),
-      modelResponse('qwen', { status: 'running' }),
+      modelResponse('consolidator', { status: 'running' }),
     ] as const;
 
     act(() => {
@@ -283,27 +327,27 @@ describe('useTurnEvents integration', () => {
       });
     });
 
-    let cached = queryClient.getQueryData<ReturnType<typeof turnSnapshotFixture>>(
+    let cached = queryClient.getQueryData<TurnEventSnapshot>(
       conversationKeys.turn(conversationId, turnId)
     )!;
     expect(
       cached.turn.responses.map(({ slot, status, content }) => ({ slot, status, content }))
     ).toEqual([
-      { slot: 'openai', status: 'completed', content: 'snapshot OpenAI' },
-      { slot: 'google', status: 'completed', content: 'snapshot Google' },
-      { slot: 'minimax', status: 'failed', content: null },
-      { slot: 'qwen', status: 'running', content: null },
+      { slot: 'base-1', status: 'completed', content: 'snapshot OpenAI' },
+      { slot: 'base-2', status: 'completed', content: 'snapshot Google' },
+      { slot: 'base-3', status: 'failed', content: null },
+      { slot: 'consolidator', status: 'running', content: null },
     ]);
     expect(cached).toMatchObject({
       lastEventSequence: snapshotSequence,
       hasWorkInProgress: true,
       turn: { status: 'running', updatedAt: eventTime },
     });
-    expect(
-      queryClient.getQueryData<{ hasWorkInProgress: boolean }>(
-        conversationKeys.detail(conversationId)
-      )
-    ).toMatchObject({ hasWorkInProgress: true });
+    const detail = queryClient.getQueryData<ConversationDetail>(
+      conversationKeys.detail(conversationId)
+    );
+    expect(detail).toMatchObject({ hasWorkInProgress: true });
+    expect(detail?.deployments).toBe(DEPLOYMENTS);
 
     act(() => {
       source.emit(
@@ -318,7 +362,7 @@ describe('useTurnEvents integration', () => {
         conversationId,
         turnId,
         eventSequence: snapshotSequence - 1,
-        response: modelResponse('google', {
+        response: modelResponse('base-2', {
           status: 'completed',
           content: 'evento antiguo no debe ganar',
           completedAt: eventTime,
@@ -327,7 +371,7 @@ describe('useTurnEvents integration', () => {
       });
     });
 
-    cached = queryClient.getQueryData<ReturnType<typeof turnSnapshotFixture>>(
+    cached = queryClient.getQueryData<TurnEventSnapshot>(
       conversationKeys.turn(conversationId, turnId)
     )!;
     expect(cached.turn.responses[0].content).toBe('snapshot OpenAI');
@@ -343,7 +387,7 @@ describe('useTurnEvents integration', () => {
         })
       );
     });
-    cached = queryClient.getQueryData<ReturnType<typeof turnSnapshotFixture>>(
+    cached = queryClient.getQueryData<TurnEventSnapshot>(
       conversationKeys.turn(conversationId, turnId)
     )!;
     expect(cached.lastEventSequence).toBe(snapshotSequence + 1);
@@ -359,7 +403,7 @@ describe('useTurnEvents integration', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const queryClient = createTestQueryClient();
-    const initial = turnSnapshotFixture({
+    const initial = snapshotFixture({
       turn: turnFixture({ status: 'running' }),
       hasWorkInProgress: true,
       lastEventSequence: 19,
@@ -368,6 +412,7 @@ describe('useTurnEvents integration', () => {
     queryClient.setQueryData(conversationKeys.detail(conversationId), {
       id: conversationId,
       title: 'Comparación',
+      deployments: DEPLOYMENTS,
       hasWorkInProgress: true,
       createdAt: eventTime,
       updatedAt: eventTime,
@@ -427,7 +472,7 @@ describe('useTurnEvents integration', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(conversationKeys.turn(conversationId, turnId), turnSnapshotFixture());
+    queryClient.setQueryData(conversationKeys.turn(conversationId, turnId), snapshotFixture());
 
     const view = render(
       <QueryClientProvider client={queryClient}>

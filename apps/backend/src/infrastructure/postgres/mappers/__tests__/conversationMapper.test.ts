@@ -88,11 +88,11 @@ describe('conversationMapper', () => {
       createdAt: '2026-08-06T12:00:00.000Z',
       updatedAt: '2026-08-06T12:00:01.000Z',
     });
-    expect(turn.responses.map(({ slot }) => slot)).toEqual([
-      'base-1',
-      'base-2',
-      'base-3',
-      'consolidator',
+    expect(turn.responses.map(({ slot, role }) => ({ slot, role }))).toEqual([
+      { slot: 'base-1', role: 'base' },
+      { slot: 'base-2', role: 'base' },
+      { slot: 'base-3', role: 'base' },
+      { slot: 'consolidator', role: 'consolidator' },
     ]);
     expect(turn.responses[0]).toEqual({
       slot: 'base-1',

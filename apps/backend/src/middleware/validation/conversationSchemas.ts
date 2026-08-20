@@ -15,6 +15,8 @@ const promptSchema = z
   .string()
   .refine((prompt) => prompt.trim().length > 0, { error: 'Prompt must not be empty.' });
 
+export const emptyConversationOperationBodySchema = z.strictObject({}).optional();
+
 export const createTurnBodySchema = z.strictObject({
   clientRequestId: uuidSchema,
   prompt: promptSchema,

@@ -1,10 +1,14 @@
 import type { TurnEvent } from '../../types/sse.js';
 
-export type UnsequencedTurnEvent = TurnEvent extends infer Event extends TurnEvent
-  ? Event extends TurnEvent
-    ? { event: Event['event']; data: Omit<Event['data'], 'eventSequence'> }
+type WithoutEventSequence<Event extends TurnEvent> = Event extends TurnEvent
+  ? Event['data'] extends infer Data
+    ? Data extends { eventSequence: number }
+      ? { event: Event['event']; data: Omit<Data, 'eventSequence'> }
+      : never
     : never
   : never;
+
+export type UnsequencedTurnEvent = WithoutEventSequence<TurnEvent>;
 
 type TurnEventListener = (event: TurnEvent) => void;
 

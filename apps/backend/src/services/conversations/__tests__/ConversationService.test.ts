@@ -24,9 +24,14 @@ vi.mock('../../../utils/logger.js', () => ({
 describe('ConversationService background execution', () => {
   it('commits the complete canonical assignment and reads it back before provider work starts', async () => {
     const trace: string[] = [];
-    const committed = deferred<{ kind: 'created'; conversationId: string; turnId: string }>();
-    const stored = createConversationFixture() as unknown as StoredTurnSnapshot;
     const deployments = deploymentSnapshots();
+    const committed = deferred<{
+      kind: 'created';
+      conversationId: string;
+      turnId: string;
+      deployments: ConversationDeploymentSnapshotTuple;
+    }>();
+    const stored = storedTurnSnapshot(deployments);
     const deploymentIds = Object.fromEntries(
       deployments.map(({ slot, deploymentId }) => [slot, deploymentId]),
     ) as unknown as DeploymentAssignment;
@@ -46,11 +51,8 @@ describe('ConversationService background execution', () => {
       return committed.promise;
     });
     const conversationRepository = {
+      findCreateReplay: vi.fn(async () => null),
       createConversation,
-      getConversationDeployments: vi.fn(async () => {
-        trace.push('read:deployments');
-        return deployments;
-      }),
     } as unknown as ConversationRepository;
     const turnRepository = {
       getTurnSnapshot: vi.fn(async () => {
@@ -85,11 +87,12 @@ describe('ConversationService background execution', () => {
       kind: 'created',
       conversationId: stored.conversation.id,
       turnId: stored.turn.id,
+      deployments,
     });
     const result = await creation;
     await service.stop();
 
-    expect(trace).toEqual(['transaction', 'read:turn', 'read:deployments', 'provider-work']);
+    expect(trace).toEqual(['transaction', 'read:turn', 'provider-work']);
     expect(result.conversation.deployments.map(({ slot }) => slot)).toEqual([
       'base-1',
       'base-2',
@@ -100,15 +103,16 @@ describe('ConversationService background execution', () => {
   });
 
   it('uses the exact four-slot default when deploymentIds are omitted', async () => {
-    const stored = createConversationFixture() as unknown as StoredTurnSnapshot;
     const deployments = defaultDeploymentSnapshots();
+    const stored = storedTurnSnapshot(deployments);
     const conversationRepository = {
+      findCreateReplay: vi.fn(async () => null),
       createConversation: vi.fn(async () => ({
         kind: 'created' as const,
         conversationId: stored.conversation.id,
         turnId: stored.turn.id,
+        deployments,
       })),
-      getConversationDeployments: vi.fn(async () => deployments),
     } as unknown as ConversationRepository;
     const turnRepository = {
       getTurnSnapshot: vi.fn(async () => stored),
@@ -146,14 +150,104 @@ describe('ConversationService background execution', () => {
     expect(orchestrator.executeTurn).toHaveBeenCalledWith(expect.objectContaining({ deployments }));
   });
 
+  it('uses the original stored snapshots for a later turn after the runtime catalog changes', async () => {
+    const originalDeployments = deploymentSnapshots();
+    const replacementDeployments = defaultDeploymentSnapshots();
+    const stored = storedTurnSnapshot(originalDeployments);
+    const conversationRepository = {
+      createTurn: vi.fn(async () => ({
+        kind: 'created' as const,
+        conversationId: stored.conversation.id,
+        turnId: stored.turn.id,
+        deployments: originalDeployments,
+      })),
+    } as unknown as ConversationRepository;
+    const turnRepository = {
+      getTurnSnapshot: vi.fn(async () => stored),
+    } as unknown as TurnRepository;
+    const orchestrator = {
+      executeTurn: vi.fn(async () => undefined),
+    } as unknown as TurnOrchestrator;
+    const modelCatalogService = {
+      resolveDefaultAssignment: vi.fn(() => ({
+        kind: 'resolved' as const,
+        deployments: replacementDeployments,
+      })),
+    } as unknown as ModelCatalogService;
+    const service = new ConversationService({
+      conversationRepository,
+      turnRepository,
+      orchestrator,
+      modelCatalogService,
+    });
+
+    const result = await service.createTurn(stored.conversation.id, {
+      clientRequestId: stored.turn.clientRequestId,
+      prompt: stored.turn.prompt,
+    });
+    await service.stop();
+
+    expect(result.conversation.deployments).toEqual(publicDeployments(originalDeployments));
+    expect(orchestrator.executeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ deployments: originalDeployments }),
+    );
+    expect(modelCatalogService.resolveDefaultAssignment).not.toHaveBeenCalled();
+  });
+
+  it('returns the original assignment for an idempotent replay without consulting the current catalog or relaunching', async () => {
+    const originalDeployments = deploymentSnapshots();
+    const stored = storedTurnSnapshot(originalDeployments);
+    const conversationRepository = {
+      findCreateReplay: vi.fn(async () => ({
+        kind: 'replay' as const,
+        conversationId: stored.conversation.id,
+        turnId: stored.turn.id,
+        deployments: originalDeployments,
+      })),
+      createConversation: vi.fn(async () => ({
+        kind: 'replay' as const,
+        conversationId: stored.conversation.id,
+        turnId: stored.turn.id,
+        deployments: originalDeployments,
+      })),
+    } as unknown as ConversationRepository;
+    const turnRepository = {
+      getTurnSnapshot: vi.fn(async () => stored),
+    } as unknown as TurnRepository;
+    const orchestrator = {
+      executeTurn: vi.fn(async () => undefined),
+    } as unknown as TurnOrchestrator;
+    const modelCatalogService = {
+      resolveDefaultAssignment: vi.fn(() => {
+        throw new Error('The mutable catalog must not be consulted for a replay');
+      }),
+    } as unknown as ModelCatalogService;
+    const service = new ConversationService({
+      conversationRepository,
+      turnRepository,
+      orchestrator,
+      modelCatalogService,
+    });
+
+    const result = await service.createConversation({
+      clientRequestId: stored.turn.clientRequestId,
+      prompt: stored.turn.prompt,
+    });
+
+    expect(result.conversation.deployments).toEqual(publicDeployments(originalDeployments));
+    expect(modelCatalogService.resolveDefaultAssignment).not.toHaveBeenCalled();
+    expect(conversationRepository.createConversation).not.toHaveBeenCalled();
+    expect(orchestrator.executeTurn).not.toHaveBeenCalled();
+  });
+
   it('projects a safe 503 and performs no writes or provider work when the default is unavailable', async () => {
     const missingDeploymentIds = [
       'openrouter-minimax-m3',
       'openrouter-qwen-3.8-max',
     ] as const;
     const conversationRepository = {
+      findCreateReplay: vi.fn(async () => null),
       createConversation: vi.fn(),
-      getConversationDeployments: vi.fn(),
     } as unknown as ConversationRepository;
     const turnRepository = {
       getTurnSnapshot: vi.fn(),
@@ -196,21 +290,21 @@ describe('ConversationService background execution', () => {
     });
     expect(JSON.stringify(error)).not.toMatch(/API_KEY|credential|provider/i);
     expect(conversationRepository.createConversation).not.toHaveBeenCalled();
-    expect(conversationRepository.getConversationDeployments).not.toHaveBeenCalled();
     expect(turnRepository.getTurnSnapshot).not.toHaveBeenCalled();
     expect(orchestrator.executeTurn).not.toHaveBeenCalled();
   });
 
   it('logs an orchestration rejection with safe identifiers and no prompt or error detail', async () => {
-    const snapshot = createConversationFixture() as StoredTurnSnapshot;
+    const deployments = deploymentSnapshots();
+    const snapshot = storedTurnSnapshot(deployments);
     snapshot.turn.prompt = 'prompt-canary-must-not-leak';
     const conversationRepository = {
       createTurn: vi.fn(async () => ({
         kind: 'created' as const,
         conversationId: snapshot.conversation.id,
         turnId: snapshot.turn.id,
+        deployments,
       })),
-      getConversationDeployments: vi.fn(async () => deploymentSnapshots()),
     } as unknown as ConversationRepository;
     const turnRepository = {
       getTurnSnapshot: vi.fn(async () => snapshot),
@@ -247,6 +341,27 @@ function deferred<T>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+function storedTurnSnapshot(
+  deployments: ConversationDeploymentSnapshotTuple,
+): StoredTurnSnapshot {
+  const fixture = createConversationFixture();
+  return {
+    conversation: fixture.conversation,
+    deployments,
+    turn: fixture.turn,
+  };
+}
+
+function publicDeployments(deployments: ConversationDeploymentSnapshotTuple) {
+  return deployments.map(({ slot, deploymentId, providerId, modelId, displayName }) => ({
+    slot,
+    deploymentId,
+    providerId,
+    modelId,
+    displayName,
+  }));
 }
 
 function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {

@@ -21,10 +21,14 @@ export function useConversationExecution({
 }: UseConversationExecutionOptions) {
   const activeRequestId = useRef<string | null>(null);
   const mutation = useMutation({
-    mutationFn: ({ deploymentIds, ...payload }: CreateConversationRequest) =>
-      conversationId
-        ? createTurn(apiClient, conversationId, payload)
-        : createConversation(apiClient, { ...payload, ...(deploymentIds ? { deploymentIds } : {}) }),
+    mutationFn: (payload: CreateConversationRequest) => {
+      if (!conversationId) return createConversation(apiClient, payload);
+
+      return createTurn(apiClient, conversationId, {
+        clientRequestId: payload.clientRequestId,
+        prompt: payload.prompt,
+      });
+    },
     onSuccess,
   });
 

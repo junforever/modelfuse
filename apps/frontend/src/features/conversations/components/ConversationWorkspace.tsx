@@ -29,6 +29,7 @@ import type {
 } from '../types/conversation';
 import type { TurnEventSnapshot } from '../types/sse';
 import { ConversationProcessingNotice } from './ConversationProcessingNotice';
+import { ConversationDeploymentSummary } from './ConversationDeploymentSummary';
 import { ConversationSidebar } from './ConversationSidebar';
 import {
   DeploymentSelectors,
@@ -64,6 +65,7 @@ function toSnapshot(
   return {
     conversationId: result.conversation.id,
     turnId: result.turn.id,
+    deployments: result.conversation.deployments,
     turn: result.turn,
     hasWorkInProgress: result.conversation.hasWorkInProgress,
     updatedAt: result.conversation.updatedAt,
@@ -110,6 +112,7 @@ function ActiveTimeline({
         className="max-h-[65vh] overflow-y-auto"
       >
         <TurnList
+          deployments={snapshot.deployments}
           turns={turns}
           activeTurnId={snapshot.turnId}
           hasWorkInProgress={snapshot.hasWorkInProgress || actionsDisabled}
@@ -163,6 +166,7 @@ export function ConversationWorkspace({
         queryClient.setQueryData<TurnEventSnapshot>(key, {
           conversationId: selectedConversationId,
           turnId: turn.id,
+          deployments: detail.deployments,
           turn,
           hasWorkInProgress: detail.hasWorkInProgress,
           updatedAt: detail.updatedAt,
@@ -194,9 +198,13 @@ export function ConversationWorkspace({
       const previous = queryClient.getQueryData<TurnEventSnapshot>(
         conversationKeys.turn(activeSelection.conversationId, activeSelection.turnId)
       );
+      const deployments = previous?.deployments ?? management.detail.data?.deployments;
+      if (!deployments) throw new Error('No se pudo conservar la asignación de la conversación');
+
       return {
         conversationId: activeSelection.conversationId,
         turnId: activeSelection.turnId,
+        deployments,
         turn: result.turn,
         hasWorkInProgress: result.conversation.hasWorkInProgress,
         updatedAt: result.turn.updatedAt,
@@ -294,6 +302,11 @@ export function ConversationWorkspace({
 
   const mutationError = execution.error ?? retryMutation.error ?? continueMutation.error;
   const snapshot = turnQuery.data;
+  const storedDeployments =
+    snapshot?.deployments ??
+    (management.detail.data?.id === selectedConversationId
+      ? management.detail.data.deployments
+      : undefined);
   const isBusy = snapshot?.hasWorkInProgress ?? management.detail.data?.hasWorkInProgress ?? false;
   const isPending = execution.isPending || retryMutation.isPending || continueMutation.isPending;
   const isNewConversation = selectedConversationId === null;
@@ -411,6 +424,10 @@ export function ConversationWorkspace({
       )}
       {withHistory && historyEmpty && (
         <p className="text-sm text-muted-foreground">No hay turnos en esta conversación.</p>
+      )}
+
+      {selectedConversationId && storedDeployments && (
+        <ConversationDeploymentSummary deployments={storedDeployments} />
       )}
 
       {snapshot && (

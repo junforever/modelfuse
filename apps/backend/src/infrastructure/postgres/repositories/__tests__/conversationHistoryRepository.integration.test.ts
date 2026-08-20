@@ -3,6 +3,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { ConversationRepository } from '../conversationRepository.js';
 import {
+  CANONICAL_SLOTS,
+  insertConversationDeployments,
+  TEST_DEPLOYMENT_SUMMARIES,
+} from '../../../../test/integration/conversationDeploymentFixtures.js';
+import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
@@ -65,6 +70,7 @@ describe('ConversationRepository history PostgreSQL integration', () => {
 
   it('returns seven complete turns in chronological 3/3/1 blocks without gaps', async () => {
     await seedHistory(pool);
+    const detail = await repository.getConversation(HISTORY_ID);
     const recent = await repository.listTurns(HISTORY_ID);
     const middle = await repository.listTurns(HISTORY_ID, recent.olderCursor ?? undefined);
     const oldest = await repository.listTurns(HISTORY_ID, middle.olderCursor ?? undefined);
@@ -79,16 +85,12 @@ describe('ConversationRepository history PostgreSQL integration', () => {
     expect(all.map(({ ordinal }) => ordinal)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     for (const turn of all) {
       expect(turn.prompt).toBe(`prompt-${turn.ordinal}`);
-      expect(turn.responses.map(({ slot }) => slot)).toEqual([
-        'openai',
-        'google',
-        'minimax',
-        'qwen',
-      ]);
+      expect(turn.responses.map(({ slot }) => slot)).toEqual(CANONICAL_SLOTS);
       expect(turn.responses.every(({ content }) => content?.endsWith(`-${turn.ordinal}`))).toBe(
         true,
       );
     }
+    expect(detail?.deployments).toEqual(TEST_DEPLOYMENT_SUMMARIES);
   });
 });
 
@@ -101,6 +103,7 @@ async function seedSidebar(pool: Pool): Promise<void> {
 
 async function seedHistory(pool: Pool): Promise<void> {
   await insertConversation(pool, HISTORY_ID, '2026-07-26T20:00:00.000Z', 'history');
+  await insertConversationDeployments(pool, HISTORY_ID);
   for (let ordinal = 1; ordinal <= 7; ordinal += 1) {
     await insertCompletedTurn(pool, HISTORY_ID, ordinal);
   }
@@ -134,10 +137,10 @@ async function insertCompletedTurn(pool: Pool, conversationId: string, ordinal: 
        (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
         is_stale, attempt_no, completed_at, created_at, updated_at)
      SELECT gen_random_uuid(), $1, slot,
-            CASE WHEN slot = 'qwen' THEN 'consolidator' ELSE 'base' END,
+            CASE WHEN slot = 'consolidator' THEN 'consolidator' ELSE 'base' END,
             slot, slot || '-model', 'completed', slot || '-' || $2, false,
             false, 1, $3, $3, $3
-       FROM unnest(ARRAY['openai', 'google', 'minimax', 'qwen']) AS slot`,
+       FROM unnest(ARRAY['base-1', 'base-2', 'base-3', 'consolidator']) AS slot`,
     [turnId, ordinal, timestamp],
   );
 }

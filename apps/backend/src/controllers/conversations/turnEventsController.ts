@@ -4,7 +4,7 @@ import type { ValidatedRequest } from '../../middleware/validation/validateReque
 import type { ConversationService } from '../../services/conversations/ConversationService.js';
 import type { TurnEventPublisher } from '../../services/conversations/turnEventPublisher.js';
 import type { ModelResponse, TurnStatus } from '../../types/conversations.js';
-import type { TurnEvent, TurnEventSnapshot } from '../../types/sse.js';
+import type { SlotUpdateEvent, TurnEvent, TurnEventSnapshot } from '../../types/sse.js';
 
 interface TurnParams {
   conversationId: string;
@@ -107,7 +107,7 @@ function snapshotEvents(snapshot: TurnEventSnapshot): TurnEvent[] {
         eventSequence,
         response,
       },
-    })),
+    }) satisfies SlotUpdateEvent),
     {
       event: 'turn_update',
       data: {

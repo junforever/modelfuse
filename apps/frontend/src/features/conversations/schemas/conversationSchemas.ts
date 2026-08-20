@@ -315,6 +315,7 @@ export const turnEventSchema: z.ZodType<TurnEvent> = z.discriminatedUnion('event
 export const turnEventSnapshotSchema: z.ZodType<TurnEventSnapshot> = z.strictObject({
   conversationId: uuidSchema,
   turnId: uuidSchema,
+  deployments: deploymentSummaryTupleSchema,
   turn: turnSchema,
   hasWorkInProgress: z.boolean(),
   updatedAt: dateTimeSchema,

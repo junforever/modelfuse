@@ -9,6 +9,11 @@ import {
   deferred,
 } from '../../../test/integration/controlledLlmProviders.js';
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
+import {
+  CANONICAL_SLOTS,
+  insertConversationDeployments,
+  TEST_DEPLOYMENT_SNAPSHOTS,
+} from '../../../test/integration/conversationDeploymentFixtures.js';
 import { openSse } from '../../../test/integration/sseTestClient.js';
 import {
   assertModelFuseSchema,
@@ -85,10 +90,10 @@ describe('turn SSE protocol/PostgreSQL', () => {
       const slotEvents = events.filter(({ event }) => event === 'slot_update');
       expect(slotEvents).toHaveLength(4);
       expect(slotEvents.map(({ data }) => (data.response as ModelResponse).content)).toEqual([
-        'Final openai response',
-        'Final google response',
-        'Final minimax response',
-        'Final qwen response',
+        'Final base-1 response',
+        'Final base-2 response',
+        'Final base-3 response',
+        'Final consolidator response',
       ]);
       expect(observation.subscribed.mock.calls.map(([turnId]) => turnId)).toEqual([
         OTHER_TURN_ID,
@@ -115,6 +120,7 @@ describe('turn SSE protocol/PostgreSQL', () => {
         conversationId: CONVERSATION_ID,
         turnId: TURN_ID,
         prompt: 'Stream committed responses.',
+        deployments: TEST_DEPLOYMENT_SNAPSHOTS,
         signal: new AbortController().signal,
       });
       const live = await readUntilClosed(stream.nextEvent);
@@ -172,7 +178,7 @@ describe('turn SSE protocol/PostgreSQL', () => {
         data: {
           conversationId: CONVERSATION_ID,
           turnId: TURN_ID,
-          response: response('openai', 'pending', null, UPDATED_AT, 0),
+          response: response('base-1', 'pending', null, UPDATED_AT, 0),
         },
       });
     });
@@ -213,20 +219,26 @@ describe('turn SSE protocol/PostgreSQL', () => {
       data: {
         conversationId: CONVERSATION_ID,
         turnId: TURN_ID,
-        response: response('openai', 'completed', 'Old openai response', '2026-08-07T09:59:59.000Z', 99),
+        response: response(
+          'base-1',
+          'completed',
+          'Old base-1 response',
+          '2026-08-07T09:59:59.000Z',
+          99,
+        ),
       },
     });
-    for (const content of ['Concurrent openai response 1', 'Concurrent openai response 2']) {
+    for (const content of ['Concurrent base-1 response 1', 'Concurrent base-1 response 2']) {
       backend.publisher.publish({
         event: 'slot_update',
         data: {
           conversationId: CONVERSATION_ID,
           turnId: TURN_ID,
-          response: response('openai', 'completed', content, CONCURRENT_UPDATED_AT, 1),
+          response: response('base-1', 'completed', content, CONCURRENT_UPDATED_AT, 1),
         },
       });
     }
-    for (const slot of ['openai', 'google', 'minimax', 'qwen'] as const) {
+    for (const slot of CANONICAL_SLOTS) {
       backend.publisher.publish({
         event: 'slot_update',
         data: {
@@ -286,13 +298,13 @@ describe('turn SSE protocol/PostgreSQL', () => {
           .filter(
             item =>
               item.event === 'slot_update' &&
-              (item.data.response as ModelResponse).slot === 'openai',
+              (item.data.response as ModelResponse).slot === 'base-1',
           )
           .map(({ data }) => (data.response as ModelResponse).content),
       ).toEqual([
-        'Concurrent openai response 1',
-        'Concurrent openai response 2',
-        'Concurrent openai',
+        'Concurrent base-1 response 1',
+        'Concurrent base-1 response 2',
+        'Concurrent base-1',
       ]);
       expect(drained.at(-1)).toMatchObject({
         event: 'busy_update',
@@ -362,7 +374,7 @@ function response(
 ): ModelResponse {
   return {
     slot,
-    role: slot === 'qwen' ? 'consolidator' : 'base',
+    role: slot === 'consolidator' ? 'consolidator' : 'base',
     provider: `${slot}-fake`,
     model: `${slot}-test-model`,
     status,
@@ -460,13 +472,14 @@ async function seedTurn(
      VALUES ($1, $2, 'SSE integration', $3, $3)`,
     [conversationId, clientRequestId, UPDATED_AT]
   );
+  await insertConversationDeployments(pool, conversationId);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
      VALUES ($1, $2, $3, 1, 'SSE prompt', $4, $5, $5)`,
     [turnId, conversationId, turnClientRequestId, status, UPDATED_AT]
   );
-  for (const slot of ['openai', 'google', 'minimax', 'qwen'] as const) {
+  for (const slot of CANONICAL_SLOTS) {
     const completed = status === 'completed';
     await pool.query(
       `INSERT INTO model_responses
@@ -477,7 +490,7 @@ async function seedTurn(
       [
         turnId,
         slot,
-        slot === 'qwen' ? 'consolidator' : 'base',
+        slot === 'consolidator' ? 'consolidator' : 'base',
         `${slot}-fake`,
         `${slot}-test-model`,
         completed ? 'completed' : 'pending',

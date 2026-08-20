@@ -5,6 +5,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { createControlledProviders } from '../../../test/integration/controlledLlmProviders.js';
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
 import {
+  insertConversationDeployments,
+  TEST_DEPLOYMENT_SUMMARIES,
+} from '../../../test/integration/conversationDeploymentFixtures.js';
+import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
@@ -55,6 +59,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
       id: IDLE_ID,
       title: 'Conversación idle',
       hasWorkInProgress: false,
+      deployments: TEST_DEPLOYMENT_SUMMARIES,
     });
     expect(detail.body).not.toHaveProperty('turns');
   });
@@ -113,6 +118,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
     expect(deleted.body.code).toBe('CONVERSATION_BUSY');
     await expect(rowCounts(pool, BUSY_ID)).resolves.toEqual({
       conversations: 1,
+      deployments: 4,
       turns: 1,
       responses: 4,
     });
@@ -125,6 +131,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
     expect(deleted.text).toBe('');
     await expect(rowCounts(pool, IDLE_ID)).resolves.toEqual({
       conversations: 0,
+      deployments: 0,
       turns: 0,
       responses: 0,
     });
@@ -140,6 +147,19 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
       .send({ title: '   ' });
     expect(invalidTitle.status).toBe(422);
     expect(invalidTitle.body).toMatchObject({ code: 'VALIDATION_ERROR' });
+
+    const replacement = await request(app)
+      .patch(`/api/v1/conversations/${IDLE_ID}`)
+      .send({ title: 'No replacement', deploymentIds: {} });
+    expect(replacement.status).toBe(422);
+    const deleteReplacement = await request(app)
+      .delete(`/api/v1/conversations/${IDLE_ID}`)
+      .send({ deploymentIds: {} });
+    expect(deleteReplacement.status).toBe(422);
+    await expect(rowCounts(pool, IDLE_ID)).resolves.toMatchObject({
+      conversations: 1,
+      deployments: 4,
+    });
 
     for (const result of await Promise.all([
       request(app).get('/api/v1/conversations/91000000-0000-4000-8000-000000000099'),
@@ -170,6 +190,7 @@ async function seedConversation(
     [conversationId, `91200000-0000-4000-8000-00000000009${discriminator}`, title, NOW,
       `2026-07-26T20:00:0${discriminator}.000Z`],
   );
+  await insertConversationDeployments(pool, conversationId);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
@@ -181,13 +202,13 @@ async function seedConversation(
        (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
         is_stale, attempt_no, started_at, completed_at, created_at, updated_at)
      SELECT gen_random_uuid(), $1, slot,
-            CASE WHEN slot = 'qwen' THEN 'consolidator' ELSE 'base' END,
+            CASE WHEN slot = 'consolidator' THEN 'consolidator' ELSE 'base' END,
             slot, slot || '-model', $2::varchar,
             CASE WHEN $2::varchar = 'completed' THEN slot || '-response' ELSE NULL END,
             false, false, 1, $3::timestamptz,
             CASE WHEN $2::varchar = 'completed' THEN $3::timestamptz ELSE NULL END,
             $3::timestamptz, $3::timestamptz
-       FROM unnest(ARRAY['openai', 'google', 'minimax', 'qwen']) AS slot`,
+       FROM unnest(ARRAY['base-1', 'base-2', 'base-3', 'consolidator']) AS slot`,
     [turnId, status, NOW],
   );
 }
@@ -198,9 +219,15 @@ async function storedTitle(pool: Pool, conversationId: string): Promise<string |
 }
 
 async function rowCounts(pool: Pool, conversationId: string) {
-  const result = await pool.query<{ conversations: number; turns: number; responses: number }>(
+  const result = await pool.query<{
+    conversations: number;
+    deployments: number;
+    turns: number;
+    responses: number;
+  }>(
     `SELECT
        (SELECT count(*)::int FROM conversations WHERE id = $1) AS conversations,
+       (SELECT count(*)::int FROM conversation_deployments WHERE conversation_id = $1) AS deployments,
        (SELECT count(*)::int FROM turns WHERE conversation_id = $1) AS turns,
        (SELECT count(*)::int FROM model_responses mr JOIN turns t ON t.id = mr.turn_id
          WHERE t.conversation_id = $1) AS responses`,

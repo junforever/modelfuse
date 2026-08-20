@@ -7,8 +7,10 @@ import { eventTime, modelResponse, turnFixture } from '../../../test/conversatio
 import { ControlledIntersectionObserver } from '../../../test/controlledIntersectionObserver';
 import { renderWithQueryClient } from '../../../test/query-test-utils';
 import type {
+  ConversationDetail,
   ConversationPage,
   ConversationSummary,
+  DeploymentSummaryTuple,
   Turn,
   TurnPage,
 } from '../types/conversation';
@@ -16,6 +18,7 @@ import type {
 const api = vi.hoisted(() => ({
   deleteConversation: vi.fn(),
   getConversation: vi.fn(),
+  listAvailableDeployments: vi.fn(),
   listConversationTurns: vi.fn(),
   listConversations: vi.fn(),
   renameConversation: vi.fn(),
@@ -27,6 +30,36 @@ vi.mock('../api/conversationsApi', async importOriginal => ({
 }));
 
 const CONVERSATION_ID = 'a0000000-0000-4000-8000-000000000092';
+const DEPLOYMENTS: DeploymentSummaryTuple = [
+  {
+    slot: 'base-1',
+    deploymentId: 'stored-base-1',
+    providerId: 'openai',
+    modelId: 'stored-gpt',
+    displayName: 'Stored GPT',
+  },
+  {
+    slot: 'base-2',
+    deploymentId: 'stored-base-2',
+    providerId: 'google',
+    modelId: 'stored-gemini',
+    displayName: 'Stored Gemini',
+  },
+  {
+    slot: 'base-3',
+    deploymentId: 'stored-base-3',
+    providerId: 'openrouter',
+    modelId: 'stored-minimax',
+    displayName: 'Stored MiniMax',
+  },
+  {
+    slot: 'consolidator',
+    deploymentId: 'stored-consolidator',
+    providerId: 'openrouter',
+    modelId: 'stored-qwen',
+    displayName: 'Stored Qwen',
+  },
+];
 
 describe('conversation history frontend integration', () => {
   beforeEach(() => {
@@ -36,7 +69,8 @@ describe('conversation history frontend integration', () => {
     vi.stubGlobal('EventSource', NoopEventSource);
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test/api/v1');
     vi.stubEnv('VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD', '40');
-    api.getConversation.mockResolvedValue(summary('Conversación 1'));
+    api.getConversation.mockResolvedValue(detail('Conversación 1'));
+    api.listAvailableDeployments.mockResolvedValue({ items: [] });
     api.listConversationTurns.mockResolvedValue(turnPage([5, 6, 7], null));
   });
 
@@ -205,7 +239,53 @@ describe('conversation history frontend integration', () => {
     unmount();
     queryClient.clear();
   });
+
+  it('restores the stored read-only assignment and canonical response labels after reload', async () => {
+    const user = userEvent.setup();
+    api.listConversations.mockResolvedValue({
+      items: [summary('Asignación persistida')],
+      nextCursor: null,
+    });
+    api.getConversation.mockResolvedValue(detail('Asignación persistida'));
+    api.listConversationTurns.mockResolvedValue(turnPage([1], null));
+
+    const firstView = renderWithQueryClient(<App />);
+    await user.click(
+      await screen.findByRole('button', { name: /^Asignación persistida$/ })
+    );
+
+    await expectStoredAssignment();
+    firstView.unmount();
+    firstView.queryClient.clear();
+
+    const reloadedView = renderWithQueryClient(<App />);
+    await user.click(
+      await screen.findByRole('button', { name: /^Asignación persistida$/ })
+    );
+
+    await expectStoredAssignment();
+    expect(api.getConversation).toHaveBeenCalledTimes(2);
+    reloadedView.unmount();
+    reloadedView.queryClient.clear();
+  });
 });
+
+async function expectStoredAssignment() {
+  const deploymentSummary = await screen.findByRole('region', {
+    name: 'Deployments de la conversación',
+  });
+  for (const deployment of DEPLOYMENTS) {
+    expect(within(deploymentSummary).getByText(deployment.displayName)).toBeInTheDocument();
+  }
+  expect(within(deploymentSummary).queryByRole('button')).not.toBeInTheDocument();
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  expect((await screen.findAllByRole('tab')).map(tab => tab.textContent)).toEqual([
+    'Base 1 · Stored GPT',
+    'Base 2 · Stored Gemini',
+    'Base 3 · Stored MiniMax',
+    'Consolidador · Stored Qwen',
+  ]);
+}
 
 function summary(
   title: string,
@@ -213,6 +293,10 @@ function summary(
   id = CONVERSATION_ID,
 ): ConversationSummary {
   return { id, title, hasWorkInProgress, createdAt: eventTime, updatedAt: eventTime };
+}
+
+function detail(title: string): ConversationDetail {
+  return { ...summary(title), deployments: DEPLOYMENTS };
 }
 
 function turnPage(ordinals: readonly number[], olderCursor: string | null): TurnPage {
@@ -231,10 +315,13 @@ function turn(ordinal: number): Turn {
     prompt: `prompt-${ordinal}`,
     status: 'completed',
     responses: [
-      modelResponse('openai', { status: 'completed', content: `openai-${ordinal}` }),
-      modelResponse('google', { status: 'completed', content: `google-${ordinal}` }),
-      modelResponse('minimax', { status: 'completed', content: `minimax-${ordinal}` }),
-      modelResponse('qwen', { status: 'completed', content: `qwen-${ordinal}` }),
+      modelResponse('base-1', { status: 'completed', content: `base-1-${ordinal}` }),
+      modelResponse('base-2', { status: 'completed', content: `base-2-${ordinal}` }),
+      modelResponse('base-3', { status: 'completed', content: `base-3-${ordinal}` }),
+      modelResponse('consolidator', {
+        status: 'completed',
+        content: `consolidator-${ordinal}`,
+      }),
     ],
   });
 }

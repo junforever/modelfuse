@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 
-import type { BaseResponseSlot } from '../../../types/conversations.js';
+import type { BaseResponseSlot, ResponseSlot } from '../../../types/conversations.js';
 
 export interface ContextTurn {
   ordinal: number;
@@ -26,19 +26,19 @@ export class ContextRepository {
     return this.getContext(input, false);
   }
 
-  getQwenContext(input: {
+  getConsolidatorContext(input: {
     conversationId: string;
     beforeOrdinal: number;
     maxTurns: number;
   }): Promise<ContextTurn[]> {
-    return this.getContext({ ...input, slot: 'qwen' }, true);
+    return this.getContext({ ...input, slot: 'consolidator' }, true);
   }
 
   private async getContext(
     input: {
       conversationId: string;
       beforeOrdinal: number;
-      slot: BaseResponseSlot | 'qwen';
+      slot: ResponseSlot;
       maxTurns: number;
     },
     excludeStale: boolean,

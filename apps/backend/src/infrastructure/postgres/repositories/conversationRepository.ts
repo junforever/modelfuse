@@ -19,24 +19,14 @@ import type {
   ConversationDeploymentSnapshotTuple,
   ConversationPage,
   ConversationSummary,
-  ResponseRole,
-  ResponseSlot,
   TurnPage,
 } from '../../../types/conversations.js';
 import { decodeCursor, encodeCursor, InvalidCursorError } from '../../../utils/cursor.js';
 import { withTransaction } from '../transaction.js';
 
-export interface ResponseDefinition {
-  slot: ResponseSlot;
-  role: ResponseRole;
-  provider: string;
-  model: string;
-}
-
 interface CreateInput {
   clientRequestId: string;
   prompt: string;
-  responses: readonly ResponseDefinition[];
 }
 
 interface CreateConversationInput {
@@ -47,9 +37,23 @@ interface CreateConversationInput {
 }
 
 export type CreateResult =
-  | { kind: 'created'; conversationId: string; turnId: string }
-  | { kind: 'replay'; conversationId: string; turnId: string }
+  | {
+      kind: 'created' | 'replay';
+      conversationId: string;
+      turnId: string;
+      deployments: ConversationDeploymentSnapshotTuple;
+    }
   | { kind: 'conflict' };
+
+export type CreateReplayResult =
+  | {
+      kind: 'replay';
+      conversationId: string;
+      turnId: string;
+      deployments: ConversationDeploymentSnapshotTuple;
+    }
+  | { kind: 'conflict' }
+  | null;
 
 export type CreateTurnResult = CreateResult | { kind: 'conversation_not_found' | 'busy' };
 export type DeleteConversationResult = 'deleted' | 'not_found' | 'busy';
@@ -74,6 +78,31 @@ const TURN_PAGE_SIZE = 3;
 
 export class ConversationRepository {
   constructor(private readonly pool: Pool) {}
+
+  findCreateReplay(clientRequestId: string, prompt: string): Promise<CreateReplayResult> {
+    return withTransaction(
+      this.pool,
+      async client => {
+        const existing = await client.query<ExistingTurnRow>(
+          `SELECT t.id, t.conversation_id, t.user_content
+             FROM conversations c
+             JOIN turns t ON t.conversation_id = c.id AND t.ordinal = 1
+            WHERE c.create_client_request_id = $1`,
+          [clientRequestId],
+        );
+        const row = existing.rows[0];
+        if (!row) return null;
+        if (row.user_content !== prompt) return { kind: 'conflict' };
+        return {
+          kind: 'replay',
+          conversationId: row.conversation_id,
+          turnId: row.id,
+          deployments: await this.requireDeployments(client, row.conversation_id, false),
+        };
+      },
+      { isolationLevel: 'REPEATABLE READ', readOnly: true },
+    );
+  }
 
   async listConversations(limit: number, cursor?: string): Promise<ConversationPage> {
     const position = cursor === undefined ? undefined : parseSidebarCursor(cursor);
@@ -262,9 +291,13 @@ export class ConversationRepository {
         );
         const row = existing.rows[0];
         if (!row) throw new Error('Conversation replay row is incomplete');
-        return row.user_content === input.prompt
-          ? { kind: 'replay', conversationId: row.conversation_id, turnId: row.id }
-          : { kind: 'conflict' };
+        if (row.user_content !== input.prompt) return { kind: 'conflict' };
+        return {
+          kind: 'replay',
+          conversationId: row.conversation_id,
+          turnId: row.id,
+          deployments: await this.requireDeployments(client, row.conversation_id, true),
+        };
       }
 
       await this.insertDeployments(client, conversationId, input.deployments);
@@ -275,14 +308,9 @@ export class ConversationRepository {
         ordinal: 1,
         clientRequestId: input.clientRequestId,
         prompt: input.prompt,
-        responses: input.deployments.map(deployment => ({
-          slot: deployment.slot,
-          role: deployment.slot === 'consolidator' ? 'consolidator' : 'base',
-          provider: deployment.providerId,
-          model: deployment.modelId,
-        })),
+        deployments: input.deployments,
       });
-      return { kind: 'created', conversationId, turnId };
+      return { kind: 'created', conversationId, turnId, deployments: input.deployments };
     });
   }
 
@@ -293,7 +321,6 @@ export class ConversationRepository {
         [conversationId],
       );
       if (conversation.rowCount === 0) return { kind: 'conversation_not_found' };
-
       const existing = await client.query<ExistingTurnRow>(
         `SELECT id, conversation_id, user_content
            FROM turns
@@ -302,9 +329,13 @@ export class ConversationRepository {
       );
       const replay = existing.rows[0];
       if (replay) {
-        return replay.user_content === input.prompt
-          ? { kind: 'replay', conversationId, turnId: replay.id }
-          : { kind: 'conflict' };
+        if (replay.user_content !== input.prompt) return { kind: 'conflict' };
+        return {
+          kind: 'replay',
+          conversationId,
+          turnId: replay.id,
+          deployments: await this.requireDeployments(client, conversationId, true),
+        };
       }
 
       const work = await client.query<{ busy: boolean }>(
@@ -320,6 +351,7 @@ export class ConversationRepository {
         [conversationId],
       );
       if (work.rows[0]?.busy === true) return { kind: 'busy' };
+      const deployments = await this.requireDeployments(client, conversationId, true);
 
       const ordinalResult = await client.query<{ ordinal: number }>(
         'SELECT COALESCE(MAX(ordinal), 0) + 1 AS ordinal FROM turns WHERE conversation_id = $1',
@@ -329,9 +361,9 @@ export class ConversationRepository {
       if (!ordinal) throw new Error('Unable to assign turn ordinal');
 
       const turnId = randomUUID();
-      await this.insertTurn(client, { conversationId, turnId, ordinal, ...input });
+      await this.insertTurn(client, { conversationId, turnId, ordinal, ...input, deployments });
       await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId]);
-      return { kind: 'created', conversationId, turnId };
+      return { kind: 'created', conversationId, turnId, deployments };
     });
   }
 
@@ -341,6 +373,7 @@ export class ConversationRepository {
       conversationId: string;
       turnId: string;
       ordinal: number;
+      deployments: ConversationDeploymentSnapshotTuple;
     },
   ): Promise<void> {
     await client.query(
@@ -350,7 +383,7 @@ export class ConversationRepository {
       [input.turnId, input.conversationId, input.clientRequestId, input.ordinal, input.prompt],
     );
 
-    for (const response of input.responses) {
+    for (const deployment of input.deployments) {
       await client.query(
         `INSERT INTO model_responses
            (id, turn_id, slot, role, provider, model, status, error_recoverable,
@@ -359,10 +392,10 @@ export class ConversationRepository {
         [
           randomUUID(),
           input.turnId,
-          response.slot,
-          response.role,
-          response.provider,
-          response.model,
+          deployment.slot,
+          deployment.slot === 'consolidator' ? 'consolidator' : 'base',
+          deployment.providerId,
+          deployment.modelId,
         ],
       );
     }
@@ -394,6 +427,22 @@ export class ConversationRepository {
         ],
       );
     }
+  }
+
+  private async requireDeployments(
+    client: PoolClient,
+    conversationId: string,
+    lock: boolean,
+  ): Promise<ConversationDeploymentSnapshotTuple> {
+    const result = await client.query<ConversationDeploymentRow>(
+      `SELECT slot, deployment_id, provider_id, model_id, display_name,
+              context_limit_tokens, max_output_tokens, input_modalities, output_modalities
+         FROM conversation_deployments
+        WHERE conversation_id = $1
+        ${lock ? 'FOR SHARE' : ''}`,
+      [conversationId],
+    );
+    return orderDeploymentSnapshots(result.rows.map(mapConversationDeploymentRow));
   }
 
 }

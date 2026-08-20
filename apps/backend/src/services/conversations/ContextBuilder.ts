@@ -3,7 +3,7 @@ import type { BaseResponseSlot, ResponseSlot } from '../../types/conversations.j
 import type { LlmContextCapabilities, LlmMessage } from '../../types/llm.js';
 import { protectContext } from './contextProtection.js';
 
-const BASE_SLOTS = ['openai', 'google', 'minimax'] as const;
+const BASE_SLOTS = ['base-1', 'base-2', 'base-3'] as const;
 
 interface ContextRepositoryPort {
   getBaseContext(input: {
@@ -12,7 +12,7 @@ interface ContextRepositoryPort {
     slot: BaseResponseSlot;
     maxTurns: number;
   }): Promise<ContextTurn[]>;
-  getQwenContext(input: {
+  getConsolidatorContext(input: {
     conversationId: string;
     beforeOrdinal: number;
     maxTurns: number;
@@ -41,8 +41,8 @@ export class ContextBuilder {
     currentBaseResponses?: readonly CurrentBaseResponse[];
     context: LlmContextCapabilities;
   }) {
-    const history = input.slot === 'qwen'
-      ? await this.dependencies.contextRepository.getQwenContext({
+    const history = input.slot === 'consolidator'
+      ? await this.dependencies.contextRepository.getConsolidatorContext({
           conversationId: input.conversationId,
           beforeOrdinal: input.currentOrdinal,
           maxTurns: this.dependencies.maxTurns,
@@ -57,12 +57,12 @@ export class ContextBuilder {
     const protectedContext = protectContext({
       systemMessage: {
         role: 'system',
-        content: input.slot === 'qwen'
+        content: input.slot === 'consolidator'
           ? 'Consolidate the available model answers into one final answer.'
           : 'Provide a complete, accurate answer to the user prompt.',
       },
       historicalTurns: history.map(this.toHistoricalTurn),
-      auxiliaryMessages: input.slot === 'qwen'
+      auxiliaryMessages: input.slot === 'consolidator'
         ? this.baseResponseMessages(input.currentBaseResponses ?? [])
         : [],
       currentPrompt: { role: 'user', content: input.prompt },

@@ -1,9 +1,10 @@
-import type { ResponseSlot, Turn } from '../types/conversation';
+import type { DeploymentSummaryTuple, ResponseSlot, Turn } from '../types/conversation';
 import { CollapsibleHistoryMessage } from './CollapsibleHistoryMessage';
 import { ContextWindowNotice } from './ContextWindowNotice';
 import { ResponseTabs } from './ResponseTabs';
 
 interface TurnCardProps {
+  readonly deployments: DeploymentSummaryTuple;
   readonly turn: Turn;
   readonly hasWorkInProgress: boolean;
   readonly runtimeStages: Partial<Record<ResponseSlot, string>>;
@@ -13,6 +14,7 @@ interface TurnCardProps {
 }
 
 export function TurnCard({
+  deployments,
   turn,
   hasWorkInProgress,
   runtimeStages,
@@ -36,6 +38,7 @@ export function TurnCard({
       </header>
       <ContextWindowNotice contextWindow={contextWindow} />
       <ResponseTabs
+        deployments={deployments}
         responses={turn.responses}
         runtimeStages={runtimeStages}
         collapseThreshold={collapseThreshold}

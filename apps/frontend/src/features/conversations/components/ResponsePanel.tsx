@@ -8,7 +8,7 @@ import { ContinueWithoutDialog } from './ContinueWithoutDialog';
 
 interface ResponsePanelProps {
   readonly response: ModelResponse;
-  readonly modelLabel: string;
+  readonly responseLabel: string;
   readonly runtimeStage?: string;
   readonly hasWorkInProgress: boolean;
   readonly collapseThreshold?: number;
@@ -18,7 +18,7 @@ interface ResponsePanelProps {
 
 export function ResponsePanel({
   response,
-  modelLabel,
+  responseLabel,
   runtimeStage,
   hasWorkInProgress,
   collapseThreshold,
@@ -50,10 +50,10 @@ export function ResponsePanel({
   }
 
   if (response.continuedWithout) {
-    return <p>Se continuó sin {modelLabel} de forma permanente.</p>;
+    return <p>Se continuó sin {responseLabel} de forma permanente.</p>;
   }
 
-  const canContinueWithout = response.slot !== 'qwen';
+  const canContinueWithout = response.slot !== 'consolidator';
 
   return (
     <div className="grid gap-4">
@@ -68,7 +68,7 @@ export function ResponsePanel({
             aria-describedby={errorId}
             onClick={() => onRetry(response.slot)}
           >
-            Reintentar {modelLabel}
+            Reintentar {responseLabel}
           </Button>
         )}
         {canContinueWithout && (
@@ -77,13 +77,13 @@ export function ResponsePanel({
             aria-describedby={errorId}
             onClick={() => setConfirmOpen(true)}
           >
-            Continuar sin {modelLabel}
+            Continuar sin {responseLabel}
           </Button>
         )}
       </div>
       {canContinueWithout && (
         <ContinueWithoutDialog
-          modelLabel={modelLabel}
+          modelLabel={responseLabel}
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           onConfirm={() => onContinueWithout(response.slot)}

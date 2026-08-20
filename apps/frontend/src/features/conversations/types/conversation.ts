@@ -3,6 +3,12 @@ export const PROVIDER_IDS = ['openai', 'google', 'minimax', 'qwen', 'openrouter'
 export const MODALITIES = ['text', 'image', 'video', 'audio', 'pdf'] as const;
 
 export type ResponseSlot = (typeof RESPONSE_SLOTS)[number];
+export const RESPONSE_SLOT_LABELS: Readonly<Record<ResponseSlot, string>> = {
+  'base-1': 'Base 1',
+  'base-2': 'Base 2',
+  'base-3': 'Base 3',
+  consolidator: 'Consolidador',
+};
 export type BaseResponseSlot = Exclude<ResponseSlot, 'consolidator'>;
 export type ResponseRole<Slot extends ResponseSlot = ResponseSlot> =
   Slot extends 'consolidator' ? 'consolidator' : 'base';

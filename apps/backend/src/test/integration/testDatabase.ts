@@ -104,6 +104,15 @@ async function createIsolatedSchema(pool: Pool, schema: string): Promise<void> {
       END IF;
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
+         WHERE conrelid = ${quoteLiteral(`${schema}.conversation_deployments`)}::regclass
+           AND conname = 'fk_conversation_deployments_conversation'
+      ) THEN
+        ALTER TABLE ${identifier}.conversation_deployments
+          ADD CONSTRAINT fk_conversation_deployments_conversation
+          FOREIGN KEY (conversation_id) REFERENCES ${identifier}.conversations (id) ON DELETE CASCADE;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
          WHERE conrelid = ${quoteLiteral(`${schema}.model_responses`)}::regclass
            AND conname = 'fk_model_responses_turn'
       ) THEN

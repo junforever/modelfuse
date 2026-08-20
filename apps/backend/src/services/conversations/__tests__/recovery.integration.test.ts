@@ -6,6 +6,11 @@ import { recoverInterruptedTurns } from '../recoverInterruptedTurns.js';
 import { createControlledProviders } from '../../../test/integration/controlledLlmProviders.js';
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
 import {
+  CANONICAL_SLOTS,
+  insertConversationDeployments,
+  TEST_DEPLOYMENT_SUMMARIES,
+} from '../../../test/integration/conversationDeploymentFixtures.js';
+import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversations,
@@ -47,7 +52,7 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
     const providers = createControlledProviders();
 
     await recoverInterruptedTurns(pool);
-    const recreated = createIntegrationBackend(pool, providers);
+    const recreated = createIntegrationBackend(pool, providers, []);
 
     for (const recoveryCase of recoveryCases) {
       const detail = await request(recreated.app).get(`/api/v1/conversations/${recoveryCase.id}`);
@@ -56,6 +61,7 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
         id: recoveryCase.id,
         title: recoveryCase.title,
         hasWorkInProgress: false,
+        deployments: TEST_DEPLOYMENT_SUMMARIES,
       });
 
       const history = await request(recreated.app).get(
@@ -81,12 +87,9 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
           prompt: expectedTurn.prompt,
           status: expectedTurn.expectedStatus,
         });
-        expect(actualTurn.responses.map(({ slot }: { slot: string }) => slot)).toEqual([
-          'openai',
-          'google',
-          'minimax',
-          'qwen',
-        ]);
+        expect(actualTurn.responses.map(({ slot }: { slot: string }) => slot)).toEqual(
+          CANONICAL_SLOTS,
+        );
 
         for (const expectedResponse of expectedTurn.responses) {
           const actualResponse = actualTurn.responses.find(
@@ -109,6 +112,7 @@ async function seedRecoveryCases(pool: Pool): Promise<void> {
        VALUES ($1, $2, $3, $4, $4)`,
       [recoveryCase.id, recoveryCase.clientRequestId, recoveryCase.title, FIXTURE_TIME],
     );
+    await insertConversationDeployments(pool, recoveryCase.id);
 
     for (const turn of recoveryCase.turns) {
       await seedTurn(pool, recoveryCase.id, turn);
@@ -147,7 +151,7 @@ async function seedTurn(
         response.id,
         turn.id,
         response.slot,
-        response.slot === 'qwen' ? 'consolidator' : 'base',
+        response.slot === 'consolidator' ? 'consolidator' : 'base',
         `${response.slot}-fixture-provider`,
         `${response.slot}-fixture-model`,
         response.status,
@@ -167,7 +171,7 @@ function expectedResponseAfterRecovery(response: RecoveryResponseCase) {
   const interrupted = response.status === 'pending' || response.status === 'running';
   return {
     slot: response.slot,
-    role: response.slot === 'qwen' ? 'consolidator' : 'base',
+    role: response.slot === 'consolidator' ? 'consolidator' : 'base',
     provider: `${response.slot}-fixture-provider`,
     model: `${response.slot}-fixture-model`,
     status: interrupted ? 'failed' : response.status,

@@ -1,9 +1,12 @@
 import type { Pool, PoolClient } from 'pg';
 
 import {
+  mapConversationDeploymentRow,
   mapConversationRow,
   mapModelResponseRow,
   mapTurnRow,
+  orderDeploymentSnapshots,
+  type ConversationDeploymentRow,
   type ConversationRow,
   type ModelResponseRow,
   type TurnRow,
@@ -11,6 +14,7 @@ import {
 import { withTransaction } from '../transaction.js';
 import { calculateTurnState } from '../../../services/conversations/turnState.js';
 import type {
+  ConversationDeploymentSnapshotTuple,
   ConversationSummary,
   ModelResponse,
   ResponseSlot,
@@ -21,6 +25,7 @@ type DatabaseClient = Pool | PoolClient;
 
 export interface StoredTurnSnapshot {
   conversation: ConversationSummary;
+  deployments: ConversationDeploymentSnapshotTuple;
   turn: Turn;
 }
 
@@ -41,7 +46,7 @@ export interface PersistResponseAttemptInput {
   metadata?: Record<string, unknown>;
   startedAt: string;
   completedAt: string;
-  reconsolidateQwen?: boolean;
+  reconsolidateConsolidator?: boolean;
 }
 
 export type RetryPreparation =
@@ -78,6 +83,12 @@ export class TurnRepository {
     slot: ResponseSlot;
   }): Promise<{ attemptNo: number; snapshot: StoredTurnSnapshot } | null> {
     return withTransaction(this.pool, async client => {
+      const conversation = await client.query<{ id: string }>(
+        'SELECT id FROM conversations WHERE id = $1 FOR UPDATE',
+        [input.conversationId],
+      );
+      if (conversation.rowCount === 0) return null;
+
       const started = await client.query<{ attempt_no: number }>(
         `UPDATE model_responses mr
             SET status = 'running',
@@ -95,7 +106,7 @@ export class TurnRepository {
       const row = started.rows[0];
       if (!row) return null;
 
-      await this.recalculateTurnWith(client, input.turnId);
+      await this.recalculateTurnWith(client, input.conversationId, input.turnId);
       const snapshot = await this.requireSnapshot(client, input.conversationId, input.turnId);
       return { attemptNo: row.attempt_no, snapshot };
     });
@@ -103,12 +114,15 @@ export class TurnRepository {
 
   persistResponseAttempt(input: PersistResponseAttemptInput): Promise<StoredTurnSnapshot | null> {
     return withTransaction(this.pool, async client => {
+      const conversationId = await this.lockConversationForTurn(client, input.turnId);
+      if (!conversationId) return null;
+
       const persisted = await client.query(
         `UPDATE model_responses
             SET status = $4::varchar,
                 content = CASE
                   WHEN $4::varchar = 'completed' THEN $5::text
-                  WHEN slot = 'qwen' AND is_stale THEN content
+                  WHEN slot = 'consolidator' AND is_stale THEN content
                   ELSE NULL
                 END,
                 error_code = $6,
@@ -117,7 +131,7 @@ export class TurnRepository {
                 metadata = $9::jsonb,
                 started_at = $10,
                 completed_at = $11,
-                is_stale = CASE WHEN slot = 'qwen' AND $4::varchar = 'completed' THEN false ELSE is_stale END,
+                is_stale = CASE WHEN slot = 'consolidator' AND $4::varchar = 'completed' THEN false ELSE is_stale END,
                 updated_at = now()
           WHERE turn_id = $1 AND slot = $2 AND attempt_no = $3 AND status = 'running'`,
         [
@@ -136,42 +150,44 @@ export class TurnRepository {
       );
       if (persisted.rowCount === 0) return null;
 
-      if (input.reconsolidateQwen === true && input.status === 'completed') {
+      if (input.reconsolidateConsolidator === true && input.status === 'completed') {
         await client.query(
           `UPDATE model_responses
               SET status = 'pending', attempt_no = attempt_no + 1,
                   is_stale = content IS NOT NULL,
                   error_code = NULL, error_message = NULL, error_recoverable = NULL,
                   started_at = NULL, completed_at = NULL, updated_at = now()
-            WHERE turn_id = $1 AND slot = 'qwen' AND status NOT IN ('pending', 'running')`,
+            WHERE turn_id = $1 AND slot = 'consolidator' AND status NOT IN ('pending', 'running')`,
           [input.turnId],
         );
       }
 
-      const { conversationId } = await this.recalculateTurnWith(client, input.turnId);
+      await this.recalculateTurnWith(client, conversationId, input.turnId);
       return this.requireSnapshot(client, conversationId, input.turnId);
     });
   }
 
   recalculateTurn(turnId: string): Promise<StoredTurnSnapshot | null> {
     return withTransaction(this.pool, async client => {
-      const turn = await client.query<{ conversation_id: string }>(
-        'SELECT conversation_id FROM turns WHERE id = $1 FOR UPDATE',
-        [turnId],
-      );
-      const conversationId = turn.rows[0]?.conversation_id;
+      const conversationId = await this.lockConversationForTurn(client, turnId);
       if (!conversationId) return null;
-      await this.recalculateTurnWith(client, turnId);
+      await this.recalculateTurnWith(client, conversationId, turnId);
       return this.requireSnapshot(client, conversationId, turnId);
     });
   }
 
   reconcileInterruptedTurn(conversationId: string, turnId: string): Promise<ReconciledTurn | null> {
     return withTransaction(this.pool, async client => {
+      const conversation = await client.query<{ id: string }>(
+        'SELECT id FROM conversations WHERE id = $1 FOR UPDATE',
+        [conversationId],
+      );
+      if (conversation.rowCount === 0) return null;
+
       const reconciled = await client.query<{ slot: ResponseSlot }>(
         `UPDATE model_responses mr
             SET status = 'failed',
-                content = CASE WHEN slot = 'qwen' AND is_stale THEN content ELSE NULL END,
+                content = CASE WHEN slot = 'consolidator' AND is_stale THEN content ELSE NULL END,
                 error_code = 'interrupted',
                 error_message = 'The response was interrupted before completion.',
                 error_recoverable = true,
@@ -188,7 +204,7 @@ export class TurnRepository {
       );
       if (reconciled.rowCount === 0) return null;
 
-      await this.recalculateTurnWith(client, turnId);
+      await this.recalculateTurnWith(client, conversationId, turnId);
       return {
         snapshot: await this.requireSnapshot(client, conversationId, turnId),
         slots: reconciled.rows.map(({ slot }) => slot),
@@ -311,7 +327,7 @@ export class TurnRepository {
               started_at, completed_at, created_at, updated_at
          FROM model_responses
         WHERE turn_id = $1 AND role = 'base' AND status = 'completed'
-        ORDER BY CASE slot WHEN 'openai' THEN 1 WHEN 'google' THEN 2 ELSE 3 END`,
+        ORDER BY CASE slot WHEN 'base-1' THEN 1 WHEN 'base-2' THEN 2 ELSE 3 END`,
       [turnId],
     );
     return rows.rows.map(mapModelResponseRow);
@@ -319,14 +335,14 @@ export class TurnRepository {
 
   private async recalculateTurnWith(
     client: PoolClient,
+    conversationId: string,
     turnId: string,
-  ): Promise<{ conversationId: string }> {
-    const turn = await client.query<{ conversation_id: string }>(
-      'SELECT conversation_id FROM turns WHERE id = $1 FOR UPDATE',
-      [turnId],
+  ): Promise<void> {
+    const turn = await client.query<{ id: string }>(
+      'SELECT id FROM turns WHERE id = $1 AND conversation_id = $2 FOR UPDATE',
+      [turnId, conversationId],
     );
-    const conversationId = turn.rows[0]?.conversation_id;
-    if (!conversationId) throw new Error('Turn disappeared during state transition');
+    if (turn.rowCount === 0) throw new Error('Turn disappeared during state transition');
 
     const responses = await client.query<Pick<ModelResponseRow, 'slot' | 'status' | 'is_stale'>>(
       'SELECT slot, status, is_stale FROM model_responses WHERE turn_id = $1',
@@ -335,7 +351,21 @@ export class TurnRepository {
     const state = calculateTurnState(responses.rows);
     await client.query('UPDATE turns SET status = $2, updated_at = now() WHERE id = $1', [turnId, state.status]);
     await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId]);
-    return { conversationId };
+  }
+
+  private async lockConversationForTurn(
+    client: PoolClient,
+    turnId: string,
+  ): Promise<string | null> {
+    const conversation = await client.query<{ id: string }>(
+      `SELECT conversation.id
+         FROM conversations conversation
+         JOIN turns turn_row ON turn_row.conversation_id = conversation.id
+        WHERE turn_row.id = $1
+        FOR UPDATE OF conversation`,
+      [turnId],
+    );
+    return conversation.rows[0]?.id ?? null;
   }
 
   private async requireSnapshot(
@@ -388,8 +418,18 @@ export class TurnRepository {
          FROM model_responses WHERE turn_id = $1`,
       [turnId],
     );
+    const deployments = await client.query<ConversationDeploymentRow>(
+      `SELECT slot, deployment_id, provider_id, model_id, display_name,
+              context_limit_tokens, max_output_tokens, input_modalities, output_modalities
+         FROM conversation_deployments
+        WHERE conversation_id = $1`,
+      [conversationId],
+    );
     return {
       conversation: mapConversationRow(conversation),
+      deployments: orderDeploymentSnapshots(
+        deployments.rows.map(mapConversationDeploymentRow),
+      ),
       turn: mapTurnRow(turn, responses.rows.map(mapModelResponseRow)),
     };
   }
