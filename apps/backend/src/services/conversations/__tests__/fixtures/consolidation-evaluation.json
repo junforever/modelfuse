@@ -5,9 +5,9 @@
       "id": "complementary-facts",
       "prompt": "Resume el plan operativo conservando los aportes complementarios.",
       "baseResponses": {
-        "openai": "El despliegue azul reduce el riesgo del cambio.",
-        "google": "Las copias de seguridad se ejecutan cada seis horas.",
-        "minimax": "El equipo debe vigilar la latencia durante el despliegue."
+        "base-1": "El despliegue azul reduce el riesgo del cambio.",
+        "base-2": "Las copias de seguridad se ejecutan cada seis horas.",
+        "base-3": "El equipo debe vigilar la latencia durante el despliegue."
       },
       "missingSlots": [],
       "checks": [
@@ -21,11 +21,11 @@
       "id": "declared-missing-slot",
       "prompt": "Consolida solamente las respuestas disponibles.",
       "baseResponses": {
-        "openai": "El plan incluye una revisión semanal.",
-        "google": "Este contenido pertenece al slot ausente.",
-        "minimax": "Las alertas deben tener un responsable asignado."
+        "base-1": "El plan incluye una revisión semanal.",
+        "base-2": "Este contenido pertenece al slot ausente.",
+        "base-3": "Las alertas deben tener un responsable asignado."
       },
-      "missingSlots": ["google"],
+      "missingSlots": ["base-2"],
       "checks": [
         { "type": "includes", "pattern": "revisión semanal" },
         { "type": "includes", "pattern": "responsable asignado" },
@@ -37,9 +37,9 @@
       "id": "no-invented-contradiction",
       "prompt": "Combina las recomendaciones sin añadir una frecuencia diaria.",
       "baseResponses": {
-        "openai": "Revisar el informe al cierre de cada semana.",
-        "google": "Mantener un registro de decisiones.",
-        "minimax": "Confirmar las acciones pendientes con sus responsables."
+        "base-1": "Revisar el informe al cierre de cada semana.",
+        "base-2": "Mantener un registro de decisiones.",
+        "base-3": "Confirmar las acciones pendientes con sus responsables."
       },
       "missingSlots": [],
       "checks": [

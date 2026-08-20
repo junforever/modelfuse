@@ -8,10 +8,10 @@ import type {
 const FIXED_AT = '2026-01-02T03:04:05.000Z';
 
 const IDENTITIES: Record<ResponseSlot, { provider: string; model: string }> = {
-  openai: { provider: 'openai-fake', model: 'openai-test-model' },
-  google: { provider: 'google-fake', model: 'google-test-model' },
-  minimax: { provider: 'minimax-fake', model: 'minimax-test-model' },
-  qwen: { provider: 'qwen-fake', model: 'qwen-test-model' },
+  'base-1': { provider: 'openai-fake', model: 'openai-test-model' },
+  'base-2': { provider: 'google-fake', model: 'google-test-model' },
+  'base-3': { provider: 'minimax-fake', model: 'minimax-test-model' },
+  consolidator: { provider: 'qwen-fake', model: 'qwen-test-model' },
 };
 
 function completedResponse<Slot extends ResponseSlot>(slot: Slot): ModelResponse<Slot> {
@@ -19,7 +19,7 @@ function completedResponse<Slot extends ResponseSlot>(slot: Slot): ModelResponse
 
   return {
     slot,
-    role: (slot === 'qwen' ? 'consolidator' : 'base') as ModelResponse<Slot>['role'],
+    role: (slot === 'consolidator' ? 'consolidator' : 'base') as ModelResponse<Slot>['role'],
     provider: identity.provider,
     model: identity.model,
     status: 'completed',
@@ -39,10 +39,10 @@ function completedResponse<Slot extends ResponseSlot>(slot: Slot): ModelResponse
 
 export function createConversationFixture(): ConversationTurnResponse {
   const responses: TurnResponses = [
-    completedResponse('openai'),
-    completedResponse('google'),
-    completedResponse('minimax'),
-    completedResponse('qwen'),
+    completedResponse('base-1'),
+    completedResponse('base-2'),
+    completedResponse('base-3'),
+    completedResponse('consolidator'),
   ];
 
   return {

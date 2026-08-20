@@ -17,6 +17,14 @@ import {
   DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ScrollArea } from '@workspace/ui/components/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@workspace/ui/components/select';
 import { Skeleton } from '@workspace/ui/components/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 
@@ -84,6 +92,63 @@ describe('shared UI primitives', () => {
     expect(await screen.findByRole('menuitem', { name: 'Rename' })).toHaveFocus();
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
+  });
+
+  it('labels the select and supports keyboard selection with focus restoration', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Select defaultValue="Alpha">
+        <SelectLabel>Deployment</SelectLabel>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="Alpha">Alpha</SelectItem>
+          <SelectItem value="Beta">Beta</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Deployment' });
+    expect(trigger).toHaveTextContent('Alpha');
+
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(await screen.findByRole('listbox')).toBeVisible();
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(trigger).toHaveTextContent('Beta');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps a disabled select unavailable to keyboard and pointer interaction', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Select defaultValue="Alpha" disabled>
+        <SelectLabel>Disabled deployment</SelectLabel>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="Alpha">Alpha</SelectItem>
+          <SelectItem value="Beta">Beta</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Disabled deployment' });
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveTextContent('Alpha');
+
+    await user.tab();
+    expect(trigger).not.toHaveFocus();
+    await user.click(trigger);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(trigger).toHaveTextContent('Alpha');
   });
 
   it('renders scroll, loading and alert states', () => {

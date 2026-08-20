@@ -26,22 +26,22 @@ describe('fake LLM providers', () => {
       {
         provider: 'openai-fake',
         model: 'openai-test-model',
-        content: 'Deterministic openai response',
+        content: 'Deterministic base-1 response',
       },
       {
         provider: 'google-fake',
         model: 'google-test-model',
-        content: 'Deterministic google response',
+        content: 'Deterministic base-2 response',
       },
       {
         provider: 'minimax-fake',
         model: 'minimax-test-model',
-        content: 'Deterministic minimax response',
+        content: 'Deterministic base-3 response',
       },
       {
         provider: 'qwen-fake',
         model: 'qwen-test-model',
-        content: 'Deterministic qwen response',
+        content: 'Deterministic consolidator response',
       },
     ]);
     expect(Object.values(providers).map((provider) => provider.calls)).toEqual(
@@ -58,10 +58,10 @@ describe('fake LLM providers', () => {
 
   it('records the call and rejects with the configured controlled error', async () => {
     const controlledError = new Error('controlled provider failure');
-    const provider = createFakeLlmProviders({ qwen: { error: controlledError } }).qwen;
+    const provider = createFakeLlmProviders({ consolidator: { error: controlledError } }).consolidator;
     const request = {
       operationId: 'operation-error',
-      slot: 'qwen' as const,
+      slot: 'consolidator' as const,
       messages: [{ role: 'user' as const, content: 'trigger controlled error' }],
       signal: new AbortController().signal,
     };

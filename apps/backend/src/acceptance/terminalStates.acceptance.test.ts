@@ -20,7 +20,12 @@ const TERMINAL_DEADLINE_MS = 60_000;
 const POLL_INTERVAL_MS = 10;
 const REQUIRED_SUCCESS_RATE = 0.95;
 const TERMINAL_STATUSES = new Set(['completed', 'failed']);
-const EXPECTED_SLOTS = new Set<ResponseSlot>(['openai', 'google', 'minimax', 'qwen']);
+const EXPECTED_SLOTS = new Set<ResponseSlot>([
+  'base-1',
+  'base-2',
+  'base-3',
+  'consolidator',
+]);
 
 describe.sequential('SC-001 controlled terminal-state acceptance', () => {
   let pool: Pool;

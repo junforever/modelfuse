@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { createFakeLlmProviders } from '../test/fakes/fakeLlmProvider.js';
 
 const THRESHOLD_PERCENT = 90;
-const BASE_SLOTS = ['openai', 'google', 'minimax'] as const;
+const BASE_SLOTS = ['base-1', 'base-2', 'base-3'] as const;
 const fixtureUrl = new URL(
   '../services/conversations/__tests__/fixtures/consolidation-evaluation.json',
   import.meta.url,
@@ -21,9 +21,9 @@ const caseSchema = z.object({
   id: z.string().trim().min(1),
   prompt: z.string().trim().min(1),
   baseResponses: z.object({
-    openai: z.string().trim().min(1),
-    google: z.string().trim().min(1),
-    minimax: z.string().trim().min(1),
+    'base-1': z.string().trim().min(1),
+    'base-2': z.string().trim().min(1),
+    'base-3': z.string().trim().min(1),
   }).strict(),
   missingSlots: z.array(z.enum(BASE_SLOTS)).max(BASE_SLOTS.length)
     .refine(slots => new Set(slots).size === slots.length, 'missingSlots must be unique'),
@@ -54,10 +54,10 @@ function checkResponse(content: string, check: Check): boolean {
 async function consolidate(testCase: EvaluationCase): Promise<string> {
   const available = BASE_SLOTS.filter(slot => !testCase.missingSlots.includes(slot));
   const fakeContent = available.map(slot => testCase.baseResponses[slot]).join('\n\n');
-  const qwen = createFakeLlmProviders({ qwen: { content: fakeContent } }).qwen;
-  const result = await qwen.generate({
+  const consolidator = createFakeLlmProviders({ consolidator: { content: fakeContent } }).consolidator;
+  const result = await consolidator.generate({
     operationId: `consolidation-evaluation-${testCase.id}`,
-    slot: 'qwen',
+    slot: 'consolidator',
     messages: [
       {
         role: 'system',

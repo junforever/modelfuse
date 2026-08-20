@@ -15,19 +15,12 @@ const validEnv = {
   POSTGRES_CONNECTION_TIMEOUT: '2000',
   POSTGRES_KEEP_ALIVE: 'true',
   OPENAI_API_KEY: 'openai-secret',
-  OPENAI_MODEL: 'openai-model',
   GOOGLE_API_KEY: 'google-secret',
-  GOOGLE_MODEL: 'google-model',
   MINIMAX_API_KEY: 'minimax-secret',
-  MINIMAX_MODEL: 'minimax-model',
   QWEN_API_KEY: 'qwen-secret',
-  QWEN_MODEL: 'qwen-model',
+  OPENROUTER_API_KEY: 'openrouter-secret',
   LLM_PROVIDER_TIMEOUT_MS: '30000',
   CONVERSATION_CONTEXT_MAX_TURNS: '8',
-  OPENAI_CONTEXT_LIMIT_TOKENS: '128000',
-  GOOGLE_CONTEXT_LIMIT_TOKENS: '1000000',
-  MINIMAX_CONTEXT_LIMIT_TOKENS: '1000000',
-  QWEN_CONTEXT_LIMIT_TOKENS: '131072',
   CONVERSATION_SIDEBAR_PAGE_SIZE: '20',
 } satisfies NodeJS.ProcessEnv;
 
@@ -49,20 +42,13 @@ describe('parseEnv', () => {
       POSTGRES_CONNECTION_TIMEOUT: 2000,
       POSTGRES_KEEP_ALIVE: true,
       OPENAI_API_KEY: 'openai-secret',
-      OPENAI_MODEL: 'openai-model',
       GOOGLE_API_KEY: 'google-secret',
-      GOOGLE_MODEL: 'google-model',
       MINIMAX_API_KEY: 'minimax-secret',
-      MINIMAX_MODEL: 'minimax-model',
       QWEN_API_KEY: 'qwen-secret',
-      QWEN_MODEL: 'qwen-model',
+      OPENROUTER_API_KEY: 'openrouter-secret',
       LLM_PROVIDER_TIMEOUT_MS: 30000,
       CONVERSATION_CONTEXT_MAX_TURNS: 8,
       LLM_CONTEXT_THRESHOLD_RATIO: 0.8,
-      OPENAI_CONTEXT_LIMIT_TOKENS: 128000,
-      GOOGLE_CONTEXT_LIMIT_TOKENS: 1000000,
-      MINIMAX_CONTEXT_LIMIT_TOKENS: 1000000,
-      QWEN_CONTEXT_LIMIT_TOKENS: 131072,
       CONVERSATION_SIDEBAR_PAGE_SIZE: 20,
     });
   });
@@ -130,17 +116,23 @@ describe('parseEnv', () => {
     });
   });
 
-  it.each([
-    'OPENAI_API_KEY',
-    'OPENAI_MODEL',
-    'GOOGLE_API_KEY',
-    'GOOGLE_MODEL',
-    'MINIMAX_API_KEY',
-    'MINIMAX_MODEL',
-    'QWEN_API_KEY',
-    'QWEN_MODEL',
-  ] as const)('rejects missing required provider setting %s', (name) => {
-    expect(() => parseEnv({ ...validEnv, [name]: '' })).toThrow(name);
+  it('trims configured provider credentials and treats blank or missing credentials as absent', () => {
+    const parsed = parseEnv({
+      ...validEnv,
+      OPENAI_API_KEY: '  openai-trimmed  ',
+      GOOGLE_API_KEY: '',
+      MINIMAX_API_KEY: '   ',
+      QWEN_API_KEY: undefined,
+      OPENROUTER_API_KEY: '  openrouter-trimmed  ',
+    });
+
+    expect(parsed).toMatchObject({
+      OPENAI_API_KEY: 'openai-trimmed',
+      OPENROUTER_API_KEY: 'openrouter-trimmed',
+    });
+    expect(parsed.GOOGLE_API_KEY).toBeUndefined();
+    expect(parsed.MINIMAX_API_KEY).toBeUndefined();
+    expect(parsed.QWEN_API_KEY).toBeUndefined();
   });
 
   it.each([
@@ -161,15 +153,6 @@ describe('parseEnv', () => {
       ).toThrow('LLM_CONTEXT_THRESHOLD_RATIO');
     }
   );
-
-  it.each([
-    'OPENAI_CONTEXT_LIMIT_TOKENS',
-    'GOOGLE_CONTEXT_LIMIT_TOKENS',
-    'MINIMAX_CONTEXT_LIMIT_TOKENS',
-    'QWEN_CONTEXT_LIMIT_TOKENS',
-  ] as const)('rejects an invalid technical deployment limit in %s', (name) => {
-    expect(() => parseEnv({ ...validEnv, [name]: '0' })).toThrow(name);
-  });
 
   it('reports invalid variable names without exposing provider credentials', () => {
     const parseInvalidEnv = () =>

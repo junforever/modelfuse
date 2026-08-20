@@ -1,22 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  deploymentIdsSchema,
   turnEventSchema,
   turnEventSnapshotSchema,
   turnSnapshotResponseSchema,
 } from '../schemas/conversationSchemas';
+import type { ResponseSlot } from '../types/conversation';
 
 const conversationId = '123e4567-e89b-42d3-a456-426614174000';
 const turnId = '223e4567-e89b-42d3-a456-426614174000';
 const clientRequestId = '323e4567-e89b-42d3-a456-426614174000';
 const updatedAt = '2026-07-26T20:00:01.000Z';
 
-function response(slot: 'openai' | 'google' | 'minimax' | 'qwen') {
+const providers: Record<ResponseSlot, string> = {
+  'base-1': 'openai',
+  'base-2': 'google',
+  'base-3': 'minimax',
+  consolidator: 'qwen',
+};
+
+function response(slot: ResponseSlot) {
+  const provider = providers[slot];
+
   return {
     slot,
-    role: slot === 'qwen' ? 'consolidator' : 'base',
-    provider: slot,
-    model: `${slot}-model`,
+    role: slot === 'consolidator' ? 'consolidator' : 'base',
+    provider,
+    model: `${provider}-model`,
     status: 'completed',
     content: `${slot} response`,
     error: null,
@@ -38,7 +49,12 @@ const turn = {
   ordinal: 1,
   prompt: 'Compare this',
   status: 'completed',
-  responses: [response('openai'), response('google'), response('minimax'), response('qwen')],
+  responses: [
+    response('base-1'),
+    response('base-2'),
+    response('base-3'),
+    response('consolidator'),
+  ],
   createdAt: '2026-07-26T20:00:00.000Z',
   updatedAt,
 };
@@ -59,6 +75,38 @@ describe('frontend conversation contracts', () => {
     ).toBe(false);
   });
 
+  it('accepts only the strict canonical slot shape across UI, REST and SSE contracts', () => {
+    const deploymentIds = {
+      'base-1': 'deployment-1',
+      'base-2': 'deployment-2',
+      'base-3': 'deployment-3',
+      consolidator: 'deployment-4',
+    };
+
+    expect(deploymentIdsSchema.parse(deploymentIds)).toEqual(deploymentIds);
+
+    for (const legacySlot of ['openai', 'google', 'minimax', 'qwen'] as const) {
+      expect(
+        deploymentIdsSchema.safeParse({ ...deploymentIds, [legacySlot]: 'legacy-deployment' })
+          .success
+      ).toBe(false);
+
+      const legacyResponse = { ...response('base-1'), slot: legacySlot };
+      expect(
+        turnSnapshotResponseSchema.safeParse({
+          conversation: { id: conversationId, hasWorkInProgress: false },
+          turn: { ...turn, responses: [legacyResponse, ...turn.responses.slice(1)] },
+        }).success
+      ).toBe(false);
+      expect(
+        turnEventSchema.safeParse({
+          event: 'slot_update',
+          data: { conversationId, turnId, eventSequence: 1, response: legacyResponse },
+        }).success
+      ).toBe(false);
+    }
+  });
+
   it('parses contracted SSE events and rejects non-integer or negative event sequences', () => {
     const events = [
       {
@@ -67,7 +115,7 @@ describe('frontend conversation contracts', () => {
           conversationId,
           turnId,
           eventSequence: 4,
-          response: response('openai'),
+          response: response('base-1'),
           runtimeStage: 'thinking',
         },
       },
@@ -131,37 +179,37 @@ describe('frontend conversation contracts', () => {
       turn,
     };
     const invalidResponses = [
-      ['completed without content', { ...response('openai'), content: '   ' }],
+      ['completed without content', { ...response('base-1'), content: '   ' }],
       ['completed with an error', {
-        ...response('openai'),
+        ...response('base-1'),
         error: { code: 'provider_error', message: 'Safe failure' },
       }],
       ['failed without an error', {
-        ...response('openai'),
+        ...response('base-1'),
         status: 'failed',
         content: null,
         error: null,
       }],
       ['running with an error', {
-        ...response('openai'),
+        ...response('base-1'),
         status: 'running',
         content: null,
         error: { code: 'provider_error', message: 'Safe failure' },
       }],
-      ['continued completed base', { ...response('openai'), continuedWithout: true }],
-      ['continued failed Qwen', {
-        ...response('qwen'),
+      ['continued completed base', { ...response('base-1'), continuedWithout: true }],
+      ['continued failed consolidator', {
+        ...response('consolidator'),
         status: 'failed',
         content: null,
         error: { code: 'provider_error', message: 'Safe failure' },
         continuedWithout: true,
       }],
-      ['stale base', { ...response('openai'), isStale: true }],
+      ['stale base', { ...response('base-1'), isStale: true }],
     ] as const;
 
     const acceptedInvalidStates = invalidResponses.flatMap(([label, candidate]) => {
       const responses: unknown[] = [...turn.responses];
-      responses[candidate.slot === 'qwen' ? 3 : 0] = candidate;
+      responses[candidate.slot === 'consolidator' ? 3 : 0] = candidate;
       return turnSnapshotResponseSchema.safeParse({
         ...snapshot,
         turn: { ...turn, responses },
@@ -178,7 +226,7 @@ describe('frontend conversation contracts', () => {
           ...turn,
           responses: [
             ...turn.responses.slice(0, 3),
-            { ...response('qwen'), isStale: true },
+            { ...response('consolidator'), isStale: true },
           ],
         },
       }).success,

@@ -8,12 +8,11 @@ import { ContextBuilder } from '../../services/conversations/ContextBuilder.js';
 import { ConversationService } from '../../services/conversations/ConversationService.js';
 import { TurnOrchestrator } from '../../services/conversations/TurnOrchestrator.js';
 import { TurnEventPublisher } from '../../services/conversations/turnEventPublisher.js';
-import type { ResponseSlot } from '../../types/conversations.js';
-import type { ControlledLlmProvider } from './controlledLlmProviders.js';
+import type { ControlledProviders } from './controlledLlmProviders.js';
 
 export function createIntegrationBackend(
   pool: Pool,
-  providers: Record<ResponseSlot, ControlledLlmProvider>
+  providers: ControlledProviders
 ) {
   const conversationRepository = new ConversationRepository(pool);
   const contextRepository = new ContextRepository(pool);

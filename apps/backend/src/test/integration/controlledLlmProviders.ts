@@ -1,4 +1,8 @@
-import type { ResponseSlot } from '../../types/conversations.js';
+import type {
+  ConversationDeploymentSnapshot,
+  ProviderId,
+  ResponseSlot,
+} from '../../types/conversations.js';
 import type { LlmProvider, LlmRequest, LlmResult } from '../../types/llm.js';
 
 export type ControlledProviderCall = LlmRequest;
@@ -8,9 +12,16 @@ type Script =
 
 const FIXED_START = '2026-01-02T03:04:05.000Z';
 const FIXED_END = '2026-01-02T03:04:06.000Z';
+const IDENTITIES: Record<ResponseSlot, { providerId: ProviderId; provider: string; model: string }> = {
+  'base-1': { providerId: 'openai', provider: 'openai-fake', model: 'openai-test-model' },
+  'base-2': { providerId: 'google', provider: 'google-fake', model: 'google-test-model' },
+  'base-3': { providerId: 'minimax', provider: 'minimax-fake', model: 'minimax-test-model' },
+  consolidator: { providerId: 'qwen', provider: 'qwen-fake', model: 'qwen-test-model' },
+};
 
 export class ControlledLlmProvider implements LlmProvider {
   readonly calls: ControlledProviderCall[] = [];
+  readonly providerId: ProviderId;
   readonly provider: string;
   readonly model: string;
   readonly context = {
@@ -22,8 +33,17 @@ export class ControlledLlmProvider implements LlmProvider {
     readonly slot: ResponseSlot,
     private readonly scripts: Script[] = []
   ) {
-    this.provider = `${slot}-fake`;
-    this.model = `${slot}-test-model`;
+    const identity = IDENTITIES[slot];
+    this.providerId = identity.providerId;
+    this.provider = identity.provider;
+    this.model = identity.model;
+  }
+
+  async measureInputTokens(
+    _deployment: ConversationDeploymentSnapshot,
+    _messages: LlmRequest['messages'],
+  ): Promise<number> {
+    return 1;
   }
 
   waitUntilCalled(count = 1): Promise<void> {
@@ -76,12 +96,14 @@ export class ControlledLlmProvider implements LlmProvider {
   }
 }
 
-export function createControlledProviders(): Record<ResponseSlot, ControlledLlmProvider> {
+export type ControlledProviders = Record<ResponseSlot, ControlledLlmProvider>;
+
+export function createControlledProviders(): ControlledProviders {
   return {
-    openai: new ControlledLlmProvider('openai'),
-    google: new ControlledLlmProvider('google'),
-    minimax: new ControlledLlmProvider('minimax'),
-    qwen: new ControlledLlmProvider('qwen'),
+    'base-1': new ControlledLlmProvider('base-1'),
+    'base-2': new ControlledLlmProvider('base-2'),
+    'base-3': new ControlledLlmProvider('base-3'),
+    consolidator: new ControlledLlmProvider('consolidator'),
   };
 }
 
