@@ -11,6 +11,7 @@ import { useMemo } from 'react';
 import {
   deleteConversation,
   getConversation,
+  listAvailableDeployments,
   listConversations,
   listConversationTurns,
   renameConversation,
@@ -72,6 +73,11 @@ export function useConversationQueries(
   enabled = true
 ) {
   const queryClient = useQueryClient();
+  const catalog = useQuery({
+    queryKey: conversationKeys.catalog,
+    queryFn: ({ signal }) => listAvailableDeployments(client, signal),
+    enabled: conversationId === null,
+  });
   const conversations = useInfiniteQuery({
     queryKey: conversationKeys.list(null),
     queryFn: ({ pageParam, signal }) => listConversations(client, pageParam, signal),
@@ -133,6 +139,7 @@ export function useConversationQueries(
   );
 
   return {
+    catalog,
     conversations: {
       ...conversations,
       items: conversationItems,

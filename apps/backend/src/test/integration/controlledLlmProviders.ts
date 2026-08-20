@@ -19,6 +19,12 @@ const IDENTITIES: Record<ResponseSlot, { providerId: ProviderId; provider: strin
   consolidator: { providerId: 'qwen', provider: 'qwen-fake', model: 'qwen-test-model' },
 };
 
+interface ControlledProviderIdentity {
+  readonly providerId: ProviderId;
+  readonly provider: string;
+  readonly model: string;
+}
+
 export class ControlledLlmProvider implements LlmProvider {
   readonly calls: ControlledProviderCall[] = [];
   readonly providerId: ProviderId;
@@ -31,9 +37,10 @@ export class ControlledLlmProvider implements LlmProvider {
 
   constructor(
     readonly slot: ResponseSlot,
-    private readonly scripts: Script[] = []
+    private readonly scripts: Script[] = [],
+    identityOverride?: ControlledProviderIdentity,
   ) {
-    const identity = IDENTITIES[slot];
+    const identity = identityOverride ?? IDENTITIES[slot];
     this.providerId = identity.providerId;
     this.provider = identity.provider;
     this.model = identity.model;

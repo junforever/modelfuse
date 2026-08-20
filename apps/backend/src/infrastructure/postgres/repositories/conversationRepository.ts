@@ -3,15 +3,20 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 
 import {
+  mapConversationDeploymentRow,
+  mapConversationDetail,
   mapConversationRow,
   mapModelResponseRow,
   mapTurnRow,
+  orderDeploymentSnapshots,
+  type ConversationDeploymentRow,
   type ConversationRow,
   type ModelResponseRow,
   type TurnRow,
 } from '../mappers/conversationMapper.js';
 import type {
   ConversationDetail,
+  ConversationDeploymentSnapshotTuple,
   ConversationPage,
   ConversationSummary,
   ResponseRole,
@@ -34,8 +39,11 @@ interface CreateInput {
   responses: readonly ResponseDefinition[];
 }
 
-interface CreateConversationInput extends CreateInput {
+interface CreateConversationInput {
+  clientRequestId: string;
+  prompt: string;
   title: string;
+  deployments: ConversationDeploymentSnapshotTuple;
 }
 
 export type CreateResult =
@@ -159,7 +167,26 @@ export class ConversationRepository {
         WHERE c.id = $1`,
       [conversationId],
     );
-    return result.rows[0] ? mapConversationRow(result.rows[0]) : null;
+    const row = result.rows[0];
+    if (!row) return null;
+    const deployments = await this.getConversationDeployments(conversationId);
+    if (!deployments) throw new Error('Conversation deployment snapshot is incomplete');
+    return mapConversationDetail(row, deployments);
+  }
+
+  async getConversationDeployments(
+    conversationId: string,
+  ): Promise<ConversationDeploymentSnapshotTuple | null> {
+    const result = await this.pool.query<ConversationDeploymentRow>(
+      `SELECT slot, deployment_id, provider_id, model_id, display_name,
+              context_limit_tokens, max_output_tokens, input_modalities, output_modalities
+         FROM conversation_deployments
+        WHERE conversation_id = $1`,
+      [conversationId],
+    );
+    return result.rows.length === 0
+      ? null
+      : orderDeploymentSnapshots(result.rows.map(mapConversationDeploymentRow));
   }
 
   async renameConversation(
@@ -240,12 +267,20 @@ export class ConversationRepository {
           : { kind: 'conflict' };
       }
 
+      await this.insertDeployments(client, conversationId, input.deployments);
       const turnId = randomUUID();
       await this.insertTurn(client, {
         conversationId,
         turnId,
         ordinal: 1,
-        ...input,
+        clientRequestId: input.clientRequestId,
+        prompt: input.prompt,
+        responses: input.deployments.map(deployment => ({
+          slot: deployment.slot,
+          role: deployment.slot === 'consolidator' ? 'consolidator' : 'base',
+          provider: deployment.providerId,
+          model: deployment.modelId,
+        })),
       });
       return { kind: 'created', conversationId, turnId };
     });
@@ -302,7 +337,11 @@ export class ConversationRepository {
 
   private async insertTurn(
     client: PoolClient,
-    input: CreateInput & { conversationId: string; turnId: string; ordinal: number },
+    input: CreateInput & {
+      conversationId: string;
+      turnId: string;
+      ordinal: number;
+    },
   ): Promise<void> {
     await client.query(
       `INSERT INTO turns
@@ -317,10 +356,46 @@ export class ConversationRepository {
            (id, turn_id, slot, role, provider, model, status, error_recoverable,
             is_stale, attempt_no, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, 'pending', false, false, 0, now(), now())`,
-        [randomUUID(), input.turnId, response.slot, response.role, response.provider, response.model],
+        [
+          randomUUID(),
+          input.turnId,
+          response.slot,
+          response.role,
+          response.provider,
+          response.model,
+        ],
       );
     }
   }
+
+  private async insertDeployments(
+    client: PoolClient,
+    conversationId: string,
+    deployments: ConversationDeploymentSnapshotTuple,
+  ): Promise<void> {
+    for (const deployment of deployments) {
+      await client.query(
+        `INSERT INTO conversation_deployments
+           (conversation_id, slot, deployment_id, provider_id, model_id, display_name,
+            context_limit_tokens, max_output_tokens, input_modalities, output_modalities,
+            created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now())`,
+        [
+          conversationId,
+          deployment.slot,
+          deployment.deploymentId,
+          deployment.providerId,
+          deployment.modelId,
+          deployment.displayName,
+          deployment.contextLimitTokens,
+          deployment.maxOutputTokens,
+          deployment.inputModalities,
+          deployment.outputModalities,
+        ],
+      );
+    }
+  }
+
 }
 
 function parseSidebarCursor(cursor: string): SidebarCursor {

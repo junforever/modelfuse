@@ -42,7 +42,7 @@ export function createConversationController(service: ConversationService) {
     createConversation: async (request: Request, response: Response, next: NextFunction) => {
       try {
         const body = (request as ValidatedRequest).validatedBody as CreateConversationBody;
-        response.status(202).json(await service.createConversation(body));
+        response.status(201).json(await service.createConversation(body));
       } catch (error) {
         next(error);
       }

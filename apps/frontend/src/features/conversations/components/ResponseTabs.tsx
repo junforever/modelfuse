@@ -4,10 +4,10 @@ import type { ResponseSlot, TurnResponses } from '../types/conversation';
 import { ResponsePanel } from './ResponsePanel';
 
 const MODEL_LABELS: Record<ResponseSlot, string> = {
-  openai: 'OpenAI',
-  google: 'Google',
-  minimax: 'MiniMax',
-  qwen: 'Qwen',
+  'base-1': 'Base 1',
+  'base-2': 'Base 2',
+  'base-3': 'Base 3',
+  consolidator: 'Consolidador',
 };
 
 interface ResponseTabsProps {
@@ -28,7 +28,7 @@ export function ResponseTabs({
   onContinueWithout,
 }: ResponseTabsProps) {
   return (
-    <Tabs defaultValue="openai">
+    <Tabs defaultValue="base-1">
       <TabsList aria-label="Respuestas de modelos">
         {responses.map(response => (
           <TabsTrigger key={response.slot} value={response.slot}>

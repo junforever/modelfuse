@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  conversationDetailSchema,
+  conversationTurnResponseSchema,
   deploymentIdsSchema,
+  modelCatalogResponseSchema,
   turnEventSchema,
   turnEventSnapshotSchema,
   turnSnapshotResponseSchema,
@@ -59,7 +62,58 @@ const turn = {
   updatedAt,
 };
 
+const deployments = ([
+  ['base-1', 'openai', 'GPT'],
+  ['base-2', 'google', 'Gemini'],
+  ['base-3', 'openrouter', 'MiniMax'],
+  ['consolidator', 'openrouter', 'Qwen'],
+] as const).map(([slot, providerId, displayName]) => ({
+  slot,
+  deploymentId: `${slot}-deployment`,
+  providerId,
+  modelId: `${slot}-model`,
+  displayName,
+}));
+
 describe('frontend conversation contracts', () => {
+  it('strictly validates catalog, detail, and creation response contracts', () => {
+    const catalogItem = {
+      deploymentId: 'openrouter-model',
+      providerId: 'openrouter',
+      modelId: 'vendor/model',
+      displayName: 'Vendor Model',
+      contextLimitTokens: 100_000,
+      maxOutputTokens: 8_000,
+      inputModalities: ['text'],
+      outputModalities: ['text'],
+    };
+    const catalog = { items: [catalogItem] };
+    const detail = {
+      id: conversationId,
+      title: 'Conversation',
+      hasWorkInProgress: true,
+      deployments,
+      createdAt: updatedAt,
+      updatedAt,
+    };
+    const creation = { conversation: detail, turn };
+
+    expect(modelCatalogResponseSchema.parse(catalog)).toEqual(catalog);
+    expect(conversationDetailSchema.parse(detail)).toEqual(detail);
+    expect(conversationTurnResponseSchema.parse(creation)).toEqual(creation);
+    expect(
+      modelCatalogResponseSchema.safeParse({
+        items: [{ ...catalogItem, credentialEnv: 'SECRET_MUST_NOT_BE_PUBLIC' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      conversationTurnResponseSchema.safeParse({
+        ...creation,
+        conversation: { ...detail, deployments: [...deployments].reverse() },
+      }).success,
+    ).toBe(false);
+  });
+
   it('parses a valid REST turn snapshot and rejects a response without all four slots', () => {
     const snapshot = {
       conversation: { id: conversationId, hasWorkInProgress: false },

@@ -6,8 +6,6 @@ import { parseEnv, type Environment } from './infrastructure/config/env.js';
 import { DEPLOYMENT_CATALOG } from './infrastructure/llm/deploymentCatalog.js';
 import { createProviderRegistry } from './infrastructure/llm/providerRegistry.js';
 import type { ApiDependencies } from './routes/apiRouter.js';
-import type { ResponseSlot } from './types/conversations.js';
-import type { LlmProvider } from './types/llm.js';
 import type { ConversationService } from './services/conversations/ConversationService.js';
 import { recoverInterruptedTurns } from './services/conversations/recoverInterruptedTurns.js';
 import { ModelCatalogService } from './services/llm/ModelCatalogService.js';
@@ -95,8 +93,7 @@ async function createProductionDependencies(environment: Environment): Promise<P
     const turnRepository = new turnRepositoryModule.TurnRepository(pool);
     const turnEventPublisher = new publisherModule.TurnEventPublisher();
     const orchestrator = new orchestratorModule.TurnOrchestrator({
-      // T023 migrates orchestration from slot-keyed providers to this provider-id registry.
-      providerRegistry: providerRegistry as unknown as Record<ResponseSlot, LlmProvider>,
+      providerRegistry,
       turnRepository,
       publisher: turnEventPublisher,
       contextBuilder: new contextBuilderModule.ContextBuilder({
@@ -109,6 +106,7 @@ async function createProductionDependencies(environment: Environment): Promise<P
       conversationRepository,
       turnRepository,
       orchestrator,
+      modelCatalogService,
       sidebarPageSize: environment.CONVERSATION_SIDEBAR_PAGE_SIZE,
     });
     await recoverInterruptedTurns(pool);

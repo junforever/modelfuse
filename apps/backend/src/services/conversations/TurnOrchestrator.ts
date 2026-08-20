@@ -1,25 +1,28 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ResponseDefinition } from '../../infrastructure/postgres/repositories/conversationRepository.js';
 import type {
   PersistResponseAttemptInput,
   StoredTurnSnapshot,
 } from '../../infrastructure/postgres/repositories/turnRepository.js';
-import type { ModelResponse, ResponseSlot } from '../../types/conversations.js';
+import type {
+  ContextWindowMetadata,
+  ConversationDeploymentSnapshot,
+  ConversationDeploymentSnapshotTuple,
+  ModelResponse,
+  ResponseSlot,
+} from '../../types/conversations.js';
 import type {
   LlmErrorCode,
   LlmMessage,
-  LlmProvider,
   LlmProviderError,
   LlmResult,
+  ProviderRegistry,
 } from '../../types/llm.js';
 import { logger } from '../../utils/logger.js';
 import { isRecoverableLlmError } from '../llm/llmErrors.js';
-import { protectContext } from './contextProtection.js';
-import type { ContextBuilder } from './ContextBuilder.js';
+import { CONTEXT_TRUNCATION_MARKER } from './contextProtection.js';
 import type { UnsequencedTurnEvent } from './turnEventPublisher.js';
 
-const BASE_SLOTS = ['openai', 'google', 'minimax'] as const;
+const BASE_SLOTS = ['base-1', 'base-2', 'base-3'] as const;
 const CONTEXT_THRESHOLD_RATIO = 0.8;
 
 interface TurnRepositoryPort {
@@ -43,6 +46,7 @@ interface ExecuteTurnInput {
   turnId: string;
   prompt: string;
   currentOrdinal?: number;
+  deployments: ConversationDeploymentSnapshotTuple;
   signal: AbortSignal;
 }
 
@@ -55,27 +59,27 @@ interface SlotExecutionResult {
   result: LlmResult | null;
 }
 
+type ProtectedContext =
+  | { ok: true; messages: LlmMessage[]; contextWindow: ContextWindowMetadata }
+  | {
+      ok: false;
+      error: { code: 'INVALID_PROMPT_SIZE'; message: string; recoverable: false };
+    };
+
 export class TurnOrchestrator {
   constructor(
     private readonly dependencies: {
-      providerRegistry: Record<ResponseSlot, LlmProvider>;
+      providerRegistry: ProviderRegistry;
       turnRepository: TurnRepositoryPort;
       publisher: PublisherPort;
-      contextBuilder?: ContextBuilder;
       contextThresholdRatio?: number;
+      contextBuilder?: unknown;
     },
   ) {}
 
+  // ponytail: T040 replaces this later-turn compatibility seam with persisted snapshot reads.
   get responseDefinitions(): readonly ResponseDefinition[] {
-    return (Object.keys(this.dependencies.providerRegistry) as ResponseSlot[]).map(slot => {
-      const provider = this.dependencies.providerRegistry[slot];
-      return {
-        slot,
-        role: slot === 'qwen' ? 'consolidator' : 'base',
-        provider: provider.provider,
-        model: provider.model,
-      };
-    });
+    throw new Error('Later-turn deployment reuse is not available yet');
   }
 
   getLastEventSequence(turnId: string): number {
@@ -83,22 +87,21 @@ export class TurnOrchestrator {
   }
 
   async executeTurn(input: ExecuteTurnInput): Promise<void> {
-    const baseExecutions = BASE_SLOTS.map(slot =>
-      this.executeSlot({ ...input, slot }),
+    const baseResults = await Promise.all(
+      BASE_SLOTS.map(slot => this.executeSlot({ ...input, slot })),
     );
-    const baseResults = await Promise.all(baseExecutions);
     await this.executeSlot({
       ...input,
-      slot: 'qwen',
-      currentBaseResponses: baseResults.map(response => ({
-        slot: response.slot,
-        content: response.result?.content ?? null,
+      slot: 'consolidator',
+      currentBaseResponses: baseResults.map(({ slot, result }) => ({
+        slot,
+        content: result?.content ?? null,
       })),
     });
   }
 
   async executeRetry(input: ExecuteRetryInput): Promise<void> {
-    if (input.slot === 'qwen') {
+    if (input.slot === 'consolidator') {
       await this.executeSlot({
         ...input,
         currentBaseResponses: await this.availableBases(input.turnId),
@@ -106,14 +109,11 @@ export class TurnOrchestrator {
       return;
     }
 
-    const retried = await this.executeSlot({
-      ...input,
-      reconsolidateOnSuccess: true,
-    });
+    const retried = await this.executeSlot(input);
     if (!retried.result) return;
     await this.executeSlot({
       ...input,
-      slot: 'qwen',
+      slot: 'consolidator',
       currentBaseResponses: await this.availableBases(input.turnId),
     });
   }
@@ -162,11 +162,11 @@ export class TurnOrchestrator {
     input: ExecuteTurnInput & {
       slot: ResponseSlot;
       currentBaseResponses?: readonly Pick<ModelResponse, 'slot' | 'content'>[];
-      reconsolidateOnSuccess?: boolean;
     },
   ): Promise<SlotExecutionResult> {
-    const provider = this.dependencies.providerRegistry[input.slot];
-    const protectedContext = await this.buildContext(input, provider);
+    const deployment = input.deployments.find(candidate => candidate.slot === input.slot);
+    if (!deployment) throw new Error(`Missing persisted deployment for slot ${input.slot}`);
+
     const started = await this.dependencies.turnRepository.startResponseAttempt?.({
       conversationId: input.conversationId,
       turnId: input.turnId,
@@ -178,7 +178,16 @@ export class TurnOrchestrator {
     const attemptNo = started?.attemptNo ?? 1;
     if (started) this.publishSnapshot(started.snapshot, input.slot);
     const attemptStartedAt = new Date().toISOString();
+    const provider = this.dependencies.providerRegistry[deployment.providerId];
 
+    if (!provider) {
+      const failure = this.unavailableProvider(deployment);
+      await this.persistFailure(input, attemptNo, attemptStartedAt, failure);
+      this.logAttemptCompleted(input, deployment, 0, 'failed', failure.code);
+      return { slot: input.slot, result: null };
+    }
+
+    const protectedContext = await this.buildContext(input, provider, deployment);
     if (!protectedContext.ok) {
       await this.persist(input, {
         attemptNo,
@@ -190,14 +199,14 @@ export class TurnOrchestrator {
         startedAt: attemptStartedAt,
         completedAt: new Date().toISOString(),
       });
-      this.logAttemptCompleted(input, provider, 0, 'failed', protectedContext.error.code);
+      this.logAttemptCompleted(input, deployment, 0, 'failed', protectedContext.error.code);
       return { slot: input.slot, result: null };
     }
 
     try {
       const result = await provider.generate({
-        operationId: randomUUID(),
         slot: input.slot,
+        deployment,
         messages: protectedContext.messages,
         signal: input.signal,
       });
@@ -212,32 +221,112 @@ export class TurnOrchestrator {
         },
         startedAt: result.startedAt,
         completedAt: result.completedAt,
-        reconsolidateQwen: input.reconsolidateOnSuccess,
       });
-      this.logAttemptCompleted(input, provider, durationMs, 'completed');
+      this.logAttemptCompleted(input, deployment, durationMs, 'completed');
       return { slot: input.slot, result };
     } catch (error) {
       const failedAt = Date.now();
-      const failure = this.normalizeFailure(error, provider);
-      await this.persist(input, {
+      const failure = this.normalizeFailure(error, deployment);
+      await this.persistFailure(
+        input,
         attemptNo,
-        status: 'failed',
-        errorCode: failure.code,
-        errorMessage: failure.safeMessage,
-        errorRecoverable: failure.recoverable,
-        metadata: { contextWindow: protectedContext.contextWindow },
-        startedAt: attemptStartedAt,
-        completedAt: new Date().toISOString(),
-      });
+        attemptStartedAt,
+        failure,
+        protectedContext.contextWindow,
+      );
       this.logAttemptCompleted(
         input,
-        provider,
+        deployment,
         Math.max(0, failedAt - Date.parse(attemptStartedAt)),
         'failed',
         failure.code,
       );
       return { slot: input.slot, result: null };
     }
+  }
+
+  private async buildContext(
+    input: ExecuteTurnInput & {
+      slot: ResponseSlot;
+      currentBaseResponses?: readonly Pick<ModelResponse, 'slot' | 'content'>[];
+    },
+    provider: NonNullable<ProviderRegistry[keyof ProviderRegistry]>,
+    deployment: ConversationDeploymentSnapshot,
+  ): Promise<ProtectedContext> {
+    // ponytail: US1 needs first-turn composition; T056 adds persisted history/windowing.
+    let auxiliaryMessages: LlmMessage[] = input.slot === 'consolidator'
+      ? (input.currentBaseResponses ?? []).flatMap(response =>
+          response.content
+            ? [{ role: 'user' as const, content: `${response.slot}:\n${response.content}` }]
+            : [],
+        )
+      : [];
+    const compose = (): LlmMessage[] => [
+      {
+        role: 'system',
+        content: input.slot === 'consolidator'
+          ? 'Consolidate the available model answers into one final answer.'
+          : 'Provide a complete, accurate answer to the user prompt.',
+      },
+      ...auxiliaryMessages,
+      { role: 'user', content: input.prompt },
+    ];
+    const threshold = deployment.contextLimitTokens
+      * (this.dependencies.contextThresholdRatio ?? CONTEXT_THRESHOLD_RATIO);
+    let messages = compose();
+    let measured = await provider.measureInputTokens(deployment, messages);
+    let truncated = false;
+
+    if (measured > threshold && auxiliaryMessages.length > 0) {
+      auxiliaryMessages = auxiliaryMessages.map(message => ({
+        ...message,
+        content: `${message.content.slice(0, message.content.indexOf('\n') + 1)}${CONTEXT_TRUNCATION_MARKER}`,
+      }));
+      messages = compose();
+      measured = await provider.measureInputTokens(deployment, messages);
+      truncated = true;
+    }
+
+    if (measured > threshold) {
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_PROMPT_SIZE',
+          message: 'The required prompt does not fit within the model context limit.',
+          recoverable: false,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      messages,
+      contextWindow: {
+        truncated,
+        firstIncludedOrdinal: input.currentOrdinal ?? 1,
+        lastIncludedOrdinal: input.currentOrdinal ?? 1,
+        protectionApplied: truncated ? 'truncate' : 'none',
+      },
+    };
+  }
+
+  private async persistFailure(
+    input: Pick<ExecuteTurnInput, 'turnId'> & { slot: ResponseSlot },
+    attemptNo: number,
+    startedAt: string,
+    failure: LlmProviderError,
+    contextWindow?: ContextWindowMetadata,
+  ): Promise<void> {
+    await this.persist(input, {
+      attemptNo,
+      status: 'failed',
+      errorCode: failure.code,
+      errorMessage: failure.safeMessage,
+      errorRecoverable: failure.recoverable,
+      metadata: contextWindow ? { contextWindow } : {},
+      startedAt,
+      completedAt: new Date().toISOString(),
+    });
   }
 
   private async persist(
@@ -249,88 +338,43 @@ export class TurnOrchestrator {
       slot: input.slot,
       ...attempt,
     });
-    if (snapshot) {
-      this.publishSnapshot(
-        snapshot,
-        attempt.reconsolidateQwen === true && attempt.status === 'completed'
-          ? [input.slot, 'qwen']
-          : input.slot,
-      );
-    } else {
-      await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
-    }
+    if (snapshot) this.publishSnapshot(snapshot, input.slot);
+    else await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
   }
 
   private async availableBases(turnId: string): Promise<ModelResponse[]> {
     return (await this.dependencies.turnRepository.getAvailableBaseResponses?.(turnId)) ?? [];
   }
 
-  private buildContext(
-    input: ExecuteTurnInput & {
-      slot: ResponseSlot;
-      currentBaseResponses?: readonly Pick<ModelResponse, 'slot' | 'content'>[];
-    },
-    provider: LlmProvider,
-  ) {
-    if (this.dependencies.contextBuilder) {
-      return this.dependencies.contextBuilder.build({
-        conversationId: input.conversationId,
-        slot: input.slot,
-        currentOrdinal: input.currentOrdinal ?? 1,
-        prompt: input.prompt,
-        currentBaseResponses: input.currentBaseResponses?.filter(
-          (response): response is Pick<ModelResponse<'openai' | 'google' | 'minimax'>, 'slot' | 'content'> =>
-            response.slot !== 'qwen',
-        ),
-        context: provider.context,
-      });
-    }
-
-    const auxiliaryMessages: LlmMessage[] = input.slot === 'qwen'
-      ? (input.currentBaseResponses ?? []).flatMap(response =>
-          response.content
-            ? [{ role: 'user' as const, content: `${response.slot}:\n${response.content}` }]
-            : [],
-        )
-      : [];
-    return Promise.resolve(protectContext({
-      systemMessage: {
-        role: 'system',
-        content: input.slot === 'qwen'
-          ? 'Consolidate the available model answers into one final answer.'
-          : 'Provide a complete, accurate answer to the user prompt.',
-      },
-      historicalTurns: [],
-      auxiliaryMessages,
-      currentPrompt: { role: 'user', content: input.prompt },
-      currentOrdinal: input.currentOrdinal ?? 1,
-      context: provider.context,
-      thresholdRatio: this.dependencies.contextThresholdRatio ?? CONTEXT_THRESHOLD_RATIO,
-    }));
-  }
-
-  private normalizeFailure(error: unknown, provider: LlmProvider): LlmProviderError {
+  private normalizeFailure(
+    error: unknown,
+    deployment: ConversationDeploymentSnapshot,
+  ): LlmProviderError {
     if (this.isProviderError(error)) {
       return {
         code: error.code,
         safeMessage: error.safeMessage,
-        provider: provider.provider,
-        model: provider.model,
+        provider: deployment.providerId,
+        model: deployment.modelId,
         recoverable: isRecoverableLlmError(error.code),
       };
     }
+    return this.unavailableProvider(deployment);
+  }
+
+  private unavailableProvider(deployment: ConversationDeploymentSnapshot): LlmProviderError {
     return {
       code: 'provider_error',
-      safeMessage: `${provider.provider} request failed.`,
-      provider: provider.provider,
-      model: provider.model,
+      safeMessage: 'The selected model provider request failed.',
+      provider: deployment.providerId,
+      model: deployment.modelId,
       recoverable: false,
     };
   }
 
   private logAttemptCompleted(
     input: ExecuteTurnInput & { slot: ResponseSlot },
-    provider: LlmProvider,
+    deployment: ConversationDeploymentSnapshot,
     durationMs: number,
     status: 'completed' | 'failed',
     errorCode?: string,
@@ -341,8 +385,8 @@ export class TurnOrchestrator {
       conversationId: input.conversationId,
       turnId: input.turnId,
       slot: input.slot,
-      provider: provider.provider,
-      model: provider.model,
+      provider: deployment.providerId,
+      model: deployment.modelId,
       durationMs: Number.isFinite(durationMs) ? durationMs : 0,
       status,
       ...(errorCode ? { errorCode } : {}),
@@ -356,19 +400,16 @@ export class TurnOrchestrator {
   }
 
   private isLlmErrorCode(code: unknown): code is LlmErrorCode {
-    return (
-      typeof code === 'string' &&
-      [
-        'authentication',
-        'rate_limited',
-        'timeout',
-        'connectivity',
-        'content_blocked',
-        'invalid_prompt_size',
-        'invalid_response',
-        'provider_transient_error',
-        'provider_error',
-      ].includes(code)
-    );
+    return typeof code === 'string' && [
+      'authentication',
+      'rate_limited',
+      'timeout',
+      'connectivity',
+      'content_blocked',
+      'invalid_prompt_size',
+      'invalid_response',
+      'provider_transient_error',
+      'provider_error',
+    ].includes(code);
   }
 }

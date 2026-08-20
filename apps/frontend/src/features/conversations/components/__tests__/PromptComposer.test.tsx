@@ -5,20 +5,37 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PromptComposer } from '../PromptComposer';
 
 const stableRequestId = '423e4567-e89b-42d3-a456-426614174000';
+const deploymentIds = {
+  'base-1': 'deployment-1',
+  'base-2': 'deployment-2',
+  'base-3': 'deployment-3',
+  consolidator: 'deployment-4',
+} as const;
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('PromptComposer', () => {
-  it('trims a valid prompt and generates exactly one stable UUID for the logical submit', async () => {
+  it('keeps composition text-only and emits the trimmed prompt with creation deployment IDs', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     const randomUUID = vi
       .spyOn(globalThis.crypto, 'randomUUID')
       .mockReturnValue(stableRequestId);
 
-    render(<PromptComposer isBusy={false} isPending={false} onSubmit={onSubmit} />);
+    const { container } = render(
+      <PromptComposer
+        isBusy={false}
+        isPending={false}
+        deploymentIds={deploymentIds}
+        onSubmit={onSubmit}
+      />
+    );
     const prompt = screen.getByRole('textbox', { name: 'Prompt' });
     const submit = screen.getByRole('button', { name: 'Enviar' });
+
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(prompt.tagName).toBe('TEXTAREA');
+    expect(container.querySelector('input[type="file"]')).toBeNull();
 
     await user.type(prompt, '   ');
     expect(submit).toBeDisabled();
@@ -30,6 +47,7 @@ describe('PromptComposer', () => {
     expect(onSubmit).toHaveBeenCalledWith({
       clientRequestId: stableRequestId,
       prompt: 'Compara estas respuestas',
+      deploymentIds,
     });
     expect(randomUUID).toHaveBeenCalledOnce();
   });

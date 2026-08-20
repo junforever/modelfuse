@@ -20,7 +20,18 @@ export const createTurnBodySchema = z.strictObject({
   prompt: promptSchema,
 });
 
-export const createConversationBodySchema = createTurnBodySchema;
+const deploymentIdsSchema = z.strictObject({
+  'base-1': z.string().trim().min(1),
+  'base-2': z.string().trim().min(1),
+  'base-3': z.string().trim().min(1),
+  consolidator: z.string().trim().min(1),
+});
+
+export const createConversationBodySchema = z.strictObject({
+  clientRequestId: uuidSchema,
+  prompt: promptSchema,
+  deploymentIds: deploymentIdsSchema.optional(),
+});
 
 export const conversationIdParamsSchema = z.strictObject({
   conversationId: uuidSchema,

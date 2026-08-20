@@ -23,12 +23,14 @@ import { apiErrorSchema } from '../schemas/conversationSchemas';
 import type {
   ConversationPage,
   ConversationTurnResponse,
+  DeploymentIds,
   ResponseSlot,
   Turn,
 } from '../types/conversation';
 import type { TurnEventSnapshot } from '../types/sse';
 import { ConversationProcessingNotice } from './ConversationProcessingNotice';
 import { ConversationSidebar } from './ConversationSidebar';
+import { DeploymentSelectors } from './DeploymentSelectors';
 import { HistoryTopSentinel } from './HistoryTopSentinel';
 import { PromptComposer } from './PromptComposer';
 import { TurnList } from './TurnList';
@@ -46,6 +48,13 @@ interface Timeline {
 interface ConversationWorkspaceProps {
   readonly withHistory?: boolean;
 }
+
+const EMPTY_DEPLOYMENT_SELECTION: DeploymentIds = {
+  'base-1': '',
+  'base-2': '',
+  'base-3': '',
+  consolidator: '',
+};
 
 function errorMessage(error: unknown): string {
   const parsed = apiErrorSchema.safeParse(error);
@@ -130,6 +139,9 @@ export function ConversationWorkspace({
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [deploymentSelection, setDeploymentSelection] = useState<DeploymentIds>(
+    EMPTY_DEPLOYMENT_SELECTION
+  );
   const [draftGeneration, setDraftGeneration] = useState(0);
   const [streamGeneration, setStreamGeneration] = useState(0);
   const environment = parseFrontendEnv(import.meta.env);
@@ -258,6 +270,7 @@ export function ConversationWorkspace({
     setSelectedConversationId(null);
     setSelection(null);
     setTimeline(null);
+    setDeploymentSelection(EMPTY_DEPLOYMENT_SELECTION);
     setDraftGeneration(generation => generation + 1);
   }
 
@@ -288,6 +301,17 @@ export function ConversationWorkspace({
   const snapshot = turnQuery.data;
   const isBusy = snapshot?.hasWorkInProgress ?? management.detail.data?.hasWorkInProgress ?? false;
   const isPending = execution.isPending || retryMutation.isPending || continueMutation.isPending;
+  const isNewConversation = selectedConversationId === null;
+  const availableDeploymentIds = new Set(
+    management.catalog.data?.items.map(item => item.deploymentId) ?? []
+  );
+  const deploymentIds =
+    isNewConversation &&
+    Object.values(deploymentSelection).every(deploymentId =>
+      availableDeploymentIds.has(deploymentId)
+    )
+      ? deploymentSelection
+      : undefined;
   const localTurns =
     timeline?.turnIds.flatMap(turnId => {
       const cached = queryClient.getQueryData<TurnEventSnapshot>(
@@ -404,10 +428,22 @@ export function ConversationWorkspace({
         />
       )}
 
+      {isNewConversation && (
+        <DeploymentSelectors
+          items={management.catalog.data?.items ?? []}
+          selection={deploymentSelection}
+          isLoading={management.catalog.isPending}
+          disabled={isPending}
+          onChange={setDeploymentSelection}
+        />
+      )}
+
       <PromptComposer
         key={activeSelection?.turnId ?? `draft:${draftGeneration}`}
         isBusy={isBusy}
+        isDisabled={isNewConversation && !deploymentIds}
         isPending={isPending}
+        deploymentIds={deploymentIds}
         onSubmit={execution.execute}
       />
     </section>

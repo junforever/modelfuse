@@ -1,6 +1,11 @@
 import { Pool } from 'pg';
 
-const REQUIRED_TABLES = ['conversations', 'turns', 'model_responses'] as const;
+const REQUIRED_TABLES = [
+  'conversations',
+  'conversation_deployments',
+  'turns',
+  'model_responses',
+] as const;
 const ISOLATED_SCHEMA_PREFIX = 'modelfuse_it';
 
 type IntegrationPool = Pool & { integrationSchema?: string };

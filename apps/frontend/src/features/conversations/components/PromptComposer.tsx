@@ -3,19 +3,27 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
 
-import type { CreateConversationRequest } from '../types/conversation';
+import type { CreateConversationRequest, DeploymentIds } from '../types/conversation';
 
 interface PromptComposerProps {
   readonly isBusy: boolean;
+  readonly isDisabled?: boolean;
   readonly isPending: boolean;
+  readonly deploymentIds?: DeploymentIds;
   readonly onSubmit: (payload: CreateConversationRequest) => void;
 }
 
-export function PromptComposer({ isBusy, isPending, onSubmit }: PromptComposerProps) {
+export function PromptComposer({
+  isBusy,
+  isDisabled = false,
+  isPending,
+  deploymentIds,
+  onSubmit,
+}: PromptComposerProps) {
   const [prompt, setPrompt] = useState('');
   const submitLocked = useRef(false);
   const trimmedPrompt = prompt.trim();
-  const submitDisabled = !trimmedPrompt || isBusy || isPending;
+  const submitDisabled = !trimmedPrompt || isBusy || isDisabled || isPending;
 
   useEffect(() => {
     if (!isPending) submitLocked.current = false;
@@ -26,7 +34,11 @@ export function PromptComposer({ isBusy, isPending, onSubmit }: PromptComposerPr
     if (submitDisabled || submitLocked.current) return;
 
     submitLocked.current = true;
-    onSubmit({ clientRequestId: crypto.randomUUID(), prompt: trimmedPrompt });
+    onSubmit({
+      clientRequestId: crypto.randomUUID(),
+      prompt: trimmedPrompt,
+      ...(deploymentIds ? { deploymentIds } : {}),
+    });
   }
 
   return (

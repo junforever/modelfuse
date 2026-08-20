@@ -109,7 +109,9 @@ export interface ConversationSummary {
   updatedAt: IsoDateTime;
 }
 
-export type ConversationDetail = ConversationSummary;
+export interface ConversationDetail extends ConversationSummary {
+  deployments: DeploymentSummaryTuple;
+}
 
 export interface Turn {
   id: string;
@@ -127,14 +129,16 @@ export interface CreateTurnRequest {
   prompt: string;
 }
 
-export type CreateConversationRequest = CreateTurnRequest;
+export interface CreateConversationRequest extends CreateTurnRequest {
+  deploymentIds?: DeploymentAssignment;
+}
 
 export interface RenameConversationRequest {
   title: string;
 }
 
 export interface ConversationTurnResponse {
-  conversation: ConversationSummary;
+  conversation: ConversationDetail;
   turn: Turn;
 }
 

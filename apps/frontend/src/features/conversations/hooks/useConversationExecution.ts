@@ -3,7 +3,10 @@ import { useMutation } from '@tanstack/react-query';
 import type { AxiosInstance } from 'axios';
 
 import { createConversation, createTurn } from '../api/conversationsApi';
-import type { ConversationTurnResponse, CreateTurnRequest } from '../types/conversation';
+import type {
+  ConversationTurnResponse,
+  CreateConversationRequest,
+} from '../types/conversation';
 
 interface UseConversationExecutionOptions {
   readonly apiClient: AxiosInstance;
@@ -18,14 +21,14 @@ export function useConversationExecution({
 }: UseConversationExecutionOptions) {
   const activeRequestId = useRef<string | null>(null);
   const mutation = useMutation({
-    mutationFn: (payload: CreateTurnRequest) =>
+    mutationFn: ({ deploymentIds, ...payload }: CreateConversationRequest) =>
       conversationId
         ? createTurn(apiClient, conversationId, payload)
-        : createConversation(apiClient, payload),
+        : createConversation(apiClient, { ...payload, ...(deploymentIds ? { deploymentIds } : {}) }),
     onSuccess,
   });
 
-  function execute(payload: CreateTurnRequest) {
+  function execute(payload: CreateConversationRequest) {
     if (activeRequestId.current) return;
 
     activeRequestId.current = payload.clientRequestId;

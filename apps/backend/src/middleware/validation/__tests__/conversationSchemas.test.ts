@@ -35,13 +35,38 @@ describe('conversation request schemas', () => {
     expect(turnIdParamsSchema.safeParse({ conversationId, turnId: 'invalid' }).success).toBe(false);
     expect(turnIdParamsSchema.safeParse({ conversationId: 'invalid', turnId }).success).toBe(false);
 
-    for (const slot of ['openai', 'google', 'minimax', 'qwen']) {
+    for (const slot of ['base-1', 'base-2', 'base-3', 'consolidator']) {
       expect(responseSlotParamsSchema.safeParse({ conversationId, turnId, slot }).success).toBe(true);
     }
 
-    expect(
-      responseSlotParamsSchema.safeParse({ conversationId, turnId, slot: 'unknown' }).success,
-    ).toBe(false);
+    for (const slot of ['openai', 'google', 'minimax', 'qwen', 'unknown']) {
+      expect(responseSlotParamsSchema.safeParse({ conversationId, turnId, slot }).success).toBe(false);
+    }
+  });
+
+  it('accepts only a complete strict four-slot deployment assignment', () => {
+    const deploymentIds = {
+      'base-1': 'deployment-1',
+      'base-2': 'deployment-2',
+      'base-3': 'deployment-3',
+      consolidator: 'deployment-4',
+    };
+    const request = { clientRequestId, prompt: 'Compare this', deploymentIds };
+
+    expect(createConversationBodySchema.parse(request)).toEqual(request);
+
+    const invalidAssignments = [
+      { ...deploymentIds, 'base-1': undefined },
+      { ...deploymentIds, extra: 'deployment-5' },
+      { ...deploymentIds, 'base-2': '' },
+      { ...deploymentIds, 'base-3': '   ' },
+      { ...deploymentIds, consolidator: null },
+      { ...deploymentIds, openai: 'legacy-deployment' },
+    ];
+    for (const invalid of invalidAssignments) {
+      expect(createConversationBodySchema.safeParse({ ...request, deploymentIds: invalid }).success)
+        .toBe(false);
+    }
   });
 
   it('accepts omitted or base64url cursors and rejects malformed cursor values', () => {

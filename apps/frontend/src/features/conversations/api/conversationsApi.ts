@@ -3,9 +3,11 @@ import type { ZodType } from 'zod';
 
 import {
   apiErrorSchema,
+  conversationDetailSchema,
   conversationPageSchema,
   conversationSummarySchema,
   conversationTurnResponseSchema,
+  modelCatalogResponseSchema,
   turnPageSchema,
   turnSnapshotResponseSchema,
 } from '../schemas/conversationSchemas';
@@ -17,6 +19,7 @@ import type {
   ConversationTurnResponse,
   CreateConversationRequest,
   CreateTurnRequest,
+  ModelCatalogResponse,
   RenameConversationRequest,
   ResponseSlot,
   TurnPage,
@@ -67,6 +70,13 @@ export function listConversations(
   );
 }
 
+export function listAvailableDeployments(
+  client: AxiosInstance,
+  signal?: AbortSignal
+): Promise<ModelCatalogResponse> {
+  return validated(client.get('/model-catalog', { signal }), modelCatalogResponseSchema);
+}
+
 export function getConversation(
   client: AxiosInstance,
   conversationId: string,
@@ -74,7 +84,7 @@ export function getConversation(
 ): Promise<ConversationDetail> {
   return validated(
     client.get(`/conversations/${conversationId}`, { signal }),
-    conversationSummarySchema
+    conversationDetailSchema
   );
 }
 

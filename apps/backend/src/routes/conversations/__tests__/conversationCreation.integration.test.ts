@@ -2,8 +2,9 @@ import type { Pool } from 'pg';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEPLOYMENT_CATALOG } from '../../../infrastructure/llm/deploymentCatalog.js';
 import {
-  createControlledProviders,
+  ControlledLlmProvider,
   deferred,
 } from '../../../test/integration/controlledLlmProviders.js';
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
@@ -11,21 +12,36 @@ import {
   assertModelFuseSchema,
   createIntegrationPool,
   deleteOwnedConversationRequests,
-  deleteOwnedConversations,
 } from '../../../test/integration/testDatabase.js';
+import type {
+  ConversationDeploymentSummary,
+  DeploymentDefinition,
+  ResponseSlot,
+} from '../../../types/conversations.js';
+import type { ProviderRegistry } from '../../../types/llm.js';
 
-const CREATE_IDS = [
-  '10000000-0000-4000-8000-000000000040',
-  '10000000-0000-4000-8000-000000000041',
-  '10000000-0000-4000-8000-000000000042',
-  '10000000-0000-4000-8000-000000000043',
-  '10000000-0000-4000-8000-000000000044',
-  '10000000-0000-4000-8000-000000000045',
-] as const;
-const SEEDED_CONVERSATION_ID = '20000000-0000-4000-8000-000000000040';
-const SEEDED_TURN_ID = '30000000-0000-4000-8000-000000000040';
+const CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000030';
+const PROMPT = 'Compare the four explicit deployments.';
+const DEPLOYMENT_IDS = {
+  'base-1': 'openai-5.6-terra',
+  'base-2': 'gemini-3.7-flash',
+  'base-3': 'openrouter-minimax-m3',
+  consolidator: 'openrouter-qwen-3.8-max',
+} as const;
+const SLOT_ORDER = ['base-1', 'base-2', 'base-3', 'consolidator'] as const;
+const SELECTED_DEFINITIONS = SLOT_ORDER.map(slot => definition(DEPLOYMENT_IDS[slot]));
+const PUBLIC_SUMMARIES = SLOT_ORDER.map((slot, index) => {
+  const selected = SELECTED_DEFINITIONS[index]!;
+  return {
+    slot,
+    deploymentId: selected.deploymentId,
+    providerId: selected.providerId,
+    modelId: selected.modelId,
+    displayName: selected.displayName,
+  };
+}) as readonly ConversationDeploymentSummary[];
 
-describe('conversation creation REST/PostgreSQL', () => {
+describe('explicit conversation creation across REST, PostgreSQL, and deterministic adapters', () => {
   let pool: Pool;
 
   beforeAll(async () => {
@@ -34,348 +50,240 @@ describe('conversation creation REST/PostgreSQL', () => {
   });
 
   beforeEach(async () => {
-    await deleteOwnedConversationRequests(pool, CREATE_IDS);
-    await deleteOwnedConversations(pool, [SEEDED_CONVERSATION_ID]);
+    await deleteOwnedConversationRequests(pool, [CLIENT_REQUEST_ID]);
   });
 
   afterEach(async () => {
-    await deleteOwnedConversationRequests(pool, CREATE_IDS);
-    await deleteOwnedConversations(pool, [SEEDED_CONVERSATION_ID]);
+    vi.restoreAllMocks();
+    await deleteOwnedConversationRequests(pool, [CLIENT_REQUEST_ID]);
   });
 
   afterAll(async () => {
     await pool?.end();
   });
 
-  it('returns 202 only after atomically committing one conversation, one turn and four slots', async () => {
-    const providers = createControlledProviders();
-    const releases = [deferred(), deferred(), deferred()];
-    providers.openai.enqueueBlocked(releases[0].promise);
-    providers.google.enqueueBlocked(releases[1].promise);
-    providers.minimax.enqueueBlocked(releases[2].promise);
-    const { app, publisher } = createIntegrationBackend(pool, providers);
-    let idle: IdleObservation | undefined;
+  it('commits the complete first turn before launching bases, then launches the consolidator last', async () => {
+    const baseGates = [deferred(), deferred(), deferred()] as const;
+    const openai = new ControlledLlmProvider('base-1');
+    const google = new ControlledLlmProvider('base-2');
+    const openrouter = new ControlledLlmProvider('base-3', [], {
+      providerId: 'openrouter',
+      provider: 'openrouter-fake',
+      model: 'openrouter-test-model',
+    });
+    openai.enqueueBlocked(baseGates[0].promise, 'OpenAI base response');
+    google.enqueueBlocked(baseGates[1].promise, 'Google base response');
+    openrouter.enqueueBlocked(baseGates[2].promise, 'OpenRouter base response');
+    openrouter.enqueueResult('OpenRouter consolidated response');
+
+    const providerRegistry: ProviderRegistry = { openai, google, openrouter };
+    const callOrder: ResponseSlot[] = [];
+    const statesAtProviderStart: Array<{
+      slot: ResponseSlot;
+      state: Awaited<ReturnType<typeof readCreationState>>;
+    }> = [];
+    observeProviderStarts(openai, pool, callOrder, statesAtProviderStart);
+    observeProviderStarts(google, pool, callOrder, statesAtProviderStart);
+    observeProviderStarts(openrouter, pool, callOrder, statesAtProviderStart);
+
+    const backend = createIntegrationBackend(pool, providerRegistry);
 
     try {
-      const response = await request(app).post('/api/v1/conversations').send({
-        clientRequestId: CREATE_IDS[0],
-        prompt: 'Compare atomic persistence.',
-      });
-      if (response.status === 202 && response.body.turn?.id) {
-        idle = observeIdle(publisher, response.body.turn.id);
-      }
-
-      expect(response.status).toBe(202);
-      expect(response.body).toMatchObject({
-        conversation: { id: expect.any(String), hasWorkInProgress: true },
-        turn: {
-          id: expect.any(String),
-          clientRequestId: CREATE_IDS[0],
-          prompt: 'Compare atomic persistence.',
-          responses: expect.arrayContaining([
-            expect.objectContaining({ slot: 'openai' }),
-            expect.objectContaining({ slot: 'google' }),
-            expect.objectContaining({ slot: 'minimax' }),
-            expect.objectContaining({ slot: 'qwen' }),
-          ]),
-        },
+      const created = await request(backend.app).post('/api/v1/conversations').send({
+        clientRequestId: CLIENT_REQUEST_ID,
+        prompt: PROMPT,
+        deploymentIds: DEPLOYMENT_IDS,
       });
 
-      const rows = await pool.query<{ conversations: number; turns: number; responses: number }>(
-        `SELECT count(DISTINCT c.id)::int AS conversations,
-                count(DISTINCT t.id)::int AS turns,
-                count(mr.id)::int AS responses
-           FROM conversations c
-           LEFT JOIN turns t ON t.conversation_id = c.id
-           LEFT JOIN model_responses mr ON mr.turn_id = t.id
-          WHERE c.create_client_request_id = $1`,
-        [CREATE_IDS[0]]
-      );
-      expect(rows.rows[0]).toEqual({ conversations: 1, turns: 1, responses: 4 });
-
-      releases.forEach(({ resolve }) => resolve());
-      await idle?.promise;
-    } finally {
-      releases.forEach(({ resolve }) => resolve());
-      await idle?.promise;
-      idle?.unsubscribe();
-    }
-  });
-
-  it('rolls back every row when the fourth slot insert fails inside the transaction', async () => {
-    const functionName = 'it_t040_fail_fourth_slot';
-    const triggerName = 'it_t040_fail_fourth_slot_trigger';
-    const providers = createControlledProviders();
-    const { app, publisher } = createIntegrationBackend(pool, providers);
-
-    await pool.query(`
-      CREATE OR REPLACE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN
-        IF NEW.slot = 'qwen' AND EXISTS (
-          SELECT 1 FROM turns t
-          JOIN conversations c ON c.id = t.conversation_id
-          WHERE t.id = NEW.turn_id AND c.create_client_request_id = '${CREATE_IDS[1]}'::uuid
-        ) THEN
-          RAISE EXCEPTION 'controlled integration failure';
-        END IF;
-        RETURN NEW;
-      END $$;
-      CREATE TRIGGER ${triggerName} BEFORE INSERT ON model_responses
-      FOR EACH ROW EXECUTE FUNCTION ${functionName}();
-    `);
-
-    try {
-      const response = await request(app).post('/api/v1/conversations').send({
-        clientRequestId: CREATE_IDS[1],
-        prompt: 'This transaction must roll back.',
+      expect(created.status).toBe(201);
+      expect(created.body.conversation.deployments).toEqual(PUBLIC_SUMMARIES);
+      expect(created.body.turn).toMatchObject({
+        clientRequestId: CLIENT_REQUEST_ID,
+        ordinal: 1,
+        prompt: PROMPT,
+        responses: [
+          { slot: 'base-1', role: 'base', provider: 'openai', model: 'gpt-5.6-terra' },
+          { slot: 'base-2', role: 'base', provider: 'google', model: 'gemini-3.7-flash' },
+          {
+            slot: 'base-3',
+            role: 'base',
+            provider: 'openrouter',
+            model: 'minimax/minimax-m3',
+          },
+          {
+            slot: 'consolidator',
+            role: 'consolidator',
+            provider: 'openrouter',
+            model: 'qwen/qwen3.8-max',
+          },
+        ],
       });
-
-      expect(response.status).toBe(500);
-      expect(response.body).toMatchObject({
-        code: 'INTERNAL_ERROR',
-        requestId: expect.any(String),
-      });
-
-      const persisted = await pool.query<{ count: number }>(
-        'SELECT count(*)::int AS count FROM conversations WHERE create_client_request_id = $1',
-        [CREATE_IDS[1]]
-      );
-      expect(persisted.rows[0].count).toBe(0);
-    } finally {
-      await pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON model_responses`);
-      await pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
-    }
-  });
-
-  it('resolves concurrent replay before busy and rejects ID/prompt conflict without duplicate work', async () => {
-    await seedCompletedConversation(pool);
-    const providers = createControlledProviders();
-    const releases = [deferred(), deferred(), deferred()];
-    providers.openai.enqueueBlocked(releases[0].promise);
-    providers.google.enqueueBlocked(releases[1].promise);
-    providers.minimax.enqueueBlocked(releases[2].promise);
-    const { app, publisher } = createIntegrationBackend(pool, providers);
-    const create = { clientRequestId: CREATE_IDS[2], prompt: 'Concurrent replay prompt.' };
-    let idle: IdleObservation | undefined;
-
-    try {
-      const [first, replay] = await Promise.all([
-        request(app).post(`/api/v1/conversations/${SEEDED_CONVERSATION_ID}/turns`).send(create),
-        request(app).post(`/api/v1/conversations/${SEEDED_CONVERSATION_ID}/turns`).send(create),
-      ]);
-
-      if (first.status === 202 && first.body.turn?.id) {
-        idle = observeIdle(publisher, first.body.turn.id);
-      }
-
-      expect([first.status, replay.status]).toEqual([202, 202]);
-      expect(replay.body.turn.id).toBe(first.body.turn.id);
-
-      const conflict = await request(app)
-        .post(`/api/v1/conversations/${SEEDED_CONVERSATION_ID}/turns`)
-        .send({ ...create, prompt: 'Different prompt.' });
-      expect(conflict.status).toBe(409);
-      expect(conflict.body.code).toBe('CLIENT_REQUEST_ID_CONFLICT');
-
-      const busy = await request(app)
-        .post(`/api/v1/conversations/${SEEDED_CONVERSATION_ID}/turns`)
-        .send({ clientRequestId: CREATE_IDS[3], prompt: 'New work while busy.' });
-      expect(busy.status).toBe(409);
-      expect(busy.body.code).toBe('CONVERSATION_BUSY');
-
-      const durable = await pool.query<{ turns: number; responses: number }>(
-        `SELECT count(DISTINCT t.id)::int AS turns, count(mr.id)::int AS responses
-           FROM turns t LEFT JOIN model_responses mr ON mr.turn_id = t.id
-          WHERE t.conversation_id = $1 AND t.client_request_id = $2`,
-        [SEEDED_CONVERSATION_ID, CREATE_IDS[2]]
-      );
-      expect(durable.rows[0]).toEqual({ turns: 1, responses: 4 });
 
       await Promise.all([
-        providers.openai.waitUntilCalled(),
-        providers.google.waitUntilCalled(),
-        providers.minimax.waitUntilCalled(),
+        openai.waitUntilCalled(),
+        google.waitUntilCalled(),
+        openrouter.waitUntilCalled(),
       ]);
-      expect(providers.openai.calls).toHaveLength(1);
-      expect(providers.google.calls).toHaveLength(1);
-      expect(providers.minimax.calls).toHaveLength(1);
 
-      releases.forEach(({ resolve }) => resolve());
-      if (!idle) {
-        throw new Error('Expected an idle observation for the accepted replay');
-      }
-      await idle.promise;
-    } finally {
-      releases.forEach(({ resolve }) => resolve());
-      await idle?.promise;
-      idle?.unsubscribe();
-    }
-  });
+      expect(callOrder).toHaveLength(3);
+      expect(new Set(callOrder)).toEqual(new Set<ResponseSlot>(['base-1', 'base-2', 'base-3']));
+      expect(openrouter.calls.map(call => call.slot)).toEqual(['base-3']);
+      expect(statesAtProviderStart).toHaveLength(3);
+      statesAtProviderStart.forEach(({ state }) => expectCompleteCommittedState(state));
 
-  it('keeps exactly 80 graphemes and never splits ZWJ emoji or combining marks', async () => {
-    const providers = createControlledProviders();
-    const releases = Array.from({ length: 6 }, () => deferred());
-    providers.openai.enqueueBlocked(releases[0].promise);
-    providers.google.enqueueBlocked(releases[1].promise);
-    providers.minimax.enqueueBlocked(releases[2].promise);
-    providers.openai.enqueueBlocked(releases[3].promise);
-    providers.google.enqueueBlocked(releases[4].promise);
-    providers.minimax.enqueueBlocked(releases[5].promise);
-    const { app, publisher } = createIntegrationBackend(pool, providers);
-    const eighty = `${'A'.repeat(78)}👩‍💻e\u0301`;
-    const eightyOne = `${eighty}Z`;
-    const idleObservations: IdleObservation[] = [];
-
-    try {
-      const exact = await request(app)
-        .post('/api/v1/conversations')
-        .send({
-          clientRequestId: CREATE_IDS[3],
-          prompt: `  ${eighty}  `,
-        });
-      if (exact.status === 202 && exact.body.turn?.id) {
-        idleObservations.push(observeIdle(publisher, exact.body.turn.id));
-      }
-      releases.slice(0, 3).forEach(({ resolve }) => resolve());
-      await idleObservations.at(-1)?.promise;
-
-      const truncated = await request(app)
-        .post('/api/v1/conversations')
-        .send({
-          clientRequestId: CREATE_IDS[4],
-          prompt: `  ${eightyOne}  `,
-        });
-      if (truncated.status === 202 && truncated.body.turn?.id) {
-        idleObservations.push(observeIdle(publisher, truncated.body.turn.id));
-      }
-      releases.slice(3).forEach(({ resolve }) => resolve());
-      await idleObservations.at(-1)?.promise;
-
-      expect(exact.status).toBe(202);
-      expect(truncated.status).toBe(202);
-      expect(exact.body.conversation.title).toBe(eighty);
-      expect(truncated.body.conversation.title).toBe(eighty);
-
-      const titles = await pool.query<{ title: string }>(
-        `SELECT title FROM conversations
-          WHERE create_client_request_id = ANY($1::uuid[])
-          ORDER BY create_client_request_id`,
-        [[CREATE_IDS[3], CREATE_IDS[4]]]
+      const detail = await request(backend.app).get(
+        `/api/v1/conversations/${created.body.conversation.id}`,
       );
-      expect(titles.rows.map(({ title }) => title)).toEqual([eighty, eighty]);
+      expect(detail.status).toBe(200);
+      expect(detail.body.deployments).toEqual(PUBLIC_SUMMARIES);
+      expect(Object.keys(detail.body.deployments[0])).toEqual([
+        'slot',
+        'deploymentId',
+        'providerId',
+        'modelId',
+        'displayName',
+      ]);
+
+      baseGates.forEach(gate => gate.resolve());
+      await openrouter.waitUntilCalled(2);
+      expect(callOrder.slice(0, 3).sort()).toEqual(['base-1', 'base-2', 'base-3']);
+      expect(callOrder[3]).toBe('consolidator');
+      expect(openrouter.calls.map(call => call.slot)).toEqual(['base-3', 'consolidator']);
     } finally {
-      releases.forEach(({ resolve }) => resolve());
-      await Promise.all(idleObservations.map(({ promise }) => promise));
-      idleObservations.forEach(({ unsubscribe }) => unsubscribe());
-    }
-  });
-
-  it('reconciles every active slot when an unexpected publisher failure escapes after 202', async () => {
-    const providers = createControlledProviders();
-    const releases = [deferred(), deferred(), deferred()];
-    providers.openai.enqueueBlocked(releases[0].promise);
-    providers.google.enqueueBlocked(releases[1].promise);
-    providers.minimax.enqueueBlocked(releases[2].promise);
-    const backend = createIntegrationBackend(pool, providers);
-    const originalPublish = backend.publisher.publish.bind(backend.publisher);
-    const terminal = deferred();
-    let unsubscribe: () => void = () => undefined;
-    let failureListenerInstalled = false;
-    let acceptedWork = false;
-
-    vi.spyOn(backend.publisher, 'publish').mockImplementation(event => {
-      if (!failureListenerInstalled) {
-        failureListenerInstalled = true;
-        unsubscribe = backend.publisher.subscribe(event.data.turnId, () => {
-          throw new Error('controlled publisher listener failure');
-        });
-      }
-      if (event.event === 'busy_update' && event.data.hasWorkInProgress === false) {
-        terminal.resolve();
-      }
-      return originalPublish(event);
-    });
-
-    try {
-      const accepted = await request(backend.app).post('/api/v1/conversations').send({
-        clientRequestId: CREATE_IDS[5],
-        prompt: 'Reconcile an unexpected post-acceptance failure.',
-      });
-      expect(accepted.status).toBe(202);
-      acceptedWork = true;
-
-      releases.forEach(({ resolve }) => resolve());
-      await terminal.promise;
-
-      const persisted = await pool.query<{ status: string; count: number }>(
-        `SELECT status, count(*)::int AS count
-           FROM model_responses
-          WHERE turn_id = $1
-          GROUP BY status
-          ORDER BY status`,
-        [accepted.body.turn.id]
-      );
-      const snapshot = await request(backend.app).get(
-        `/api/v1/conversations/${accepted.body.conversation.id}/turns/${accepted.body.turn.id}`
-      );
-
-      expect(
-        persisted.rows.filter(({ status }) => status === 'pending' || status === 'running')
-      ).toEqual([]);
-      expect(snapshot.status).toBe(200);
-      expect(snapshot.body.conversation.hasWorkInProgress).toBe(false);
-      expect(['completed', 'partial', 'failed']).toContain(snapshot.body.turn.status);
-    } finally {
-      releases.forEach(({ resolve }) => resolve());
-      if (acceptedWork) await terminal.promise;
-      unsubscribe();
+      baseGates.forEach(gate => gate.resolve());
+      await backend.conversationService.stop();
     }
   });
 });
 
-interface IdleObservation {
-  promise: Promise<void>;
-  unsubscribe: () => void;
-}
-
-function observeIdle(
-  publisher: { subscribe: (turnId: string, listener: (event: any) => void) => () => void },
-  turnId: string
-): IdleObservation {
-  let unsubscribe: () => void = () => undefined;
-  const promise = new Promise<void>(resolve => {
-    unsubscribe = publisher.subscribe(turnId, event => {
-      if (event.event === 'busy_update' && event.data.hasWorkInProgress === false) {
-        unsubscribe();
-        resolve();
-      }
-    });
+function observeProviderStarts(
+  provider: ControlledLlmProvider,
+  pool: Pool,
+  callOrder: ResponseSlot[],
+  observations: Array<{
+    slot: ResponseSlot;
+    state: Awaited<ReturnType<typeof readCreationState>>;
+  }>,
+): void {
+  const generate = provider.generate.bind(provider);
+  vi.spyOn(provider, 'generate').mockImplementation(async input => {
+    callOrder.push(input.slot);
+    observations.push({ slot: input.slot, state: await readCreationState(pool) });
+    return generate(input);
   });
-  return { promise, unsubscribe: () => unsubscribe() };
 }
 
-async function seedCompletedConversation(pool: Pool): Promise<void> {
-  const now = '2026-01-02T03:04:05.000Z';
-  await pool.query(
-    `INSERT INTO conversations (id, create_client_request_id, title, created_at, updated_at)
-     VALUES ($1, $2, 'Seeded conversation', $3, $3)`,
-    [SEEDED_CONVERSATION_ID, '10000000-0000-4000-8000-000000000099', now]
+async function readCreationState(pool: Pool) {
+  const conversation = await pool.query<{ id: string }>(
+    'SELECT id FROM conversations WHERE create_client_request_id = $1',
+    [CLIENT_REQUEST_ID],
   );
-  await pool.query(
-    `INSERT INTO turns
-       (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
-     VALUES ($1, $2, $3, 1, 'Seed prompt', 'completed', $4, $4)`,
-    [SEEDED_TURN_ID, SEEDED_CONVERSATION_ID, '40000000-0000-4000-8000-000000000040', now]
+  const conversationId = conversation.rows[0]?.id ?? null;
+  const deployments = conversationId
+    ? await pool.query<{
+        slot: ResponseSlot;
+        deploymentId: string;
+        providerId: string;
+        modelId: string;
+        displayName: string;
+        contextLimitTokens: number;
+        maxOutputTokens: number;
+        inputModalities: string[];
+        outputModalities: string[];
+        createdAt: Date;
+        updatedAt: Date;
+      }>(
+        `SELECT slot,
+                deployment_id AS "deploymentId",
+                provider_id AS "providerId",
+                model_id AS "modelId",
+                display_name AS "displayName",
+                context_limit_tokens AS "contextLimitTokens",
+                max_output_tokens AS "maxOutputTokens",
+                input_modalities AS "inputModalities",
+                output_modalities AS "outputModalities",
+                created_at AS "createdAt",
+                updated_at AS "updatedAt"
+           FROM conversation_deployments
+          WHERE conversation_id = $1
+          ORDER BY CASE slot
+            WHEN 'base-1' THEN 1 WHEN 'base-2' THEN 2
+            WHEN 'base-3' THEN 3 WHEN 'consolidator' THEN 4 END`,
+        [conversationId],
+      )
+    : { rows: [] };
+  const turns = conversationId
+    ? await pool.query<{ id: string }>('SELECT id FROM turns WHERE conversation_id = $1', [
+        conversationId,
+      ])
+    : { rows: [] };
+  const responses = turns.rows[0]
+    ? await pool.query<{
+        slot: ResponseSlot;
+        role: string;
+        provider: string;
+        model: string;
+      }>(
+        `SELECT slot, role, provider, model
+           FROM model_responses
+          WHERE turn_id = $1
+          ORDER BY CASE slot
+            WHEN 'base-1' THEN 1 WHEN 'base-2' THEN 2
+            WHEN 'base-3' THEN 3 WHEN 'consolidator' THEN 4 END`,
+        [turns.rows[0].id],
+      )
+    : { rows: [] };
+
+  return {
+    conversations: conversation.rowCount ?? 0,
+    turns: turns.rowCount ?? 0,
+    deployments: deployments.rows,
+    responses: responses.rows,
+  };
+}
+
+function expectCompleteCommittedState(state: Awaited<ReturnType<typeof readCreationState>>): void {
+  expect(state.conversations).toBe(1);
+  expect(state.turns).toBe(1);
+  expect(
+    state.deployments.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...row }) => row),
+  ).toEqual(
+    SLOT_ORDER.map((slot, index) => {
+      const selected = SELECTED_DEFINITIONS[index]!;
+      return {
+        slot,
+        deploymentId: selected.deploymentId,
+        providerId: selected.providerId,
+        modelId: selected.modelId,
+        displayName: selected.displayName,
+        contextLimitTokens: selected.contextLimitTokens,
+        maxOutputTokens: selected.maxOutputTokens,
+        inputModalities: [...selected.inputModalities],
+        outputModalities: [...selected.outputModalities],
+      };
+    }),
   );
-  await pool.query(
-    `INSERT INTO model_responses
-       (id, turn_id, slot, role, provider, model, status, content, error_recoverable,
-        is_stale, attempt_no, created_at, updated_at, completed_at)
-     SELECT gen_random_uuid(), $1, slot,
-            CASE WHEN slot = 'qwen' THEN 'consolidator' ELSE 'base' END,
-            slot, slot || '-test-model', 'completed', slot || ' completed', false,
-            false, 1, $2, $2, $2
-       FROM unnest(ARRAY['openai','google','minimax','qwen']) AS slot`,
-    [SEEDED_TURN_ID, now]
-  );
+  state.deployments.forEach(row => expect(row.updatedAt).toEqual(row.createdAt));
+  expect(state.responses).toEqual([
+    { slot: 'base-1', role: 'base', provider: 'openai', model: 'gpt-5.6-terra' },
+    { slot: 'base-2', role: 'base', provider: 'google', model: 'gemini-3.7-flash' },
+    {
+      slot: 'base-3',
+      role: 'base',
+      provider: 'openrouter',
+      model: 'minimax/minimax-m3',
+    },
+    {
+      slot: 'consolidator',
+      role: 'consolidator',
+      provider: 'openrouter',
+      model: 'qwen/qwen3.8-max',
+    },
+  ]);
+}
+
+function definition(deploymentId: string): DeploymentDefinition {
+  const selected = DEPLOYMENT_CATALOG.find(item => item.deploymentId === deploymentId);
+  if (!selected) throw new Error(`Missing T030 deployment fixture: ${deploymentId}`);
+  return selected;
 }

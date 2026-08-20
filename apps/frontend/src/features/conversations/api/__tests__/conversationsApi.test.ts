@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest';
 import {
   continueWithoutResponse,
   createConversation,
+  getConversation,
   getTurnSnapshot,
+  listAvailableDeployments,
   retryResponse,
 } from '../conversationsApi';
 import { createApiClient } from '../client';
@@ -24,10 +26,28 @@ const conversation = {
   id: conversationId,
   title: 'Comparación inicial',
   hasWorkInProgress: true,
+  deployments: [
+    { slot: 'base-1', deploymentId: 'deployment-1', providerId: 'openai', modelId: 'model-1', displayName: 'Model 1' },
+    { slot: 'base-2', deploymentId: 'deployment-2', providerId: 'google', modelId: 'model-2', displayName: 'Model 2' },
+    { slot: 'base-3', deploymentId: 'deployment-3', providerId: 'openrouter', modelId: 'model-3', displayName: 'Model 3' },
+    { slot: 'consolidator', deploymentId: 'deployment-4', providerId: 'openrouter', modelId: 'model-4', displayName: 'Model 4' },
+  ],
   createdAt: eventTime,
   updatedAt: eventTime,
 };
 const conversationTurn = { conversation, turn: turnFixture() };
+const deploymentIds = Object.fromEntries(
+  conversation.deployments.map(({ slot, deploymentId }) => [slot, deploymentId])
+);
+const catalog = {
+  items: conversation.deployments.map(({ slot: _slot, ...deployment }, index) => ({
+    ...deployment,
+    contextLimitTokens: 100_000 + index,
+    maxOutputTokens: 8_000 + index,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+  })),
+};
 const snapshot = {
   conversation: {
     id: conversationId,
@@ -47,10 +67,12 @@ function response(config: InternalAxiosRequestConfig, data: unknown, status = 20
 }
 
 describe('conversations API contract', () => {
-  it('maps create, snapshot, retry and Continue-without to their validated REST contracts', async () => {
+  it('maps catalog, detail, create and turn actions to their validated REST contracts', async () => {
     const requests: InternalAxiosRequestConfig[] = [];
     const adapter: AxiosAdapter = async config => {
       requests.push(config);
+      if (config.url === '/model-catalog') return response(config, catalog);
+      if (config.url === `/conversations/${conversationId}`) return response(config, conversation);
       if (config.method === 'get') return response(config, snapshot);
       if (config.url?.endsWith('/continue-without')) {
         return response(config, conversationTurn);
@@ -62,15 +84,17 @@ describe('conversations API contract', () => {
       adapter,
     });
 
+    await expect(listAvailableDeployments(client)).resolves.toEqual(catalog);
+    await expect(getConversation(client, conversationId)).resolves.toEqual(conversation);
     await expect(
-      createConversation(client, { clientRequestId, prompt: 'Primer prompt' })
+      createConversation(client, { clientRequestId, prompt: 'Primer prompt', deploymentIds })
     ).resolves.toEqual(conversationTurn);
     await expect(getTurnSnapshot(client, conversationId, turnId)).resolves.toEqual(snapshot);
     await expect(
-      retryResponse(client, conversationId, turnId, 'openai')
+      retryResponse(client, conversationId, turnId, 'base-1')
     ).resolves.toEqual(conversationTurn);
     await expect(
-      continueWithoutResponse(client, conversationId, turnId, 'google')
+      continueWithoutResponse(client, conversationId, turnId, 'base-2')
     ).resolves.toEqual(conversationTurn);
 
     expect(
@@ -81,9 +105,19 @@ describe('conversations API contract', () => {
       }))
     ).toEqual([
       {
+        method: 'get',
+        url: '/model-catalog',
+        body: undefined,
+      },
+      {
+        method: 'get',
+        url: `/conversations/${conversationId}`,
+        body: undefined,
+      },
+      {
         method: 'post',
         url: '/conversations',
-        body: { clientRequestId, prompt: 'Primer prompt' },
+        body: { clientRequestId, prompt: 'Primer prompt', deploymentIds },
       },
       {
         method: 'get',
@@ -92,12 +126,12 @@ describe('conversations API contract', () => {
       },
       {
         method: 'post',
-        url: `/conversations/${conversationId}/turns/${turnId}/responses/openai/retry`,
+        url: `/conversations/${conversationId}/turns/${turnId}/responses/base-1/retry`,
         body: undefined,
       },
       {
         method: 'post',
-        url: `/conversations/${conversationId}/turns/${turnId}/responses/google/continue-without`,
+        url: `/conversations/${conversationId}/turns/${turnId}/responses/base-2/continue-without`,
         body: undefined,
       },
     ]);
@@ -130,7 +164,7 @@ describe('conversations API contract', () => {
     expect(JSON.stringify(failure)).not.toMatch(/responses|schema|ZodError/i);
   });
 
-  it('exposes only the validated safe API error returned by the server', async () => {
+  it('falls back to one safe error when the server error payload is not strictly public', async () => {
     const apiError = {
       code: 'CONVERSATION_BUSY',
       message: 'La conversación está procesando otro turno',
@@ -149,12 +183,16 @@ describe('conversations API contract', () => {
 
     let failure: unknown;
     try {
-      await retryResponse(client, conversationId, turnId, 'openai');
+      await retryResponse(client, conversationId, turnId, 'base-1');
     } catch (error) {
       failure = error;
     }
 
-    expect(failure).toMatchObject(apiError);
+    expect(failure).toEqual({
+      code: 'INTERNAL_ERROR',
+      message: 'No se pudo completar la solicitud',
+      requestId: 'unavailable',
+    });
     expect(JSON.stringify(failure)).not.toContain('database-password-must-not-leak');
   });
 });

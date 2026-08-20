@@ -1,10 +1,16 @@
 import {
   RESPONSE_SLOTS,
+  type ConversationDeploymentSnapshot,
+  type ConversationDeploymentSnapshotTuple,
+  type ConversationDeploymentSummary,
+  type ConversationDetail,
   type ConversationSummary,
   type ContextWindowMetadata,
   type IsoDateTime,
   type ModelResponse,
   type ModelResponseMetadata,
+  type Modality,
+  type ProviderId,
   type ResponseRole,
   type ResponseSlot,
   type ResponseStatus,
@@ -53,6 +59,19 @@ export interface ModelResponseRow {
   completed_at: Timestamp | null;
   created_at: Timestamp;
   updated_at: Timestamp;
+  [column: string]: unknown;
+}
+
+export interface ConversationDeploymentRow {
+  slot: ResponseSlot;
+  deployment_id: string;
+  provider_id: ProviderId;
+  model_id: string;
+  display_name: string;
+  context_limit_tokens: number;
+  max_output_tokens: number;
+  input_modalities: Modality[];
+  output_modalities: Modality[];
   [column: string]: unknown;
 }
 
@@ -129,10 +148,10 @@ function orderResponses(responses: readonly ModelResponse[]): TurnResponses {
   }
 
   return [
-    requireResponse(bySlot, 'openai'),
-    requireResponse(bySlot, 'google'),
-    requireResponse(bySlot, 'minimax'),
-    requireResponse(bySlot, 'qwen'),
+    requireResponse(bySlot, 'base-1'),
+    requireResponse(bySlot, 'base-2'),
+    requireResponse(bySlot, 'base-3'),
+    requireResponse(bySlot, 'consolidator'),
   ];
 }
 
@@ -144,6 +163,71 @@ export function mapConversationRow(row: ConversationRow): ConversationSummary {
     createdAt: toIsoDateTime(row.created_at),
     updatedAt: toIsoDateTime(row.updated_at),
   };
+}
+
+export function mapConversationDeploymentRow(
+  row: ConversationDeploymentRow,
+): ConversationDeploymentSnapshot {
+  return {
+    slot: row.slot,
+    deploymentId: row.deployment_id,
+    providerId: row.provider_id,
+    modelId: row.model_id,
+    displayName: row.display_name,
+    contextLimitTokens: row.context_limit_tokens,
+    maxOutputTokens: row.max_output_tokens,
+    inputModalities: row.input_modalities as [Modality, ...Modality[]],
+    outputModalities: row.output_modalities as [Modality, ...Modality[]],
+  };
+}
+
+function requireDeployment<Slot extends ResponseSlot>(
+  deployments: ReadonlyMap<ResponseSlot, ConversationDeploymentSnapshot>,
+  slot: Slot,
+): ConversationDeploymentSnapshot<Slot> {
+  const deployment = deployments.get(slot);
+  if (!deployment) throw new Error(`Missing conversation deployment slot: ${slot}`);
+  return deployment as ConversationDeploymentSnapshot<Slot>;
+}
+
+export function orderDeploymentSnapshots(
+  deployments: readonly ConversationDeploymentSnapshot[],
+): ConversationDeploymentSnapshotTuple {
+  if (deployments.length !== RESPONSE_SLOTS.length) {
+    throw new Error(`Expected exactly ${RESPONSE_SLOTS.length} conversation deployments`);
+  }
+  const bySlot = new Map(deployments.map(deployment => [deployment.slot, deployment]));
+  if (bySlot.size !== RESPONSE_SLOTS.length) {
+    throw new Error('Conversation deployment slots must be unique');
+  }
+  return [
+    requireDeployment(bySlot, 'base-1'),
+    requireDeployment(bySlot, 'base-2'),
+    requireDeployment(bySlot, 'base-3'),
+    requireDeployment(bySlot, 'consolidator'),
+  ];
+}
+
+export function mapConversationDetail(
+  row: ConversationRow,
+  deployments: ConversationDeploymentSnapshotTuple,
+): ConversationDetail {
+  return {
+    ...mapConversationRow(row),
+    deployments: [
+      toDeploymentSummary(deployments[0]),
+      toDeploymentSummary(deployments[1]),
+      toDeploymentSummary(deployments[2]),
+      toDeploymentSummary(deployments[3]),
+    ],
+  };
+}
+
+function toDeploymentSummary<Slot extends ResponseSlot>(
+  deployment: ConversationDeploymentSnapshot<Slot>,
+): ConversationDeploymentSummary<Slot> {
+  const { slot, deploymentId, providerId, modelId, displayName } = deployment;
+  return { slot, deploymentId, providerId, modelId, displayName };
 }
 
 export function mapModelResponseRow(row: ModelResponseRow): ModelResponse {

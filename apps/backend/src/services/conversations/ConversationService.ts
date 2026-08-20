@@ -1,7 +1,11 @@
 import type { ConversationRepository } from '../../infrastructure/postgres/repositories/conversationRepository.js';
 import type {
+  ConversationDeploymentSnapshot,
+  ConversationDeploymentSnapshotTuple,
+  ConversationDeploymentSummary,
   ConversationDetail,
   ConversationPage,
+  ConversationSummary,
   ConversationTurnResponse,
   CreateConversationRequest,
   CreateTurnRequest,
@@ -15,10 +19,16 @@ import type {
   TurnRepository,
 } from '../../infrastructure/postgres/repositories/turnRepository.js';
 import type { TurnEventSnapshot } from '../../types/sse.js';
+import type { ModelCatalogService } from '../llm/ModelCatalogService.js';
 import { logger } from '../../utils/logger.js';
 import { truncateTitleGraphemes } from '../../utils/titleGraphemes.js';
 import { ConversationError } from './conversationErrors.js';
 import type { TurnOrchestrator } from './TurnOrchestrator.js';
+
+interface CommittedTurn {
+  response: ConversationTurnResponse;
+  deployments: ConversationDeploymentSnapshotTuple;
+}
 
 export class ConversationService {
   private readonly activeExecutions = new Set<Promise<void>>();
@@ -28,26 +38,40 @@ export class ConversationService {
       conversationRepository: ConversationRepository;
       turnRepository: TurnRepository;
       orchestrator: TurnOrchestrator;
+      modelCatalogService?: ModelCatalogService;
       sidebarPageSize?: number;
     },
   ) {}
 
   async createConversation(input: CreateConversationRequest): Promise<ConversationTurnResponse> {
     const prompt = input.prompt.trim();
+    if (!input.deploymentIds) {
+      throw new ConversationError(422, 'DEPLOYMENT_UNAVAILABLE', 'A deployment selection is required.');
+    }
+    const catalog = this.dependencies.modelCatalogService;
+    if (!catalog) throw new Error('Model catalog service is unavailable');
+    const resolution = catalog.resolveExplicitAssignment(input.deploymentIds);
+    if (resolution.kind === 'unavailable') {
+      throw new ConversationError(
+        422,
+        'DEPLOYMENT_UNAVAILABLE',
+        'One or more selected deployments are unavailable.',
+      );
+    }
     const created = await this.dependencies.conversationRepository.createConversation({
       clientRequestId: input.clientRequestId,
       prompt,
       title: truncateTitleGraphemes(prompt),
-      responses: this.dependencies.orchestrator.responseDefinitions,
+      deployments: resolution.deployments,
     });
     this.assertCreated(created);
-    const snapshot = await this.requireSnapshot(created.conversationId, created.turnId);
+    const committed = await this.requireCommittedTurn(created.conversationId, created.turnId);
     if (created.kind === 'created') {
-      this.launch(snapshot, false);
+      this.launch(committed, false);
     } else {
-      this.logReplay(snapshot);
+      this.logReplay(committed.response);
     }
-    return snapshot;
+    return committed.response;
   }
 
   async createTurn(
@@ -74,10 +98,10 @@ export class ConversationService {
         throw new ConversationError(409, 'CLIENT_REQUEST_ID_CONFLICT', 'The request ID belongs to a different prompt.');
       case 'created':
       case 'replay': {
-        const snapshot = await this.requireSnapshot(created.conversationId, created.turnId);
-        if (created.kind === 'created') this.launch(snapshot, false);
-        else this.logReplay(snapshot);
-        return snapshot;
+        const committed = await this.requireCommittedTurn(created.conversationId, created.turnId);
+        if (created.kind === 'created') this.launch(committed, false);
+        else this.logReplay(committed.response);
+        return committed.response;
       }
     }
   }
@@ -105,7 +129,7 @@ export class ConversationService {
   async renameConversation(
     conversationId: string,
     input: RenameConversationRequest,
-  ): Promise<ConversationDetail> {
+  ): Promise<ConversationSummary> {
     const conversation = await this.dependencies.conversationRepository.renameConversation(
       conversationId,
       input.title,
@@ -133,7 +157,7 @@ export class ConversationService {
   }
 
   async getTurn(conversationId: string, turnId: string): Promise<TurnSnapshotResponse> {
-    const snapshot = await this.requireSnapshot(conversationId, turnId);
+    const snapshot = (await this.requireCommittedTurn(conversationId, turnId)).response;
     return {
       conversation: {
         id: snapshot.conversation.id,
@@ -145,7 +169,7 @@ export class ConversationService {
 
   async getTurnSnapshot(conversationId: string, turnId: string): Promise<TurnEventSnapshot> {
     const lastEventSequence = this.dependencies.orchestrator.getLastEventSequence(turnId);
-    const snapshot = await this.requireSnapshot(conversationId, turnId);
+    const snapshot = (await this.requireCommittedTurn(conversationId, turnId)).response;
     return {
       conversationId: snapshot.conversation.id,
       turnId: snapshot.turn.id,
@@ -181,10 +205,12 @@ export class ConversationService {
         throw new ConversationError(409, 'RESPONSE_RETRY_IN_PROGRESS', 'The response retry is already in progress.');
       case 'not_retryable':
         throw new ConversationError(409, 'RESPONSE_NOT_RETRYABLE', 'The response is not retryable.');
-      case 'accepted':
-        this.dependencies.orchestrator.publishSnapshot(prepared.snapshot, slot);
-        this.launch(prepared.snapshot, true, slot);
-        return prepared.snapshot;
+      case 'accepted': {
+        const committed = await this.completeSnapshot(prepared.snapshot);
+        this.dependencies.orchestrator.publishSnapshot(committed.response, slot);
+        this.launch(committed, true, slot);
+        return committed.response;
+      }
     }
   }
 
@@ -205,19 +231,43 @@ export class ConversationService {
         throw new ConversationError(404, 'RESPONSE_NOT_FOUND', 'Response not found.');
       case 'not_allowed':
         throw new ConversationError(409, 'CONTINUE_WITHOUT_NOT_ALLOWED', 'Continue-without is not allowed.');
-      case 'accepted':
-        this.dependencies.orchestrator.publishSnapshot(continued.snapshot, slot);
-        return continued.snapshot;
+      case 'accepted': {
+        const committed = await this.completeSnapshot(continued.snapshot);
+        this.dependencies.orchestrator.publishSnapshot(committed.response, slot);
+        return committed.response;
+      }
     }
   }
 
-  private async requireSnapshot(
+  private async requireCommittedTurn(
     conversationId: string,
     turnId: string,
-  ): Promise<StoredTurnSnapshot> {
+  ): Promise<CommittedTurn> {
     const snapshot = await this.dependencies.turnRepository.getTurnSnapshot(conversationId, turnId);
     if (!snapshot) throw new ConversationError(404, 'TURN_NOT_FOUND', 'Turn not found.');
-    return snapshot;
+    return this.completeSnapshot(snapshot);
+  }
+
+  private async completeSnapshot(snapshot: StoredTurnSnapshot): Promise<CommittedTurn> {
+    const deployments = await this.dependencies.conversationRepository.getConversationDeployments(
+      snapshot.conversation.id,
+    );
+    if (!deployments) throw new Error('Conversation deployment snapshot is unavailable');
+    return {
+      deployments,
+      response: {
+        conversation: {
+          ...snapshot.conversation,
+          deployments: [
+            toPublicDeployment(deployments[0]),
+            toPublicDeployment(deployments[1]),
+            toPublicDeployment(deployments[2]),
+            toPublicDeployment(deployments[3]),
+          ],
+        },
+        turn: snapshot.turn,
+      },
+    };
   }
 
   private assertCreated(
@@ -228,7 +278,7 @@ export class ConversationService {
     }
   }
 
-  private logReplay(snapshot: StoredTurnSnapshot): void {
+  private logReplay(snapshot: ConversationTurnResponse): void {
     logger.info({
       message: 'Existing turn replayed',
       operation: 'turn_replayed',
@@ -239,12 +289,13 @@ export class ConversationService {
     });
   }
 
-  private launch(snapshot: StoredTurnSnapshot, retry: boolean, slot?: ResponseSlot): void {
+  private launch(snapshot: CommittedTurn, retry: boolean, slot?: ResponseSlot): void {
     const input = {
-      conversationId: snapshot.conversation.id,
-      turnId: snapshot.turn.id,
-      prompt: snapshot.turn.prompt,
-      currentOrdinal: snapshot.turn.ordinal,
+      conversationId: snapshot.response.conversation.id,
+      turnId: snapshot.response.turn.id,
+      prompt: snapshot.response.turn.prompt,
+      currentOrdinal: snapshot.response.turn.ordinal,
+      deployments: snapshot.deployments,
       signal: new AbortController().signal,
     };
     const execution = retry && slot
@@ -252,7 +303,7 @@ export class ConversationService {
       : this.dependencies.orchestrator.executeTurn(input);
     let tracked!: Promise<void>;
     tracked = execution
-      .catch(() => this.reconcileRejectedExecution(snapshot))
+      .catch(() => this.reconcileRejectedExecution(snapshot.response))
       .finally(() => this.activeExecutions.delete(tracked));
     this.activeExecutions.add(tracked);
   }
@@ -261,7 +312,7 @@ export class ConversationService {
     await Promise.allSettled([...this.activeExecutions]);
   }
 
-  private async reconcileRejectedExecution(snapshot: StoredTurnSnapshot): Promise<void> {
+  private async reconcileRejectedExecution(snapshot: ConversationTurnResponse): Promise<void> {
     logger.error({
       message: 'Background turn execution failed unexpectedly',
       operation: 'turn_execution_rejected',
@@ -286,4 +337,11 @@ export class ConversationService {
       });
     }
   }
+}
+
+function toPublicDeployment<Slot extends ConversationDeploymentSnapshot['slot']>(
+  deployment: ConversationDeploymentSnapshot<Slot>,
+): ConversationDeploymentSummary<Slot> {
+  const { slot, deploymentId, providerId, modelId, displayName } = deployment;
+  return { slot, deploymentId, providerId, modelId, displayName };
 }

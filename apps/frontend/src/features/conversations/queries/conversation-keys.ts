@@ -1,5 +1,6 @@
 export const conversationKeys = {
   all: ['conversations'] as const,
+  catalog: ['model-catalog'] as const,
   lists: ['conversations', 'list'] as const,
   list: (cursor?: string | null) => ['conversations', 'list', { cursor }] as const,
   detail: (conversationId: string) => ['conversations', 'detail', conversationId] as const,

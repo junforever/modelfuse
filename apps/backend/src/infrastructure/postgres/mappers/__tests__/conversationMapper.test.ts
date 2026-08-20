@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  mapConversationDeploymentRow,
+  mapConversationDetail,
   mapConversationRow,
   mapModelResponseRow,
   mapTurnRow,
+  orderDeploymentSnapshots,
 } from '../conversationMapper.js';
 
 describe('conversationMapper', () => {
@@ -20,12 +23,12 @@ describe('conversationMapper', () => {
       created_at: createdAt,
       updated_at: updatedAt,
     };
-    const responseRow = (slot: 'openai' | 'google' | 'minimax' | 'qwen') => ({
+    const responseRow = (slot: 'base-1' | 'base-2' | 'base-3' | 'consolidator') => ({
       id: `${slot}-response-id`,
       turn_id: 'turn-id',
       slot,
-      role: slot === 'qwen' ? ('consolidator' as const) : ('base' as const),
-      provider: slot,
+      role: slot === 'consolidator' ? ('consolidator' as const) : ('base' as const),
+      provider: `${slot}-provider`,
       model: `${slot}-model`,
       status: 'completed' as const,
       content: `Respuesta ${slot}`,
@@ -55,7 +58,7 @@ describe('conversationMapper', () => {
       provider_request_body: { secret: 'must-not-leak' },
       raw_provider_response: { secret: 'must-not-leak' },
     });
-    const responses = (['google', 'qwen', 'openai', 'minimax'] as const).map((slot) =>
+    const responses = (['base-2', 'consolidator', 'base-1', 'base-3'] as const).map((slot) =>
       mapModelResponseRow(responseRow(slot)),
     );
 
@@ -86,18 +89,18 @@ describe('conversationMapper', () => {
       updatedAt: '2026-08-06T12:00:01.000Z',
     });
     expect(turn.responses.map(({ slot }) => slot)).toEqual([
-      'openai',
-      'google',
-      'minimax',
-      'qwen',
+      'base-1',
+      'base-2',
+      'base-3',
+      'consolidator',
     ]);
     expect(turn.responses[0]).toEqual({
-      slot: 'openai',
+      slot: 'base-1',
       role: 'base',
-      provider: 'openai',
-      model: 'openai-model',
+      provider: 'base-1-provider',
+      model: 'base-1-model',
       status: 'completed',
-      content: 'Respuesta openai',
+      content: 'Respuesta base-1',
       error: null,
       recoverable: false,
       continuedWithout: false,
@@ -123,5 +126,62 @@ describe('conversationMapper', () => {
     expect(JSON.stringify({ conversation, turn })).not.toMatch(
       /turn_id|conversation_id|api_key|provider_request_body|raw_provider_response|measuredTokens|contextLimitTokens|thresholdTokens|must-not-leak/,
     );
+  });
+
+  it('returns a safe public deployment summary in canonical slot order', () => {
+    const createdAt = new Date('2026-08-20T12:00:00.000Z');
+    const rows = (['consolidator', 'base-2', 'base-1', 'base-3'] as const).map((slot, index) => ({
+      slot,
+      deployment_id: `${slot}-deployment`,
+      provider_id: index % 2 === 0 ? ('openrouter' as const) : ('openai' as const),
+      model_id: `${slot}-model`,
+      display_name: `${slot} display`,
+      context_limit_tokens: 10_000 + index,
+      max_output_tokens: 1_000 + index,
+      input_modalities: ['text' as const],
+      output_modalities: ['text' as const],
+      credential_env: 'SECRET_MUST_NOT_LEAK',
+      raw_provider_config: { apiKey: 'SECRET_MUST_NOT_LEAK' },
+    }));
+    const deployments = orderDeploymentSnapshots(rows.map(mapConversationDeploymentRow));
+    const detail = mapConversationDetail({
+      id: 'conversation-id',
+      title: 'Conversation',
+      has_work_in_progress: false,
+      created_at: createdAt,
+      updated_at: createdAt,
+    }, deployments);
+
+    expect(detail.deployments).toEqual([
+      {
+        slot: 'base-1',
+        deploymentId: 'base-1-deployment',
+        providerId: 'openrouter',
+        modelId: 'base-1-model',
+        displayName: 'base-1 display',
+      },
+      {
+        slot: 'base-2',
+        deploymentId: 'base-2-deployment',
+        providerId: 'openai',
+        modelId: 'base-2-model',
+        displayName: 'base-2 display',
+      },
+      {
+        slot: 'base-3',
+        deploymentId: 'base-3-deployment',
+        providerId: 'openai',
+        modelId: 'base-3-model',
+        displayName: 'base-3 display',
+      },
+      {
+        slot: 'consolidator',
+        deploymentId: 'consolidator-deployment',
+        providerId: 'openrouter',
+        modelId: 'consolidator-model',
+        displayName: 'consolidator display',
+      },
+    ]);
+    expect(JSON.stringify(detail)).not.toMatch(/contextLimit|maxOutput|modalities|credential|apiKey|SECRET/);
   });
 });

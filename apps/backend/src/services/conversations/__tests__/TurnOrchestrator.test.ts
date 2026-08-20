@@ -1,241 +1,141 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { LlmProvider, LlmResult } from '../../../types/llm.js';
-import type { ModelResponse, ResponseSlot, ResponseStatus } from '../../../types/conversations.js';
-import type { StoredTurnSnapshot } from '../../../infrastructure/postgres/repositories/turnRepository.js';
+import type {
+  ConversationDeploymentSnapshotTuple,
+  ProviderId,
+  ResponseSlot,
+} from '../../../types/conversations.js';
+import type { LlmProvider, LlmResult, LlmRequest } from '../../../types/llm.js';
 import { TurnOrchestrator } from '../TurnOrchestrator.js';
-import type { UnsequencedTurnEvent } from '../turnEventPublisher.js';
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-const resultFor = (slot: ResponseSlot, content: string): LlmResult => ({
-  content,
-  provider: `${slot}-provider`,
-  model: `${slot}-model`,
-  startedAt: '2026-08-07T10:00:00.000Z',
-  completedAt: '2026-08-07T10:00:01.000Z',
-});
 
 describe('TurnOrchestrator', () => {
-  it('starts all bases in parallel, persists attempt one, and consolidates only available results', async () => {
+  it('runs the three canonical bases concurrently, dispatches by providerId once, then consolidates', async () => {
     const pending = {
-      openai: deferred<LlmResult>(),
-      google: deferred<LlmResult>(),
-      minimax: deferred<LlmResult>(),
+      'base-1': deferred<LlmResult>(),
+      'base-2': deferred<LlmResult>(),
+      'base-3': deferred<LlmResult>(),
     };
     const generate = {
-      openai: vi.fn<LlmProvider['generate']>(() => pending.openai.promise),
-      google: vi.fn<LlmProvider['generate']>(() => pending.google.promise),
-      minimax: vi.fn<LlmProvider['generate']>(() => pending.minimax.promise),
-      qwen: vi.fn<LlmProvider['generate']>(async () =>
-        resultFor('qwen', 'Consolidated answer'),
-      ),
+      openrouter: vi.fn<LlmProvider['generate']>(() => pending['base-1'].promise),
+      qwen: vi.fn<LlmProvider['generate']>(() => pending['base-2'].promise),
+      openai: vi.fn<LlmProvider['generate']>(() => pending['base-3'].promise),
+      google: vi.fn<LlmProvider['generate']>(async request =>
+        resultFor(request, 'Consolidated answer')),
     };
-    const provider = (slot: ResponseSlot): LlmProvider => ({
-      slot,
-      provider: `${slot}-provider`,
-      model: `${slot}-model`,
-      context: {
-        limitTokens: 10_000,
-        measureInputTokens: () => ({ kind: 'exact', tokens: 1 }),
-      },
-      generate: generate[slot],
-    });
     const providerRegistry = {
-      openai: provider('openai'),
-      google: provider('google'),
-      minimax: provider('minimax'),
-      qwen: provider('qwen'),
+      openrouter: provider('openrouter', generate.openrouter),
+      qwen: provider('qwen', generate.qwen),
+      openai: provider('openai', generate.openai),
+      google: provider('google', generate.google),
     };
     const turnRepository = {
       persistResponseAttempt: vi.fn(async () => undefined),
       recalculateTurn: vi.fn(async () => undefined),
     };
-    const publisher = { publish: vi.fn() };
+    const deployments = deploymentSnapshots();
     const orchestrator = new TurnOrchestrator({
       providerRegistry,
       turnRepository,
-      publisher,
+      publisher: { publish: vi.fn() },
     });
 
     const execution = orchestrator.executeTurn({
       conversationId: 'conversation-1',
       turnId: 'turn-1',
       prompt: 'Compare this',
+      deployments,
       signal: new AbortController().signal,
     });
 
     await vi.waitFor(() => {
+      expect(generate.openrouter).toHaveBeenCalledOnce();
+      expect(generate.qwen).toHaveBeenCalledOnce();
       expect(generate.openai).toHaveBeenCalledOnce();
-      expect(generate.google).toHaveBeenCalledOnce();
-      expect(generate.minimax).toHaveBeenCalledOnce();
     });
-    expect(generate.qwen).not.toHaveBeenCalled();
+    expect(generate.google).not.toHaveBeenCalled();
 
-    pending.openai.resolve(resultFor('openai', 'OpenAI available'));
-    pending.google.reject({
-      code: 'provider_transient_error',
-      safeMessage: 'Google unavailable',
-      provider: 'google-provider',
-      model: 'google-model',
-      recoverable: true,
-    });
-    pending.minimax.resolve(resultFor('minimax', 'MiniMax available'));
+    pending['base-1'].resolve(resultFor(generate.openrouter.mock.calls[0]![0], 'Base one'));
+    pending['base-2'].resolve(resultFor(generate.qwen.mock.calls[0]![0], 'Base two'));
+    pending['base-3'].resolve(resultFor(generate.openai.mock.calls[0]![0], 'Base three'));
     await execution;
 
-    expect(turnRepository.persistResponseAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ turnId: 'turn-1', slot: 'openai', attemptNo: 1, status: 'completed' }),
-    );
-    expect(turnRepository.persistResponseAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ turnId: 'turn-1', slot: 'google', attemptNo: 1, status: 'failed' }),
-    );
-    expect(turnRepository.persistResponseAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ turnId: 'turn-1', slot: 'minimax', attemptNo: 1, status: 'completed' }),
-    );
-    expect(turnRepository.persistResponseAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ turnId: 'turn-1', slot: 'qwen', attemptNo: 1, status: 'completed' }),
-    );
-
-    const qwenRequest = generate.qwen.mock.calls[0]?.[0];
-    const qwenContext = qwenRequest?.messages.map(({ content }) => content).join('\n');
-    expect(qwenContext).toContain('OpenAI available');
-    expect(qwenContext).toContain('MiniMax available');
-    expect(qwenContext).not.toContain('Google unavailable');
-  });
-
-  it('persists running and terminal states before publishing them, including provider failure during consolidation', async () => {
-    const trace: string[] = [];
-    const persisted = new Map<ResponseSlot, ResponseStatus>([
-      ['openai', 'pending'],
-      ['google', 'pending'],
-      ['minimax', 'pending'],
-      ['qwen', 'pending'],
+    expect(generate.google).toHaveBeenCalledOnce();
+    const requests = [
+      generate.openrouter.mock.calls[0]![0],
+      generate.qwen.mock.calls[0]![0],
+      generate.openai.mock.calls[0]![0],
+      generate.google.mock.calls[0]![0],
+    ];
+    expect(requests.map(({ slot, deployment }) => [slot, deployment.providerId])).toEqual([
+      ['base-1', 'openrouter'],
+      ['base-2', 'qwen'],
+      ['base-3', 'openai'],
+      ['consolidator', 'google'],
     ]);
-    const generate = {
-      openai: vi.fn<LlmProvider['generate']>(async () => resultFor('openai', 'OpenAI answer')),
-      google: vi.fn<LlmProvider['generate']>(async () => {
-        throw {
-          code: 'timeout',
-          safeMessage: 'Google timed out',
-        };
-      }),
-      minimax: vi.fn<LlmProvider['generate']>(async () => resultFor('minimax', 'MiniMax answer')),
-      qwen: vi.fn<LlmProvider['generate']>(async () => {
-        throw {
-          code: 'provider_transient_error',
-          safeMessage: 'Qwen unavailable',
-        };
-      }),
-    };
-    const provider = (slot: ResponseSlot): LlmProvider => ({
-      slot,
-      provider: `${slot}-provider`,
-      model: `${slot}-model`,
-      context: {
-        limitTokens: 10_000,
-        measureInputTokens: () => ({ kind: 'exact', tokens: 1 }),
-      },
-      generate: generate[slot],
-    });
-    const providerRegistry = {
-      openai: provider('openai'),
-      google: provider('google'),
-      minimax: provider('minimax'),
-      qwen: provider('qwen'),
-    };
-    const turnRepository = {
-      startResponseAttempt: vi.fn(async ({ slot }: { slot: ResponseSlot }) => {
-        persisted.set(slot, 'running');
-        trace.push(`persist:${slot}:running`);
-        return { attemptNo: 1, snapshot: snapshotFor(slot, 'running') };
-      }),
-      persistResponseAttempt: vi.fn(async (input: { slot: ResponseSlot; status: 'completed' | 'failed' }) => {
-        persisted.set(input.slot, input.status);
-        trace.push(`persist:${input.slot}:${input.status}`);
-        return snapshotFor(input.slot, input.status);
-      }),
-    };
-    const publisher = {
-      publish: vi.fn((event: UnsequencedTurnEvent) => {
-        if (event.event === 'slot_update') {
-          const { slot, status } = event.data.response;
-          expect(persisted.get(slot)).toBe(status);
-          trace.push(`publish:${slot}:${status}`);
-        } else {
-          trace.push(`publish:${event.event}`);
-        }
-      }),
-    };
-    const orchestrator = new TurnOrchestrator({ providerRegistry, turnRepository, publisher });
-
-    await orchestrator.executeTurn({
-      conversationId: 'conversation-1',
-      turnId: 'turn-1',
-      prompt: 'Compare this',
-      signal: new AbortController().signal,
-    });
-
-    expect(trace.indexOf('persist:openai:completed')).toBeLessThan(trace.indexOf('publish:openai:completed'));
-    expect(trace.indexOf('persist:google:failed')).toBeLessThan(trace.indexOf('publish:google:failed'));
-    expect(trace.indexOf('persist:minimax:completed')).toBeLessThan(trace.indexOf('publish:minimax:completed'));
-    expect(trace.indexOf('persist:qwen:failed')).toBeLessThan(trace.indexOf('publish:qwen:failed'));
-    expect(generate.qwen).toHaveBeenCalledOnce();
-    expect(turnRepository.persistResponseAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ slot: 'qwen', status: 'failed', errorCode: 'provider_transient_error' }),
-    );
+    expect(requests[3]?.messages.map(({ content }) => content)).toEqual([
+      'Consolidate the available model answers into one final answer.',
+      'base-1:\nBase one',
+      'base-2:\nBase two',
+      'base-3:\nBase three',
+      'Compare this',
+    ]);
+    expect(turnRepository.persistResponseAttempt).toHaveBeenCalledTimes(4);
+    for (const slot of ['base-1', 'base-2', 'base-3', 'consolidator'] as const) {
+      expect(turnRepository.persistResponseAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({ slot, attemptNo: 1, status: 'completed' }),
+      );
+    }
   });
 });
 
-function snapshotFor(slot: ResponseSlot, status: 'running' | 'completed' | 'failed'): StoredTurnSnapshot {
-  const responseFor = <Slot extends ResponseSlot>(responseSlot: Slot): ModelResponse<Slot> => ({
-    slot: responseSlot,
-    role: (responseSlot === 'qwen' ? 'consolidator' : 'base') as ModelResponse<Slot>['role'],
-    provider: `${responseSlot}-provider`,
-    model: `${responseSlot}-model`,
-    status,
-    content: status === 'completed' ? `${responseSlot} answer` : null,
-    error: status === 'failed' ? { code: 'provider_error', message: 'provider failed' } : null,
-    recoverable: status === 'failed',
-    continuedWithout: false,
-    isStale: false,
-    attemptNo: 1,
-    metadata: null,
-    startedAt: '2026-08-07T10:00:00.000Z',
-    completedAt: status === 'running' ? null : '2026-08-07T10:00:01.000Z',
-    createdAt: '2026-08-07T10:00:00.000Z',
-    updatedAt: '2026-08-07T10:00:01.000Z',
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(resolvePromise => {
+    resolve = resolvePromise;
   });
+  return { promise, resolve };
+}
 
+function provider(
+  providerId: ProviderId,
+  generate: LlmProvider['generate'],
+): LlmProvider {
   return {
-    conversation: {
-      id: 'conversation-1',
-      title: 'Test',
-      hasWorkInProgress: status === 'running',
-      createdAt: '2026-08-07T10:00:00.000Z',
-      updatedAt: '2026-08-07T10:00:01.000Z',
-    },
-    turn: {
-      id: 'turn-1',
-      clientRequestId: 'request-1',
-      ordinal: 1,
-      prompt: 'Compare this',
-      status: status === 'failed' ? 'failed' : status === 'completed' ? 'completed' : 'running',
-      createdAt: '2026-08-07T10:00:00.000Z',
-      updatedAt: '2026-08-07T10:00:01.000Z',
-      responses: [
-        responseFor('openai'),
-        responseFor('google'),
-        responseFor('minimax'),
-        responseFor('qwen'),
-      ],
-    },
+    providerId,
+    measureInputTokens: vi.fn(async () => 1),
+    generate,
   };
+}
+
+function resultFor(request: LlmRequest, content: string): LlmResult {
+  return {
+    content,
+    provider: request.deployment.providerId,
+    model: request.deployment.modelId,
+    startedAt: '2026-08-20T10:00:00.000Z',
+    completedAt: '2026-08-20T10:00:01.000Z',
+  };
+}
+
+function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {
+  const snapshot = <Slot extends ResponseSlot>(
+    slot: Slot,
+    providerId: ProviderId,
+  ) => ({
+    slot,
+    deploymentId: `${slot}-deployment`,
+    providerId,
+    modelId: `${slot}-model`,
+    displayName: `${slot} display`,
+    contextLimitTokens: 10_000,
+    maxOutputTokens: 1_000,
+    inputModalities: ['text'] as const,
+    outputModalities: ['text'] as const,
+  });
+  return [
+    snapshot('base-1', 'openrouter'),
+    snapshot('base-2', 'qwen'),
+    snapshot('base-3', 'openai'),
+    snapshot('consolidator', 'google'),
+  ];
 }
