@@ -1,11 +1,53 @@
-export const RESPONSE_SLOTS = ['openai', 'google', 'minimax', 'qwen'] as const;
+export const RESPONSE_SLOTS = ['base-1', 'base-2', 'base-3', 'consolidator'] as const;
+export const PROVIDER_IDS = ['openai', 'google', 'minimax', 'qwen', 'openrouter'] as const;
+export const MODALITIES = ['text', 'image', 'video', 'audio', 'pdf'] as const;
 
 export type ResponseSlot = (typeof RESPONSE_SLOTS)[number];
-export type BaseResponseSlot = Exclude<ResponseSlot, 'qwen'>;
-export type ResponseRole = 'base' | 'consolidator';
+export type BaseResponseSlot = Exclude<ResponseSlot, 'consolidator'>;
+export type ResponseRole<Slot extends ResponseSlot = ResponseSlot> =
+  Slot extends 'consolidator' ? 'consolidator' : 'base';
+export type ProviderId = (typeof PROVIDER_IDS)[number];
+export type Modality = (typeof MODALITIES)[number];
 export type ResponseStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type TurnStatus = 'pending' | 'running' | 'partial' | 'completed' | 'failed';
 export type IsoDateTime = string;
+
+export interface DeploymentCatalogItem {
+  readonly deploymentId: string;
+  readonly providerId: ProviderId;
+  readonly modelId: string;
+  readonly displayName: string;
+  readonly contextLimitTokens: number;
+  readonly maxOutputTokens: number;
+  readonly inputModalities: readonly [Modality, ...Modality[]];
+  readonly outputModalities: readonly [Modality, ...Modality[]];
+}
+
+export interface ModelCatalogResponse {
+  readonly items: readonly DeploymentCatalogItem[];
+}
+
+export interface DeploymentIds {
+  readonly 'base-1': string;
+  readonly 'base-2': string;
+  readonly 'base-3': string;
+  readonly consolidator: string;
+}
+
+export interface ConversationDeploymentSummary<Slot extends ResponseSlot = ResponseSlot> {
+  readonly slot: Slot;
+  readonly deploymentId: string;
+  readonly providerId: ProviderId;
+  readonly modelId: string;
+  readonly displayName: string;
+}
+
+export type DeploymentSummaryTuple = readonly [
+  ConversationDeploymentSummary<'base-1'>,
+  ConversationDeploymentSummary<'base-2'>,
+  ConversationDeploymentSummary<'base-3'>,
+  ConversationDeploymentSummary<'consolidator'>,
+];
 
 export interface ApiError {
   readonly code: string;
@@ -33,7 +75,7 @@ export interface ModelResponseMetadata {
 
 export interface ModelResponse<Slot extends ResponseSlot = ResponseSlot> {
   readonly slot: Slot;
-  readonly role: Slot extends 'qwen' ? 'consolidator' : 'base';
+  readonly role: ResponseRole<Slot>;
   readonly provider: string;
   readonly model: string;
   readonly status: ResponseStatus;
@@ -51,10 +93,10 @@ export interface ModelResponse<Slot extends ResponseSlot = ResponseSlot> {
 }
 
 export type TurnResponses = readonly [
-  ModelResponse<'openai'>,
-  ModelResponse<'google'>,
-  ModelResponse<'minimax'>,
-  ModelResponse<'qwen'>,
+  ModelResponse<'base-1'>,
+  ModelResponse<'base-2'>,
+  ModelResponse<'base-3'>,
+  ModelResponse<'consolidator'>,
 ];
 
 export interface ConversationSummary {
@@ -65,7 +107,9 @@ export interface ConversationSummary {
   readonly updatedAt: IsoDateTime;
 }
 
-export type ConversationDetail = ConversationSummary;
+export interface ConversationDetail extends ConversationSummary {
+  readonly deployments: DeploymentSummaryTuple;
+}
 
 export interface Turn {
   readonly id: string;
@@ -83,14 +127,16 @@ export interface CreateTurnRequest {
   readonly prompt: string;
 }
 
-export type CreateConversationRequest = CreateTurnRequest;
+export interface CreateConversationRequest extends CreateTurnRequest {
+  readonly deploymentIds?: DeploymentIds;
+}
 
 export interface RenameConversationRequest {
   readonly title: string;
 }
 
 export interface ConversationTurnResponse {
-  readonly conversation: ConversationSummary;
+  readonly conversation: ConversationDetail;
   readonly turn: Turn;
 }
 

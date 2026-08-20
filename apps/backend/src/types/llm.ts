@@ -1,51 +1,46 @@
-import type { ResponseSlot } from './conversations.js';
+import type {
+  ConversationDeploymentSnapshot,
+  ProviderId,
+  ResponseSlot,
+} from './conversations.js';
 
 export interface LlmMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  readonly role: 'system' | 'user' | 'assistant';
+  readonly content: string;
 }
 
 export interface LlmRequest {
-  operationId: string;
-  slot: ResponseSlot;
-  messages: LlmMessage[];
-  signal: AbortSignal;
+  readonly slot: ResponseSlot;
+  readonly deployment: ConversationDeploymentSnapshot;
+  readonly messages: readonly LlmMessage[];
+  readonly signal?: AbortSignal;
 }
 
 export interface LlmMetrics {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  cost?: number;
-  currency?: string;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly totalTokens?: number;
 }
 
 export interface LlmResult {
-  content: string;
-  provider: string;
-  model: string;
-  startedAt: string;
-  completedAt: string;
-  metrics?: LlmMetrics;
-  metadata?: Record<string, string | number | boolean | null>;
-}
-
-export type InputTokenMeasurement =
-  | { kind: 'exact'; tokens: number }
-  | { kind: 'upper_bound'; tokens: number; basis: string };
-
-export interface LlmContextCapabilities {
-  limitTokens: number;
-  measureInputTokens(messages: LlmMessage[]): InputTokenMeasurement;
+  readonly content: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly startedAt: string;
+  readonly completedAt: string;
+  readonly metrics?: LlmMetrics;
 }
 
 export interface LlmProvider {
-  readonly slot: ResponseSlot;
-  readonly provider: string;
-  readonly model: string;
-  readonly context: LlmContextCapabilities;
+  readonly providerId: ProviderId;
+  measureInputTokens(
+    deployment: ConversationDeploymentSnapshot,
+    messages: readonly LlmMessage[],
+  ): Promise<number>;
   generate(request: LlmRequest): Promise<LlmResult>;
 }
+
+export type ProviderRegistry = Readonly<Partial<Record<ProviderId, LlmProvider>>>;
 
 export type LlmErrorCode =
   | 'authentication'
@@ -67,9 +62,7 @@ export interface LlmProviderError {
 }
 
 export interface LlmProviderConfig {
-  apiKey: string;
-  model: string;
-  endpoint: string;
-  timeoutMs: number;
-  contextLimitTokens: number;
+  readonly apiKey: string;
+  readonly endpoint: string;
+  readonly timeoutMs: number;
 }
