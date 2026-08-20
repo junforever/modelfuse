@@ -6,5 +6,6 @@
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
     <include file="001-create-conversations-and-turns.sql" relativeToChangelogFile="true"/>
+    <include file="002-create-conversation-deployments.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

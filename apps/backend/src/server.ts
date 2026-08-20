@@ -3,11 +3,14 @@ import type { Pool } from 'pg';
 
 import { createApp } from './app.js';
 import { parseEnv, type Environment } from './infrastructure/config/env.js';
+import { DEPLOYMENT_CATALOG } from './infrastructure/llm/deploymentCatalog.js';
+import { createProviderRegistry } from './infrastructure/llm/providerRegistry.js';
 import type { ApiDependencies } from './routes/apiRouter.js';
 import type { ResponseSlot } from './types/conversations.js';
 import type { LlmProvider } from './types/llm.js';
 import type { ConversationService } from './services/conversations/ConversationService.js';
 import { recoverInterruptedTurns } from './services/conversations/recoverInterruptedTurns.js';
+import { ModelCatalogService } from './services/llm/ModelCatalogService.js';
 
 interface ProductionResources {
   dependencies: ApiDependencies;
@@ -65,10 +68,9 @@ function waitUntilListening(server: Server): Promise<void> {
 }
 
 async function createProductionDependencies(environment: Environment): Promise<ProductionResources> {
-  const [poolModule, registryModule, repositoryModule, contextRepositoryModule, turnRepositoryModule, publisherModule, contextBuilderModule, orchestratorModule, serviceModule] =
+  const [poolModule, repositoryModule, contextRepositoryModule, turnRepositoryModule, publisherModule, contextBuilderModule, orchestratorModule, serviceModule] =
     await Promise.all([
       import('./infrastructure/postgres/postgresPool.js'),
-      import('./infrastructure/llm/providerRegistry.js'),
       import('./infrastructure/postgres/repositories/conversationRepository.js'),
       import('./infrastructure/postgres/repositories/contextRepository.js'),
       import('./infrastructure/postgres/repositories/turnRepository.js'),
@@ -85,17 +87,16 @@ async function createProductionDependencies(environment: Environment): Promise<P
   if (!pool) throw new Error('PostgreSQL pool is unavailable.');
 
   try {
-    const providerRegistry = (registryModule as unknown as {
-      providerRegistry?: Record<ResponseSlot, LlmProvider>;
-    }).providerRegistry;
-    if (!providerRegistry) throw new Error('LLM provider registry is unavailable.');
+    const providerRegistry = createProviderRegistry(environment);
+    const modelCatalogService = new ModelCatalogService(DEPLOYMENT_CATALOG, providerRegistry);
 
     const conversationRepository = new repositoryModule.ConversationRepository(pool);
     const contextRepository = new contextRepositoryModule.ContextRepository(pool);
     const turnRepository = new turnRepositoryModule.TurnRepository(pool);
     const turnEventPublisher = new publisherModule.TurnEventPublisher();
     const orchestrator = new orchestratorModule.TurnOrchestrator({
-      providerRegistry,
+      // T023 migrates orchestration from slot-keyed providers to this provider-id registry.
+      providerRegistry: providerRegistry as unknown as Record<ResponseSlot, LlmProvider>,
       turnRepository,
       publisher: turnEventPublisher,
       contextBuilder: new contextBuilderModule.ContextBuilder({
@@ -112,7 +113,12 @@ async function createProductionDependencies(environment: Environment): Promise<P
     });
     await recoverInterruptedTurns(pool);
     return {
-      dependencies: { conversationService, turnEventPublisher },
+      dependencies: {
+        conversationService,
+        turnEventPublisher,
+        providerRegistry,
+        modelCatalogService,
+      },
       pool,
       conversationService,
     };
