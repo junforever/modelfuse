@@ -2,7 +2,6 @@ import axios from 'axios';
 
 import { isRecoverableLlmError } from '../../../services/llm/llmErrors.js';
 import type {
-  InputTokenMeasurement,
   LlmErrorCode,
   LlmMessage,
   LlmMetrics,
@@ -23,41 +22,40 @@ interface GoogleResponse {
 }
 
 export class GoogleProvider implements LlmProvider {
-  readonly slot = 'google' as const;
-  readonly provider = 'google';
-  readonly model: string;
-  readonly context;
+  readonly providerId = 'google' as const;
 
-  constructor(private readonly config: LlmProviderConfig) {
-    this.model = config.model;
-    this.context = {
-      limitTokens: config.contextLimitTokens,
-      measureInputTokens: (messages: LlmMessage[]) => this.measure(messages),
-    };
+  constructor(private readonly config: LlmProviderConfig) {}
+
+  async measureInputTokens(
+    deployment: LlmRequest['deployment'],
+    messages: readonly LlmMessage[]
+  ): Promise<number> {
+    return new TextEncoder().encode(
+      JSON.stringify({ model: deployment.modelId, ...this.mapMessages(messages) })
+    ).length;
   }
 
   async generate(request: LlmRequest): Promise<LlmResult> {
     const startedAt = new Date().toISOString();
     let data: GoogleResponse;
-
     try {
       ({ data } = await axios.request<GoogleResponse>({
         method: 'POST',
-        url: this.config.endpoint,
+        url: `${this.config.endpoint}/v1beta/models/${encodeURIComponent(request.deployment.modelId)}:generateContent`,
         timeout: this.config.timeoutMs,
         signal: request.signal,
         params: { key: this.config.apiKey },
-        data: this.mapMessages(request.messages),
+        data: {
+          ...this.mapMessages(request.messages),
+          generationConfig: { maxOutputTokens: request.deployment.maxOutputTokens },
+        },
       }));
     } catch (error) {
-      throw this.failure(this.classify(error));
+      throw this.failure(this.classify(error), request.deployment.modelId);
     }
-
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (typeof content !== 'string' || content.trim() === '') {
-      throw this.failure('invalid_response');
-    }
-
+    if (typeof content !== 'string' || content.trim() === '')
+      throw this.failure('invalid_response', request.deployment.modelId);
     const usage = data.usageMetadata;
     const metrics: LlmMetrics | undefined = usage
       ? {
@@ -66,18 +64,17 @@ export class GoogleProvider implements LlmProvider {
           totalTokens: usage.totalTokenCount,
         }
       : undefined;
-
     return {
       content: content.trim(),
-      provider: this.provider,
-      model: this.model,
+      provider: this.providerId,
+      model: request.deployment.modelId,
       startedAt,
       completedAt: new Date().toISOString(),
       ...(metrics ? { metrics } : {}),
     };
   }
 
-  private mapMessages(messages: LlmMessage[]): Record<string, unknown> {
+  private mapMessages(messages: readonly LlmMessage[]): Record<string, unknown> {
     const systemParts = messages
       .filter(({ role }) => role === 'system')
       .map(({ content }) => ({ text: content }));
@@ -87,50 +84,31 @@ export class GoogleProvider implements LlmProvider {
         role: role === 'assistant' ? 'model' : 'user',
         parts: [{ text: content }],
       }));
-
     return {
-      ...(systemParts.length > 0
-        ? { system_instruction: { parts: systemParts } }
-        : {}),
+      ...(systemParts.length ? { system_instruction: { parts: systemParts } } : {}),
       contents,
-    };
-  }
-
-  private measure(messages: LlmMessage[]): InputTokenMeasurement {
-    const bytes = new TextEncoder().encode(
-      JSON.stringify(this.mapMessages(messages)),
-    ).length;
-    return {
-      kind: 'upper_bound',
-      tokens: bytes,
-      basis: 'google deployment JSON UTF-8 byte upper bound',
     };
   }
 
   private classify(error: unknown): LlmErrorCode {
     if (!axios.isAxiosError(error)) return 'provider_error';
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') return 'timeout';
-
     const status = error.response?.status;
     if (status === undefined) return 'connectivity';
     if (status === 401 || status === 403) return 'authentication';
     if (status === 429) return 'rate_limited';
     if (status === 413) return 'invalid_prompt_size';
-
-    const body = error.response?.data as
-      | { promptFeedback?: { blockReason?: unknown } }
-      | undefined;
+    const body = error.response?.data as { promptFeedback?: { blockReason?: unknown } } | undefined;
     if (body?.promptFeedback?.blockReason === 'SAFETY') return 'content_blocked';
-    if (status >= 500) return 'provider_transient_error';
-    return 'provider_error';
+    return status >= 500 ? 'provider_transient_error' : 'provider_error';
   }
 
-  private failure(code: LlmErrorCode): LlmProviderError {
+  private failure(code: LlmErrorCode, model: string): LlmProviderError {
     return {
       code,
       safeMessage: 'Google request failed.',
-      provider: this.provider,
-      model: this.model,
+      provider: this.providerId,
+      model,
       recoverable: isRecoverableLlmError(code),
     };
   }
