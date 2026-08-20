@@ -22,6 +22,7 @@ import type { ProviderRegistry } from '../../../types/llm.js';
 
 const CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000030';
 const DEFAULT_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000035';
+const UNAVAILABLE_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000039';
 const PROMPT = 'Compare the four explicit deployments.';
 const DEPLOYMENT_IDS = {
   'base-1': 'openai-5.6-terra',
@@ -62,6 +63,7 @@ const MISSING_PROVIDER_CASES = [
 const OWNED_CLIENT_REQUEST_IDS = [
   CLIENT_REQUEST_ID,
   DEFAULT_CLIENT_REQUEST_ID,
+  UNAVAILABLE_CLIENT_REQUEST_ID,
   ...MISSING_PROVIDER_CASES.map(testCase => testCase.clientRequestId),
 ] as const;
 
@@ -306,6 +308,45 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       }
     },
   );
+
+  it('rejects a directly selected unavailable deployment before persistence or provider calls', async () => {
+    const openai = new ControlledLlmProvider('base-1');
+    const google = new ControlledLlmProvider('base-2');
+    const backend = createIntegrationBackend(pool, { openai, google });
+    const requestId = 't039-unavailable-selection';
+
+    try {
+      const rejected = await request(backend.app)
+        .post('/api/v1/conversations')
+        .set('x-request-id', requestId)
+        .send({
+          clientRequestId: UNAVAILABLE_CLIENT_REQUEST_ID,
+          prompt: 'Reject the unavailable OpenRouter deployment atomically.',
+          deploymentIds: {
+            'base-1': 'openai-5.6-sol',
+            'base-2': 'openai-5.6-terra',
+            'base-3': 'openrouter-kimi-k3',
+            consolidator: 'gemini-3.7-flash',
+          },
+        });
+
+      expect(rejected.status).toBe(422);
+      expect(rejected.body).toEqual({
+        code: 'DEPLOYMENT_UNAVAILABLE',
+        message: 'One or more selected deployments are unavailable.',
+        requestId,
+      });
+      expect(await readCreationState(pool, UNAVAILABLE_CLIENT_REQUEST_ID)).toEqual({
+        conversations: 0,
+        turns: 0,
+        deployments: [],
+        responses: [],
+      });
+      expect([...openai.calls, ...google.calls]).toEqual([]);
+    } finally {
+      await backend.conversationService.stop();
+    }
+  });
 });
 
 function observeProviderStarts(

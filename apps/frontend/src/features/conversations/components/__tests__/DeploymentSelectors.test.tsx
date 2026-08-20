@@ -28,6 +28,51 @@ const defaultItems = [
 ] as const;
 
 describe('DeploymentSelectors', () => {
+  it('announces loading, empty, and error states without exposing a manual retry control', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <DeploymentSelectors
+        items={[]}
+        selection={emptySelection}
+        isLoading
+        disabled={false}
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Cargando deployments');
+    expect(screen.getByRole('group', { name: 'Deployments' })).toBeDisabled();
+
+    rerender(
+      <DeploymentSelectors
+        items={[]}
+        selection={emptySelection}
+        isLoading={false}
+        disabled={false}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('No hay deployments disponibles');
+    expect(screen.getByRole('group', { name: 'Deployments' })).toBeDisabled();
+
+    rerender(
+      <DeploymentSelectors
+        items={[]}
+        selection={emptySelection}
+        isLoading={false}
+        isError
+        disabled={false}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'No se pudo cargar el catálogo de deployments',
+    );
+    expect(screen.getByRole('group', { name: 'Deployments' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /reintentar/i })).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('labels four selectors and lets every canonical slot choose any catalog item', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -107,9 +152,32 @@ describe('DeploymentSelectors', () => {
     );
 
     expect(selection).toEqual(emptySelection);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'El perfil predeterminado no está disponible',
+    );
     for (const selector of screen.getAllByRole('combobox')) {
       expect(selector).toHaveTextContent('Selecciona un deployment');
     }
+  });
+
+  it('announces when a selected deployment is no longer available', () => {
+    render(
+      <DeploymentSelectors
+        items={items}
+        selection={{ ...emptySelection, 'base-1': 'deployment-removed' }}
+        isLoading={false}
+        disabled={false}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Una selección ya no está disponible. Elige otro deployment para continuar.',
+    );
+    expect(screen.getByRole('group', { name: 'Deployments' })).toBeEnabled();
+    expect(
+      screen.queryByText('El perfil predeterminado no está disponible', { exact: false }),
+    ).not.toBeInTheDocument();
   });
 });
 

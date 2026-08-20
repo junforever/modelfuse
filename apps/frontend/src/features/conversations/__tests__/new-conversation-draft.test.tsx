@@ -154,12 +154,9 @@ describe('new conversation draft', () => {
     });
     const { queryClient, unmount } = renderWithQueryClient(<App />);
 
-    await waitFor(() => {
-      for (const selector of screen.getAllByRole('combobox')) {
-        expect(selector).toBeEnabled();
-        expect(selector).toHaveTextContent('Selecciona un deployment');
-      }
-    });
+    expect(
+      await screen.findByText('El perfil predeterminado no está disponible', { exact: false }),
+    ).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Requiere selección');
 
     expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();

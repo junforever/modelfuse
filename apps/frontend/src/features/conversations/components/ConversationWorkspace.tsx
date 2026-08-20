@@ -305,6 +305,7 @@ export function ConversationWorkspace({
   );
   const deploymentIds =
     isNewConversation &&
+    management.catalog.isSuccess &&
     Object.values(deploymentSelection).every(deploymentId =>
       availableDeploymentIds.has(deploymentId)
     )
@@ -431,6 +432,7 @@ export function ConversationWorkspace({
           items={management.catalog.data?.items ?? []}
           selection={deploymentSelection}
           isLoading={management.catalog.isPending}
+          isError={management.catalog.isError}
           disabled={isPending}
           onChange={setDraftDeploymentSelection}
         />

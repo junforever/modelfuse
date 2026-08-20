@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEPLOYMENT_CATALOG } from '../../../infrastructure/llm/deploymentCatalog.js';
+import { createProviderRegistry } from '../../../infrastructure/llm/providerRegistry.js';
 import type { DeploymentDefinition } from '../../../types/conversations.js';
 import type { LlmProvider, ProviderRegistry } from '../../../types/llm.js';
 import { ModelCatalogService } from '../ModelCatalogService.js';
@@ -39,32 +40,57 @@ const unavailableDefaultCases = [
 
 const definitions = [
   definition('deployment-z', 'Zulu', 'openai'),
-  definition('deployment-a', 'Alpha', 'google'),
+  definition('deployment-a-1', 'Alpha', 'google'),
   definition('deployment-b', 'Bravo', 'openai'),
-  definition('deployment-c', 'Charlie', 'google'),
+  definition('deployment-a-2', 'Alpha', 'google'),
   definition('deployment-offline', 'Offline', 'openrouter'),
 ] as const;
 
 describe('ModelCatalogService', () => {
-  it('returns only available safe entries ordered by display name', () => {
+  it('returns only safe available fields sorted by display name and keeps source order for ties', () => {
     const service = new ModelCatalogService(definitions, registry('openai', 'google'));
 
     expect(service.listAvailableDeployments()).toEqual([
       publicDefinition(definitions[1]),
-      publicDefinition(definitions[2]),
       publicDefinition(definitions[3]),
+      publicDefinition(definitions[2]),
       publicDefinition(definitions[0]),
     ]);
-    expect(JSON.stringify(service.listAvailableDeployments())).not.toContain('credentialEnv');
+  });
+
+  it('derives provider availability from credentials without catalog rows for direct MiniMax or Qwen', () => {
+    const providers = createProviderRegistry({
+      OPENAI_API_KEY: 'openai-test-key',
+      OPENAI_BASE_URL: undefined,
+      GOOGLE_API_KEY: 'google-test-key',
+      GOOGLE_BASE_URL: undefined,
+      MINIMAX_API_KEY: 'minimax-test-key',
+      MINIMAX_BASE_URL: undefined,
+      QWEN_API_KEY: 'qwen-test-key',
+      QWEN_BASE_URL: undefined,
+      OPENROUTER_API_KEY: undefined,
+      LLM_PROVIDER_TIMEOUT_MS: 1_000,
+    });
+
+    expect(Object.keys(providers)).toEqual(['openai', 'google', 'minimax', 'qwen']);
+    expect(providers.minimax?.providerId).toBe('minimax');
+    expect(providers.qwen?.providerId).toBe('qwen');
+    expect(new ModelCatalogService(DEPLOYMENT_CATALOG, providers).listAvailableDeployments())
+      .toEqual([
+        publicDefinition(DEPLOYMENT_CATALOG[6]),
+        publicDefinition(DEPLOYMENT_CATALOG[9]),
+        publicDefinition(DEPLOYMENT_CATALOG[7]),
+        publicDefinition(DEPLOYMENT_CATALOG[8]),
+      ]);
   });
 
   it('resolves arbitrary available IDs into the canonical snapshot order', () => {
     const service = new ModelCatalogService(definitions, registry('openai', 'google'));
 
     const result = service.resolveExplicitAssignment({
-      'base-1': 'deployment-a',
+      'base-1': 'deployment-a-1',
       'base-2': 'deployment-b',
-      'base-3': 'deployment-c',
+      'base-3': 'deployment-a-2',
       consolidator: 'deployment-z',
     });
 
@@ -82,9 +108,9 @@ describe('ModelCatalogService', () => {
   it('rejects unknown and currently unavailable deployment IDs with one safe outcome', () => {
     const service = new ModelCatalogService(definitions, registry('openai', 'google'));
     const valid = {
-      'base-1': 'deployment-a',
+      'base-1': 'deployment-a-1',
       'base-2': 'deployment-b',
-      'base-3': 'deployment-c',
+      'base-3': 'deployment-a-2',
       consolidator: 'deployment-z',
     } as const;
 

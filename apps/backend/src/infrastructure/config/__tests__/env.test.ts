@@ -133,6 +133,29 @@ describe('parseEnv', () => {
     expect(parsed.GOOGLE_API_KEY).toBeUndefined();
     expect(parsed.MINIMAX_API_KEY).toBeUndefined();
     expect(parsed.QWEN_API_KEY).toBeUndefined();
+
+    const withoutProviderCredentials = parseEnv({
+      ...validEnv,
+      OPENAI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      MINIMAX_API_KEY: undefined,
+      QWEN_API_KEY: undefined,
+      OPENROUTER_API_KEY: undefined,
+    });
+
+    expect({
+      OPENAI_API_KEY: withoutProviderCredentials.OPENAI_API_KEY,
+      GOOGLE_API_KEY: withoutProviderCredentials.GOOGLE_API_KEY,
+      MINIMAX_API_KEY: withoutProviderCredentials.MINIMAX_API_KEY,
+      QWEN_API_KEY: withoutProviderCredentials.QWEN_API_KEY,
+      OPENROUTER_API_KEY: withoutProviderCredentials.OPENROUTER_API_KEY,
+    }).toEqual({
+      OPENAI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      MINIMAX_API_KEY: undefined,
+      QWEN_API_KEY: undefined,
+      OPENROUTER_API_KEY: undefined,
+    });
   });
 
   it.each([
