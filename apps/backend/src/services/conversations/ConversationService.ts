@@ -22,7 +22,10 @@ import type { TurnEventSnapshot } from '../../types/sse.js';
 import type { ModelCatalogService } from '../llm/ModelCatalogService.js';
 import { logger } from '../../utils/logger.js';
 import { truncateTitleGraphemes } from '../../utils/titleGraphemes.js';
-import { ConversationError } from './conversationErrors.js';
+import {
+  ConversationError,
+  DefaultProfileUnavailableError,
+} from './conversationErrors.js';
 import type { TurnOrchestrator } from './TurnOrchestrator.js';
 
 interface CommittedTurn {
@@ -45,24 +48,31 @@ export class ConversationService {
 
   async createConversation(input: CreateConversationRequest): Promise<ConversationTurnResponse> {
     const prompt = input.prompt.trim();
-    if (!input.deploymentIds) {
-      throw new ConversationError(422, 'DEPLOYMENT_UNAVAILABLE', 'A deployment selection is required.');
-    }
     const catalog = this.dependencies.modelCatalogService;
     if (!catalog) throw new Error('Model catalog service is unavailable');
-    const resolution = catalog.resolveExplicitAssignment(input.deploymentIds);
-    if (resolution.kind === 'unavailable') {
-      throw new ConversationError(
-        422,
-        'DEPLOYMENT_UNAVAILABLE',
-        'One or more selected deployments are unavailable.',
-      );
+    let deployments: ConversationDeploymentSnapshotTuple;
+    if (input.deploymentIds) {
+      const resolution = catalog.resolveExplicitAssignment(input.deploymentIds);
+      if (resolution.kind === 'unavailable') {
+        throw new ConversationError(
+          422,
+          'DEPLOYMENT_UNAVAILABLE',
+          'One or more selected deployments are unavailable.',
+        );
+      }
+      deployments = resolution.deployments;
+    } else {
+      const resolution = catalog.resolveDefaultAssignment();
+      if (resolution.kind === 'unavailable') {
+        throw new DefaultProfileUnavailableError(resolution.missingDeploymentIds);
+      }
+      deployments = resolution.deployments;
     }
     const created = await this.dependencies.conversationRepository.createConversation({
       clientRequestId: input.clientRequestId,
       prompt,
       title: truncateTitleGraphemes(prompt),
-      deployments: resolution.deployments,
+      deployments,
     });
     this.assertCreated(created);
     const committed = await this.requireCommittedTurn(created.conversationId, created.turnId);

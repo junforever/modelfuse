@@ -21,6 +21,7 @@ import type {
 import type { ProviderRegistry } from '../../../types/llm.js';
 
 const CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000030';
+const DEFAULT_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000035';
 const PROMPT = 'Compare the four explicit deployments.';
 const DEPLOYMENT_IDS = {
   'base-1': 'openai-5.6-terra',
@@ -30,18 +31,54 @@ const DEPLOYMENT_IDS = {
 } as const;
 const SLOT_ORDER = ['base-1', 'base-2', 'base-3', 'consolidator'] as const;
 const SELECTED_DEFINITIONS = SLOT_ORDER.map(slot => definition(DEPLOYMENT_IDS[slot]));
-const PUBLIC_SUMMARIES = SLOT_ORDER.map((slot, index) => {
-  const selected = SELECTED_DEFINITIONS[index]!;
-  return {
-    slot,
-    deploymentId: selected.deploymentId,
-    providerId: selected.providerId,
-    modelId: selected.modelId,
-    displayName: selected.displayName,
-  };
-}) as readonly ConversationDeploymentSummary[];
+const DEFAULT_DEPLOYMENT_IDS = {
+  'base-1': 'openai-5.6-sol',
+  'base-2': 'gemini-3.7-flash',
+  'base-3': 'openrouter-minimax-m3',
+  consolidator: 'openrouter-qwen-3.8-max',
+} as const;
+const DEFAULT_SELECTED_DEFINITIONS = SLOT_ORDER.map(slot =>
+  definition(DEFAULT_DEPLOYMENT_IDS[slot]),
+);
+const PUBLIC_SUMMARIES = publicSummaries(SELECTED_DEFINITIONS);
+const DEFAULT_PUBLIC_SUMMARIES = publicSummaries(DEFAULT_SELECTED_DEFINITIONS);
+const MISSING_PROVIDER_CASES = [
+  {
+    providerId: 'openai',
+    clientRequestId: '10000000-0000-4000-8000-000000000036',
+    missingDeploymentIds: ['openai-5.6-sol'],
+  },
+  {
+    providerId: 'google',
+    clientRequestId: '10000000-0000-4000-8000-000000000037',
+    missingDeploymentIds: ['gemini-3.7-flash'],
+  },
+  {
+    providerId: 'openrouter',
+    clientRequestId: '10000000-0000-4000-8000-000000000038',
+    missingDeploymentIds: ['openrouter-minimax-m3', 'openrouter-qwen-3.8-max'],
+  },
+] as const;
+const OWNED_CLIENT_REQUEST_IDS = [
+  CLIENT_REQUEST_ID,
+  DEFAULT_CLIENT_REQUEST_ID,
+  ...MISSING_PROVIDER_CASES.map(testCase => testCase.clientRequestId),
+] as const;
 
-describe('explicit conversation creation across REST, PostgreSQL, and deterministic adapters', () => {
+function publicSummaries(selectedDefinitions: readonly DeploymentDefinition[]) {
+  return SLOT_ORDER.map((slot, index) => {
+    const selected = selectedDefinitions[index]!;
+    return {
+      slot,
+      deploymentId: selected.deploymentId,
+      providerId: selected.providerId,
+      modelId: selected.modelId,
+      displayName: selected.displayName,
+    };
+  }) as readonly ConversationDeploymentSummary[];
+}
+
+describe('conversation creation across REST, PostgreSQL, and deterministic adapters', () => {
   let pool: Pool;
 
   beforeAll(async () => {
@@ -50,12 +87,12 @@ describe('explicit conversation creation across REST, PostgreSQL, and determinis
   });
 
   beforeEach(async () => {
-    await deleteOwnedConversationRequests(pool, [CLIENT_REQUEST_ID]);
+    await deleteOwnedConversationRequests(pool, OWNED_CLIENT_REQUEST_IDS);
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await deleteOwnedConversationRequests(pool, [CLIENT_REQUEST_ID]);
+    await deleteOwnedConversationRequests(pool, OWNED_CLIENT_REQUEST_IDS);
   });
 
   afterAll(async () => {
@@ -82,9 +119,9 @@ describe('explicit conversation creation across REST, PostgreSQL, and determinis
       slot: ResponseSlot;
       state: Awaited<ReturnType<typeof readCreationState>>;
     }> = [];
-    observeProviderStarts(openai, pool, callOrder, statesAtProviderStart);
-    observeProviderStarts(google, pool, callOrder, statesAtProviderStart);
-    observeProviderStarts(openrouter, pool, callOrder, statesAtProviderStart);
+    observeProviderStarts(openai, pool, CLIENT_REQUEST_ID, callOrder, statesAtProviderStart);
+    observeProviderStarts(google, pool, CLIENT_REQUEST_ID, callOrder, statesAtProviderStart);
+    observeProviderStarts(openrouter, pool, CLIENT_REQUEST_ID, callOrder, statesAtProviderStart);
 
     const backend = createIntegrationBackend(pool, providerRegistry);
 
@@ -154,11 +191,127 @@ describe('explicit conversation creation across REST, PostgreSQL, and determinis
       await backend.conversationService.stop();
     }
   });
+
+  it('persists the exact ordered default profile before launching providers when deploymentIds is omitted', async () => {
+    const baseGates = [deferred(), deferred(), deferred()] as const;
+    const openai = new ControlledLlmProvider('base-1');
+    const google = new ControlledLlmProvider('base-2');
+    const openrouter = new ControlledLlmProvider('base-3', [], {
+      providerId: 'openrouter',
+      provider: 'openrouter-fake',
+      model: 'openrouter-test-model',
+    });
+    openai.enqueueBlocked(baseGates[0].promise, 'OpenAI default response');
+    google.enqueueBlocked(baseGates[1].promise, 'Google default response');
+    openrouter.enqueueBlocked(baseGates[2].promise, 'OpenRouter default response');
+    openrouter.enqueueResult('OpenRouter default consolidation');
+
+    const providerRegistry: ProviderRegistry = { openai, google, openrouter };
+    const callOrder: ResponseSlot[] = [];
+    const statesAtProviderStart: Array<{
+      slot: ResponseSlot;
+      state: Awaited<ReturnType<typeof readCreationState>>;
+    }> = [];
+    observeProviderStarts(
+      openai,
+      pool,
+      DEFAULT_CLIENT_REQUEST_ID,
+      callOrder,
+      statesAtProviderStart,
+    );
+    observeProviderStarts(
+      google,
+      pool,
+      DEFAULT_CLIENT_REQUEST_ID,
+      callOrder,
+      statesAtProviderStart,
+    );
+    observeProviderStarts(
+      openrouter,
+      pool,
+      DEFAULT_CLIENT_REQUEST_ID,
+      callOrder,
+      statesAtProviderStart,
+    );
+    const backend = createIntegrationBackend(pool, providerRegistry);
+
+    try {
+      const created = await request(backend.app).post('/api/v1/conversations').send({
+        clientRequestId: DEFAULT_CLIENT_REQUEST_ID,
+        prompt: 'Use the complete default deployment profile.',
+      });
+
+      expect(created.status).toBe(201);
+      expect(created.body.conversation.deployments).toEqual(DEFAULT_PUBLIC_SUMMARIES);
+      await Promise.all([
+        openai.waitUntilCalled(),
+        google.waitUntilCalled(),
+        openrouter.waitUntilCalled(),
+      ]);
+      expect(new Set(callOrder)).toEqual(new Set<ResponseSlot>(['base-1', 'base-2', 'base-3']));
+      expect(statesAtProviderStart).toHaveLength(3);
+      statesAtProviderStart.forEach(({ state }) =>
+        expectCompleteCommittedState(state, DEFAULT_SELECTED_DEFINITIONS),
+      );
+      expectCompleteCommittedState(
+        await readCreationState(pool, DEFAULT_CLIENT_REQUEST_ID),
+        DEFAULT_SELECTED_DEFINITIONS,
+      );
+    } finally {
+      baseGates.forEach(gate => gate.resolve());
+      await backend.conversationService.stop();
+    }
+  });
+
+  it.each(MISSING_PROVIDER_CASES)(
+    'returns an exact safe 503 with no rows or provider calls when $providerId is unavailable',
+    async ({ providerId, clientRequestId, missingDeploymentIds }) => {
+      const openai = new ControlledLlmProvider('base-1');
+      const google = new ControlledLlmProvider('base-2');
+      const openrouter = new ControlledLlmProvider('base-3', [], {
+        providerId: 'openrouter',
+        provider: 'openrouter-fake',
+        model: 'openrouter-test-model',
+      });
+      const providerRegistry: ProviderRegistry = {
+        ...(providerId === 'openai' ? {} : { openai }),
+        ...(providerId === 'google' ? {} : { google }),
+        ...(providerId === 'openrouter' ? {} : { openrouter }),
+      };
+      const backend = createIntegrationBackend(pool, providerRegistry);
+      const requestId = `t035-missing-${providerId}`;
+
+      try {
+        const rejected = await request(backend.app)
+          .post('/api/v1/conversations')
+          .set('x-request-id', requestId)
+          .send({ clientRequestId, prompt: 'Do not persist or launch providers.' });
+
+        expect(rejected.status).toBe(503);
+        expect(rejected.body).toEqual({
+          code: 'DEFAULT_PROFILE_UNAVAILABLE',
+          message: 'The default deployment profile is unavailable.',
+          requestId,
+          missingDeploymentIds,
+        });
+        expect(await readCreationState(pool, clientRequestId)).toEqual({
+          conversations: 0,
+          turns: 0,
+          deployments: [],
+          responses: [],
+        });
+        expect([...openai.calls, ...google.calls, ...openrouter.calls]).toEqual([]);
+      } finally {
+        await backend.conversationService.stop();
+      }
+    },
+  );
 });
 
 function observeProviderStarts(
   provider: ControlledLlmProvider,
   pool: Pool,
+  clientRequestId: string,
   callOrder: ResponseSlot[],
   observations: Array<{
     slot: ResponseSlot;
@@ -168,15 +321,18 @@ function observeProviderStarts(
   const generate = provider.generate.bind(provider);
   vi.spyOn(provider, 'generate').mockImplementation(async input => {
     callOrder.push(input.slot);
-    observations.push({ slot: input.slot, state: await readCreationState(pool) });
+    observations.push({
+      slot: input.slot,
+      state: await readCreationState(pool, clientRequestId),
+    });
     return generate(input);
   });
 }
 
-async function readCreationState(pool: Pool) {
+async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID) {
   const conversation = await pool.query<{ id: string }>(
     'SELECT id FROM conversations WHERE create_client_request_id = $1',
-    [CLIENT_REQUEST_ID],
+    [clientRequestId],
   );
   const conversationId = conversation.rows[0]?.id ?? null;
   const deployments = conversationId
@@ -242,14 +398,17 @@ async function readCreationState(pool: Pool) {
   };
 }
 
-function expectCompleteCommittedState(state: Awaited<ReturnType<typeof readCreationState>>): void {
+function expectCompleteCommittedState(
+  state: Awaited<ReturnType<typeof readCreationState>>,
+  selectedDefinitions: readonly DeploymentDefinition[] = SELECTED_DEFINITIONS,
+): void {
   expect(state.conversations).toBe(1);
   expect(state.turns).toBe(1);
   expect(
     state.deployments.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...row }) => row),
   ).toEqual(
     SLOT_ORDER.map((slot, index) => {
-      const selected = SELECTED_DEFINITIONS[index]!;
+      const selected = selectedDefinitions[index]!;
       return {
         slot,
         deploymentId: selected.deploymentId,
@@ -264,22 +423,14 @@ function expectCompleteCommittedState(state: Awaited<ReturnType<typeof readCreat
     }),
   );
   state.deployments.forEach(row => expect(row.updatedAt).toEqual(row.createdAt));
-  expect(state.responses).toEqual([
-    { slot: 'base-1', role: 'base', provider: 'openai', model: 'gpt-5.6-terra' },
-    { slot: 'base-2', role: 'base', provider: 'google', model: 'gemini-3.7-flash' },
-    {
-      slot: 'base-3',
-      role: 'base',
-      provider: 'openrouter',
-      model: 'minimax/minimax-m3',
-    },
-    {
-      slot: 'consolidator',
-      role: 'consolidator',
-      provider: 'openrouter',
-      model: 'qwen/qwen3.8-max',
-    },
-  ]);
+  expect(state.responses).toEqual(
+    SLOT_ORDER.map((slot, index) => ({
+      slot,
+      role: slot === 'consolidator' ? 'consolidator' : 'base',
+      provider: selectedDefinitions[index]!.providerId,
+      model: selectedDefinitions[index]!.modelId,
+    })),
+  );
 }
 
 function definition(deploymentId: string): DeploymentDefinition {

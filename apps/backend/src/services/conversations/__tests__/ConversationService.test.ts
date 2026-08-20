@@ -12,6 +12,7 @@ import type {
 import { createConversationFixture } from '../../../test/fixtures/conversationFixtures.js';
 import type { ModelCatalogService } from '../../llm/ModelCatalogService.js';
 import { ConversationService } from '../ConversationService.js';
+import { DefaultProfileUnavailableError } from '../conversationErrors.js';
 import type { TurnOrchestrator } from '../TurnOrchestrator.js';
 
 const logSink = vi.hoisted(() => ({ error: vi.fn() }));
@@ -98,6 +99,108 @@ describe('ConversationService background execution', () => {
     expect(orchestrator.executeTurn).toHaveBeenCalledWith(expect.objectContaining({ deployments }));
   });
 
+  it('uses the exact four-slot default when deploymentIds are omitted', async () => {
+    const stored = createConversationFixture() as unknown as StoredTurnSnapshot;
+    const deployments = defaultDeploymentSnapshots();
+    const conversationRepository = {
+      createConversation: vi.fn(async () => ({
+        kind: 'created' as const,
+        conversationId: stored.conversation.id,
+        turnId: stored.turn.id,
+      })),
+      getConversationDeployments: vi.fn(async () => deployments),
+    } as unknown as ConversationRepository;
+    const turnRepository = {
+      getTurnSnapshot: vi.fn(async () => stored),
+    } as unknown as TurnRepository;
+    const orchestrator = {
+      executeTurn: vi.fn(async () => undefined),
+    } as unknown as TurnOrchestrator;
+    const modelCatalogService = {
+      resolveDefaultAssignment: vi.fn(() => ({ kind: 'resolved' as const, deployments })),
+    } as unknown as ModelCatalogService;
+    const service = new ConversationService({
+      conversationRepository,
+      turnRepository,
+      orchestrator,
+      modelCatalogService,
+    });
+
+    const result = await service.createConversation({
+      clientRequestId: stored.turn.clientRequestId,
+      prompt: stored.turn.prompt,
+    });
+    await service.stop();
+
+    expect(modelCatalogService.resolveDefaultAssignment).toHaveBeenCalledOnce();
+    expect(conversationRepository.createConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ deployments }),
+    );
+    expect(result.conversation.deployments.map(({ slot, deploymentId }) => [slot, deploymentId]))
+      .toEqual([
+        ['base-1', 'openai-5.6-sol'],
+        ['base-2', 'gemini-3.7-flash'],
+        ['base-3', 'openrouter-minimax-m3'],
+        ['consolidator', 'openrouter-qwen-3.8-max'],
+      ]);
+    expect(orchestrator.executeTurn).toHaveBeenCalledWith(expect.objectContaining({ deployments }));
+  });
+
+  it('projects a safe 503 and performs no writes or provider work when the default is unavailable', async () => {
+    const missingDeploymentIds = [
+      'openrouter-minimax-m3',
+      'openrouter-qwen-3.8-max',
+    ] as const;
+    const conversationRepository = {
+      createConversation: vi.fn(),
+      getConversationDeployments: vi.fn(),
+    } as unknown as ConversationRepository;
+    const turnRepository = {
+      getTurnSnapshot: vi.fn(),
+    } as unknown as TurnRepository;
+    const orchestrator = {
+      executeTurn: vi.fn(),
+    } as unknown as TurnOrchestrator;
+    const modelCatalogService = {
+      resolveDefaultAssignment: vi.fn(() => ({
+        kind: 'unavailable' as const,
+        missingDeploymentIds,
+      })),
+    } as unknown as ModelCatalogService;
+    const service = new ConversationService({
+      conversationRepository,
+      turnRepository,
+      orchestrator,
+      modelCatalogService,
+    });
+
+    const error = await service.createConversation({
+      clientRequestId: '423e4567-e89b-42d3-a456-426614174001',
+      prompt: 'No debe persistirse',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(DefaultProfileUnavailableError);
+    if (!(error instanceof DefaultProfileUnavailableError)) {
+      throw new Error('Expected DefaultProfileUnavailableError');
+    }
+    expect({
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      missingDeploymentIds: error.missingDeploymentIds,
+    }).toEqual({
+      status: 503,
+      code: 'DEFAULT_PROFILE_UNAVAILABLE',
+      message: 'The default deployment profile is unavailable.',
+      missingDeploymentIds,
+    });
+    expect(JSON.stringify(error)).not.toMatch(/API_KEY|credential|provider/i);
+    expect(conversationRepository.createConversation).not.toHaveBeenCalled();
+    expect(conversationRepository.getConversationDeployments).not.toHaveBeenCalled();
+    expect(turnRepository.getTurnSnapshot).not.toHaveBeenCalled();
+    expect(orchestrator.executeTurn).not.toHaveBeenCalled();
+  });
+
   it('logs an orchestration rejection with safe identifiers and no prompt or error detail', async () => {
     const snapshot = createConversationFixture() as StoredTurnSnapshot;
     snapshot.turn.prompt = 'prompt-canary-must-not-leak';
@@ -166,5 +269,39 @@ function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {
     snapshot('base-2', 2),
     snapshot('base-3', 3),
     snapshot('consolidator', 4),
+  ];
+}
+
+function defaultDeploymentSnapshots(): ConversationDeploymentSnapshotTuple {
+  const snapshots = deploymentSnapshots();
+  return [
+    {
+      ...snapshots[0],
+      deploymentId: 'openai-5.6-sol',
+      providerId: 'openai',
+      modelId: 'gpt-5.6-sol',
+      displayName: 'GPT-5.6 Sol',
+    },
+    {
+      ...snapshots[1],
+      deploymentId: 'gemini-3.7-flash',
+      providerId: 'google',
+      modelId: 'gemini-3.7-flash',
+      displayName: 'Gemini 3.7 Flash',
+    },
+    {
+      ...snapshots[2],
+      deploymentId: 'openrouter-minimax-m3',
+      providerId: 'openrouter',
+      modelId: 'minimax/minimax-m3',
+      displayName: 'MiniMax M3',
+    },
+    {
+      ...snapshots[3],
+      deploymentId: 'openrouter-qwen-3.8-max',
+      providerId: 'openrouter',
+      modelId: 'qwen/qwen3.8-max',
+      displayName: 'Qwen 3.8 Max',
+    },
   ];
 }

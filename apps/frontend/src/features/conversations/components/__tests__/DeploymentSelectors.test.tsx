@@ -3,7 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DeploymentCatalogItem, DeploymentIds } from '../../types/conversation';
-import { DeploymentSelectors } from '../DeploymentSelectors';
+import {
+  DeploymentSelectors,
+  getDefaultDeploymentSelection,
+} from '../DeploymentSelectors';
 
 const emptySelection: DeploymentIds = {
   'base-1': '',
@@ -16,6 +19,12 @@ const items = [
   deployment('deployment-2', 'Gemini', 'google'),
   deployment('deployment-3', 'MiniMax', 'openrouter'),
   deployment('deployment-4', 'Qwen', 'openrouter'),
+] as const;
+const defaultItems = [
+  deployment('openai-5.6-sol', 'GPT-5.6 Sol', 'openai'),
+  deployment('gemini-3.7-flash', 'Gemini 3.7 Flash', 'google'),
+  deployment('openrouter-minimax-m3', 'MiniMax M3', 'openrouter'),
+  deployment('openrouter-qwen-3.8-max', 'Qwen 3.8 Max', 'openrouter'),
 ] as const;
 
 describe('DeploymentSelectors', () => {
@@ -55,6 +64,51 @@ describe('DeploymentSelectors', () => {
         ...emptySelection,
         [slot]: deploymentId,
       });
+    }
+  });
+
+  it('shows the exact four defaults when the complete profile is available', () => {
+    const selection = getDefaultDeploymentSelection(defaultItems);
+    render(
+      <DeploymentSelectors
+        items={defaultItems}
+        selection={selection}
+        isLoading={false}
+        disabled={false}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(selection).toEqual({
+      'base-1': 'openai-5.6-sol',
+      'base-2': 'gemini-3.7-flash',
+      'base-3': 'openrouter-minimax-m3',
+      consolidator: 'openrouter-qwen-3.8-max',
+    });
+    expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveTextContent('openai-5.6-sol');
+    expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent('gemini-3.7-flash');
+    expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent('openrouter-minimax-m3');
+    expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent('openrouter-qwen-3.8-max');
+  });
+
+  it('shows no partial defaults when any required deployment is missing', () => {
+    const incompleteItems = defaultItems.filter(
+      item => item.deploymentId !== 'openrouter-qwen-3.8-max',
+    );
+    const selection = getDefaultDeploymentSelection(incompleteItems);
+    render(
+      <DeploymentSelectors
+        items={incompleteItems}
+        selection={selection}
+        isLoading={false}
+        disabled={false}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(selection).toEqual(emptySelection);
+    for (const selector of screen.getAllByRole('combobox')) {
+      expect(selector).toHaveTextContent('Selecciona un deployment');
     }
   });
 });

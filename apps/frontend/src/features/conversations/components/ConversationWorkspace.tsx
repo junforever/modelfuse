@@ -30,7 +30,10 @@ import type {
 import type { TurnEventSnapshot } from '../types/sse';
 import { ConversationProcessingNotice } from './ConversationProcessingNotice';
 import { ConversationSidebar } from './ConversationSidebar';
-import { DeploymentSelectors } from './DeploymentSelectors';
+import {
+  DeploymentSelectors,
+  getDefaultDeploymentSelection,
+} from './DeploymentSelectors';
 import { HistoryTopSentinel } from './HistoryTopSentinel';
 import { PromptComposer } from './PromptComposer';
 import { TurnList } from './TurnList';
@@ -48,13 +51,6 @@ interface Timeline {
 interface ConversationWorkspaceProps {
   readonly withHistory?: boolean;
 }
-
-const EMPTY_DEPLOYMENT_SELECTION: DeploymentIds = {
-  'base-1': '',
-  'base-2': '',
-  'base-3': '',
-  consolidator: '',
-};
 
 function errorMessage(error: unknown): string {
   const parsed = apiErrorSchema.safeParse(error);
@@ -139,9 +135,8 @@ export function ConversationWorkspace({
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
-  const [deploymentSelection, setDeploymentSelection] = useState<DeploymentIds>(
-    EMPTY_DEPLOYMENT_SELECTION
-  );
+  const [draftDeploymentSelection, setDraftDeploymentSelection] =
+    useState<DeploymentIds | null>(null);
   const [draftGeneration, setDraftGeneration] = useState(0);
   const [streamGeneration, setStreamGeneration] = useState(0);
   const environment = parseFrontendEnv(import.meta.env);
@@ -270,7 +265,7 @@ export function ConversationWorkspace({
     setSelectedConversationId(null);
     setSelection(null);
     setTimeline(null);
-    setDeploymentSelection(EMPTY_DEPLOYMENT_SELECTION);
+    setDraftDeploymentSelection(null);
     setDraftGeneration(generation => generation + 1);
   }
 
@@ -302,6 +297,9 @@ export function ConversationWorkspace({
   const isBusy = snapshot?.hasWorkInProgress ?? management.detail.data?.hasWorkInProgress ?? false;
   const isPending = execution.isPending || retryMutation.isPending || continueMutation.isPending;
   const isNewConversation = selectedConversationId === null;
+  const deploymentSelection =
+    draftDeploymentSelection ??
+    getDefaultDeploymentSelection(management.catalog.data?.items ?? []);
   const availableDeploymentIds = new Set(
     management.catalog.data?.items.map(item => item.deploymentId) ?? []
   );
@@ -434,7 +432,7 @@ export function ConversationWorkspace({
           selection={deploymentSelection}
           isLoading={management.catalog.isPending}
           disabled={isPending}
-          onChange={setDeploymentSelection}
+          onChange={setDraftDeploymentSelection}
         />
       )}
 

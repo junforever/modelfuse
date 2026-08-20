@@ -12,6 +12,17 @@ export type ExplicitAssignmentResolution =
   | { readonly kind: 'resolved'; readonly deployments: ConversationDeploymentSnapshotTuple }
   | { readonly kind: 'unavailable' };
 
+export type DefaultAssignmentResolution =
+  | { readonly kind: 'resolved'; readonly deployments: ConversationDeploymentSnapshotTuple }
+  | { readonly kind: 'unavailable'; readonly missingDeploymentIds: readonly string[] };
+
+const DEFAULT_DEPLOYMENT_ASSIGNMENT = {
+  'base-1': 'openai-5.6-sol',
+  'base-2': 'gemini-3.7-flash',
+  'base-3': 'openrouter-minimax-m3',
+  consolidator: 'openrouter-qwen-3.8-max',
+} as const satisfies DeploymentAssignment;
+
 export class ModelCatalogService {
   private readonly definitionsById: ReadonlyMap<string, DeploymentDefinition>;
 
@@ -45,6 +56,29 @@ export class ModelCatalogService {
     return base1 && base2 && base3 && consolidator
       ? { kind: 'resolved', deployments: [base1, base2, base3, consolidator] }
       : { kind: 'unavailable' };
+  }
+
+  resolveDefaultAssignment(): DefaultAssignmentResolution {
+    const base1 = this.resolveSnapshot('base-1', DEFAULT_DEPLOYMENT_ASSIGNMENT['base-1']);
+    const base2 = this.resolveSnapshot('base-2', DEFAULT_DEPLOYMENT_ASSIGNMENT['base-2']);
+    const base3 = this.resolveSnapshot('base-3', DEFAULT_DEPLOYMENT_ASSIGNMENT['base-3']);
+    const consolidator = this.resolveSnapshot(
+      'consolidator',
+      DEFAULT_DEPLOYMENT_ASSIGNMENT.consolidator,
+    );
+    const missingDeploymentIds = [
+      base1 ? undefined : DEFAULT_DEPLOYMENT_ASSIGNMENT['base-1'],
+      base2 ? undefined : DEFAULT_DEPLOYMENT_ASSIGNMENT['base-2'],
+      base3 ? undefined : DEFAULT_DEPLOYMENT_ASSIGNMENT['base-3'],
+      consolidator ? undefined : DEFAULT_DEPLOYMENT_ASSIGNMENT.consolidator,
+    ].filter(
+      (deploymentId): deploymentId is NonNullable<typeof deploymentId> =>
+        deploymentId !== undefined,
+    );
+
+    return missingDeploymentIds.length === 0 && base1 && base2 && base3 && consolidator
+      ? { kind: 'resolved', deployments: [base1, base2, base3, consolidator] }
+      : { kind: 'unavailable', missingDeploymentIds };
   }
 
   private resolveSnapshot<Slot extends ResponseSlot>(

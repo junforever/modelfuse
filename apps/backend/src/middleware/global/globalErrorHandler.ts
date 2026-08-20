@@ -1,7 +1,10 @@
 import type { NextFunction, Request, Response } from 'express';
 import { logger } from '#utils/logger';
 import type { ApiError } from '../../types/apiError.js';
-import { ConversationError } from '../../services/conversations/conversationErrors.js';
+import {
+  ConversationError,
+  DefaultProfileUnavailableError,
+} from '../../services/conversations/conversationErrors.js';
 import { InvalidCursorError } from '../../utils/cursor.js';
 /**
  * Global error handling middleware for Express applications.
@@ -54,8 +57,19 @@ export function globalErrorHandler(
     requestId: req.requestId,
   });
 
+  const defaultProfileUnavailable = err instanceof DefaultProfileUnavailableError ? err : undefined;
   const expected = err instanceof ConversationError ? err : undefined;
   const invalidCursor = err instanceof InvalidCursorError;
+  if (defaultProfileUnavailable) {
+    const response: ApiError = {
+      code: defaultProfileUnavailable.code,
+      message: defaultProfileUnavailable.message,
+      requestId: req.requestId,
+      missingDeploymentIds: defaultProfileUnavailable.missingDeploymentIds,
+    };
+    res.status(defaultProfileUnavailable.status).json(response);
+    return;
+  }
   const response: ApiError = {
     code: invalidCursor ? 'INVALID_CURSOR' : expected?.code ?? 'INTERNAL_ERROR',
     message: invalidCursor

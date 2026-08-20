@@ -10,12 +10,24 @@ export type ApiErrorCode =
   | 'RESPONSE_RETRY_IN_PROGRESS'
   | 'CONTINUE_WITHOUT_NOT_ALLOWED'
   | 'DEPLOYMENT_UNAVAILABLE'
+  | 'DEFAULT_PROFILE_UNAVAILABLE'
   | 'VALIDATION_ERROR'
   | 'INTERNAL_ERROR';
 
-export interface ApiError {
-  code: ApiErrorCode;
+export type StandardApiErrorCode = Exclude<ApiErrorCode, 'DEFAULT_PROFILE_UNAVAILABLE'>;
+
+export interface StandardApiError {
+  code: StandardApiErrorCode;
   message: string;
   requestId: string;
   fieldErrors?: Record<string, string[]>;
 }
+
+export interface DefaultProfileUnavailableApiError {
+  code: 'DEFAULT_PROFILE_UNAVAILABLE';
+  message: string;
+  requestId: string;
+  missingDeploymentIds: readonly string[];
+}
+
+export type ApiError = StandardApiError | DefaultProfileUnavailableApiError;

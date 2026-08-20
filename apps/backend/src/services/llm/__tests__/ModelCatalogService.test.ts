@@ -1,8 +1,41 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { DEPLOYMENT_CATALOG } from '../../../infrastructure/llm/deploymentCatalog.js';
 import type { DeploymentDefinition } from '../../../types/conversations.js';
 import type { LlmProvider, ProviderRegistry } from '../../../types/llm.js';
 import { ModelCatalogService } from '../ModelCatalogService.js';
+
+const defaultDeploymentIds = {
+  'base-1': 'openai-5.6-sol',
+  'base-2': 'gemini-3.7-flash',
+  'base-3': 'openrouter-minimax-m3',
+  consolidator: 'openrouter-qwen-3.8-max',
+} as const;
+
+const unavailableDefaultCases = [
+  { providers: ['google', 'openrouter'], missing: ['openai-5.6-sol'] },
+  { providers: ['openai', 'openrouter'], missing: ['gemini-3.7-flash'] },
+  {
+    providers: ['openai', 'google'],
+    missing: ['openrouter-minimax-m3', 'openrouter-qwen-3.8-max'],
+  },
+  {
+    providers: ['openrouter'],
+    missing: ['openai-5.6-sol', 'gemini-3.7-flash'],
+  },
+  {
+    providers: ['google'],
+    missing: ['openai-5.6-sol', 'openrouter-minimax-m3', 'openrouter-qwen-3.8-max'],
+  },
+  {
+    providers: ['openai'],
+    missing: ['gemini-3.7-flash', 'openrouter-minimax-m3', 'openrouter-qwen-3.8-max'],
+  },
+  {
+    providers: [],
+    missing: Object.values(defaultDeploymentIds),
+  },
+] as const;
 
 const definitions = [
   definition('deployment-z', 'Zulu', 'openai'),
@@ -62,6 +95,35 @@ describe('ModelCatalogService', () => {
       service.resolveExplicitAssignment({ ...valid, consolidator: 'deployment-offline' }),
     ).toEqual({ kind: 'unavailable' });
   });
+
+  it('resolves the exact four-slot default only when every required provider is available', () => {
+    const service = new ModelCatalogService(
+      DEPLOYMENT_CATALOG,
+      registry('openai', 'google', 'openrouter'),
+    );
+
+    const result = service.resolveDefaultAssignment();
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') throw new Error('Expected the complete default profile');
+    expect(
+      Object.fromEntries(
+        result.deployments.map(({ slot, deploymentId }) => [slot, deploymentId]),
+      ),
+    ).toEqual(defaultDeploymentIds);
+  });
+
+  it.each(unavailableDefaultCases)(
+    'rejects the default all-or-nothing and reports only missing IDs for providers $providers',
+    ({ providers, missing }) => {
+      const service = new ModelCatalogService(DEPLOYMENT_CATALOG, registry(...providers));
+
+      expect(service.resolveDefaultAssignment()).toEqual({
+        kind: 'unavailable',
+        missingDeploymentIds: missing,
+      });
+    },
+  );
 });
 
 function definition(

@@ -39,6 +39,12 @@ const deploymentIds: DeploymentIds = {
   'base-3': 'deployment-3',
   consolidator: 'deployment-4',
 };
+const defaultDeploymentIds: DeploymentIds = {
+  'base-1': 'openai-5.6-sol',
+  'base-2': 'gemini-3.7-flash',
+  'base-3': 'openrouter-minimax-m3',
+  consolidator: 'openrouter-qwen-3.8-max',
+};
 
 describe('new conversation draft', () => {
   beforeEach(() => {
@@ -103,6 +109,61 @@ describe('new conversation draft', () => {
     savedConversations.forEach(button => expect(button).not.toHaveAttribute('aria-current'));
     expect(api.createConversation).not.toHaveBeenCalled();
     expect(api.createTurn).not.toHaveBeenCalled();
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('preselects and submits the exact complete default profile for a new draft', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis.crypto, 'randomUUID')
+      .mockReturnValue('623e4567-e89b-42d3-a456-426614174000');
+    api.createConversation.mockResolvedValue({
+      conversation: detail(FIRST_ID, 'Nueva'),
+      turn: turnFixture(),
+    });
+    const { queryClient, unmount } = renderWithQueryClient(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveTextContent('openai-5.6-sol');
+      expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent('gemini-3.7-flash');
+      expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent('openrouter-minimax-m3');
+      expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent('openrouter-qwen-3.8-max');
+    });
+
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Usar perfil completo');
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(expect.anything(), {
+      clientRequestId: '623e4567-e89b-42d3-a456-426614174000',
+      prompt: 'Usar perfil completo',
+      deploymentIds: defaultDeploymentIds,
+    }));
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('leaves every selector empty and blocks creation when the exact default is incomplete', async () => {
+    const user = userEvent.setup();
+    api.listAvailableDeployments.mockResolvedValue({
+      items: [
+        ...catalogItems().slice(0, 3),
+        catalogItem('openrouter-qwen-alternative', 'Qwen alternativo', 'openrouter'),
+      ],
+    });
+    const { queryClient, unmount } = renderWithQueryClient(<App />);
+
+    await waitFor(() => {
+      for (const selector of screen.getAllByRole('combobox')) {
+        expect(selector).toBeEnabled();
+        expect(selector).toHaveTextContent('Selecciona un deployment');
+      }
+    });
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Requiere selección');
+
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
+    expect(api.createConversation).not.toHaveBeenCalled();
 
     unmount();
     queryClient.clear();
@@ -194,13 +255,29 @@ function detail(id: string, title: string): ConversationDetail {
 }
 
 function catalogItems() {
-  return detail(FIRST_ID, 'Catalog').deployments.map(({ slot: _slot, ...deployment }) => ({
-    ...deployment,
+  return [
+    catalogItem('openai-5.6-sol', 'GPT-5.6 Sol', 'openai'),
+    catalogItem('gemini-3.7-flash', 'Gemini 3.7 Flash', 'google'),
+    catalogItem('openrouter-minimax-m3', 'MiniMax M3', 'openrouter'),
+    catalogItem('openrouter-qwen-3.8-max', 'Qwen 3.8 Max', 'openrouter'),
+  ];
+}
+
+function catalogItem(
+  deploymentId: string,
+  displayName: string,
+  providerId: 'openai' | 'google' | 'openrouter',
+) {
+  return {
+    deploymentId,
+    displayName,
+    providerId,
+    modelId: `${deploymentId}-model`,
     contextLimitTokens: 100_000,
     maxOutputTokens: 8_000,
-    inputModalities: ['text'],
-    outputModalities: ['text'],
-  }));
+    inputModalities: ['text'] as const,
+    outputModalities: ['text'] as const,
+  };
 }
 
 class NoopEventSource {
