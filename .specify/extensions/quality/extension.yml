@@ -1,44 +1,38 @@
 schema_version: '1.0'
 
 extension:
-  # ID único de la extensión
   id: 'quality'
   name: 'Quality Gate'
-  version: '1.0.0'
-  description: 'Valida y mejora la calidad del código (formato, lint, tipos) después de implementar.'
+  version: '1.2.0'
+  description: 'Valida y mejora la calidad del código: formato, lint, typecheck, análisis retrospectivo de flujo.'
   author: 'junforever'
   repository: 'https://github.com/junforever/speckit-extensions/quality'
   license: 'MIT'
 
 requires:
-  speckit_version: '>=0.1.0'
-  # Herramientas necesarias para el correcto funcionamiento de la extensión.
+  speckit_version: '>=0.2.0'
   tools:
     - name: node
       required: false
       version: '>=22.0.0'
+
 provides:
   commands:
     - name: 'speckit.quality.format'
       file: 'commands/speckit.quality.format.md'
-      description: 'Formatea el código fuente usando Prettier si está disponible.'
-      # En el futuro añadirás:
-      # - name: "speckit.quality.lint"
-      #   file: "commands/speckit.quality.lint.md"
+      description: 'Formatea el código fuente usando Prettier, una única vez al finalizar todas las tareas.'
 
   config:
     - name: 'quality-config.yml'
       template: 'quality-config.template.yml'
-      description: 'Configuración de los gates de calidad (rutas, herramientas a usar).'
+      description: 'Configuración de los quality gates.'
       required: false
 
 hooks:
-  # Se ejecutará después de cada 'specify implement'
   after_implement:
     command: 'speckit.quality.format'
-    # false = se ejecuta automáticamente sin preguntar
     optional: false
-    description: 'Formatear código con Prettier tras la implementación.'
+    description: 'Formatear con Prettier UNA sola vez, después de que TODAS las tareas del implement hayan finalizado.'
 
 tags:
   - 'quality'

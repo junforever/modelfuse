@@ -28,5 +28,6 @@ specify extension add ./ruta/a/quality --dev
 ## Actualización de la extensión
 
 ```bash
-specify extension add ./ruta/a/quality --dev --force
+specify extension remove quality
+specify extension add ./ruta/a/quality --dev
 ```
