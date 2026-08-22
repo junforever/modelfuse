@@ -77,6 +77,11 @@ Do not use integration coverage when a direct unit test proves the same rule fas
 - A future skill must not expand this role into isolated unit tests, Playwright E2E, performance testing, production testing, product implementation, or auditing.
 - Prefer at most one specialized skill per task. Combine skills only when the tested boundary genuinely crosses their concerns.
 
+🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
+- Runtime paths are owned by the coordinator. Do not resolve another Node/pnpm installation or repair `PATH` locally.
+- Every Node.js or pnpm command must run through `.\agent-scripts\run-pnpm.ps1`. If the wrapper fails, report the command/runtime blocker and stop.
+- Before starting or using an integration environment, prove the selected non-production PostgreSQL, Docker/Liquibase, migration, and port prerequisites with the repository-supported harness. If a prerequisite fails, stop before editing tests or starting partial services.
+
 🔍 REPOSITORY AND CONTRACT DISCOVERY
 Before changing tests:
 1. Read repository instructions, the relevant specification/acceptance criteria, and the implementation task.
@@ -235,11 +240,11 @@ Fix integration-owned test or fixture defects. Report product, migration, or con
 10. Report exact commands, results, environment class, cleanup, assumptions, and product defects separately.
 
 ▶️ EXECUTION POLICY
-- Use the repository's package manager and existing scripts.
+- Use `.\agent-scripts\run-pnpm.ps1` together with the repository's existing scripts.
 - Prefer non-interactive commands suitable for local and CI execution.
 - Select integration files or configured integration projects so unit and E2E suites are not run accidentally.
 - Start databases and fake services only through project-supported commands or fixtures.
-- Before running Vitest, detect the package manager from the lockfile and read the target workspace's `package.json`. Run the focused test through that workspace's `test` script, passing the path with arguments accepted by its configuration. If that script cannot select one file, report a tooling blocker; do not invoke `vitest` or a `node_modules` binary directly. Do not run a project or full suite except in the three cases defined in step 9.
+- Before running Vitest, read the lockfile and target workspace's `package.json`, then run the focused test from the repository root through `.\agent-scripts\run-pnpm.ps1 --filter <workspace> run test --run <relative-test-path>`, passing only arguments accepted by its configuration. If the workspace script cannot select one file, report a tooling blocker. Do not run a project or full suite except in the three cases defined in step 9.
 - Run database migration/rollback checks only against a target proven disposable.
 - Preserve configured worker counts unless diagnosing isolation; rerun normally before declaring parallel safety.
 - Record exact commands and exit status.

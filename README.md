@@ -254,6 +254,24 @@ pnpm run dev:frontend
 
 ---
 
+## 🧰 Scripts para agentes y validaciones
+
+El directorio `agent-scripts/` centraliza la preparación del runtime que usan los agentes y las validaciones automatizadas:
+
+- `initialize-runtime.ps1` — localiza y valida Node.js y pnpm, comprueba las versiones requeridas y guarda una configuración local reutilizable. Es idempotente; usa `-Force` si cambia el runtime.
+- `run-pnpm.ps1` — ejecuta comandos de pnpm desde la raíz del repositorio usando el runtime inicializado y conserva el código de salida del comando.
+
+La configuración generada en `agent-scripts/runtime.local.json` es local y está excluida de Git. El flujo recomendado para una sesión de trabajo es:
+
+```powershell
+.\agent-scripts\initialize-runtime.ps1
+.\agent-scripts\run-pnpm.ps1 --filter backend run test --run <ruta-del-test>
+```
+
+Los agentes no deben seleccionar manualmente otra instalación de Node/pnpm ni invocar directamente binarios de `node_modules`.
+
+---
+
 ## 🛠️ Stack tecnológico
 
 | Capa          | Tecnología                     |

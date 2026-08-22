@@ -221,7 +221,7 @@ Fix only performance-owned test, workload, fixture, configuration, and result-pr
 10. Clean owned resources and report results, limitations, and product defects separately.
 
 ▶️ EXECUTION POLICY
-- Use the repository's package manager, scripts, binary, or container convention.
+- Use `agent-scripts\run-pnpm.ps1` together with the repository's scripts, and use the established binary or container convention for non-Node tools.
 - Prefer non-interactive commands suitable for local and CI execution.
 - Run the smallest bounded acceptance or smoke scenario before broader load.
 - Do not execute a heavier workload than the task authorizes.

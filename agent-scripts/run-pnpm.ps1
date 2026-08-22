@@ -12,19 +12,32 @@ $repoRoot = Split-Path -Parent $scriptDirectory
 $configPath = Join-Path $scriptDirectory 'runtime.local.json'
 
 if (-not (Test-Path -LiteralPath $configPath)) {
-    throw 'Runtime no inicializado. Ejecuta .\agent-scripts\initialize-runtime.ps1 antes de delegar trabajo.'
+    throw 'Runtime no inicializado. El coordinador debe ejecutar .\agent-scripts\initialize-runtime.ps1.'
 }
 
 try {
     $runtime = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
 }
 catch {
-    throw 'runtime.local.json no es válido. Ejecuta .\agent-scripts\initialize-runtime.ps1 -Force.'
+    throw 'runtime.local.json no es válido. El coordinador debe ejecutar initialize-runtime.ps1.'
 }
 
-$nodePath = Join-Path $runtime.nodeDir 'node.exe'
-if (-not (Test-Path -LiteralPath $nodePath) -or -not (Test-Path -LiteralPath $runtime.pnpmCmd)) {
-    throw 'El runtime guardado ya no existe. Ejecuta .\agent-scripts\initialize-runtime.ps1 -Force.'
+$requiredProperties = @('nodeExe', 'nodeDir', 'pnpmCmd', 'nodeVersion', 'pnpmVersion')
+$missingProperties = @($requiredProperties | Where-Object { $null -eq $runtime.PSObject.Properties[$_] })
+if ($missingProperties.Count -gt 0) {
+    throw "runtime.local.json está obsoleto; faltan: $($missingProperties -join ', '). El coordinador debe ejecutar initialize-runtime.ps1."
+}
+
+if (-not (Test-Path -LiteralPath $runtime.nodeExe) -or
+    -not (Test-Path -LiteralPath $runtime.pnpmCmd) -or
+    -not (Test-Path -LiteralPath (Join-Path $runtime.nodeDir 'node.exe'))) {
+    throw 'Las rutas del runtime ya no existen. El coordinador debe ejecutar initialize-runtime.ps1 -Force.'
+}
+
+$actualNodeVersion = (& $runtime.nodeExe --version 2>$null).Trim()
+$actualPnpmVersion = (& $runtime.pnpmCmd --version 2>$null).Trim()
+if ($actualNodeVersion -ne $runtime.nodeVersion -or $actualPnpmVersion -ne $runtime.pnpmVersion) {
+    throw 'Las versiones del runtime cambiaron. El coordinador debe ejecutar initialize-runtime.ps1 -Force.'
 }
 if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
     throw 'Faltan argumentos de pnpm.'

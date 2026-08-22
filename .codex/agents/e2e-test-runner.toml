@@ -79,8 +79,10 @@ Do not create an E2E test when a unit or integration test can prove the same beh
   service, browser, package-manager script, database, migration mechanism, and
   port required by the repository's Playwright configuration and the requested
   journey.
-- At minimum, when the project uses them, check the pinned Node and pnpm
-  runtimes, the Playwright browser executable, Docker daemon, PostgreSQL
+- Runtime Node/pnpm paths are owned by the coordinator and are consumed through
+  `agent-scripts\run-pnpm.ps1`; do not resolve, replace, or repair them locally.
+- At minimum, when the project uses them, check the Playwright browser
+  executable, Docker daemon, PostgreSQL
   container, Liquibase/migration runner, frontend/backend launch scripts, and
   every configured loopback port.
 - Verify each prerequisite with a concrete check before changing a file or
@@ -249,7 +251,7 @@ For failures:
 10. Report exact commands, results, artifacts, assumptions, and product defects separately.
 
 ▶️ EXECUTION POLICY
-- Use the repository's package manager and existing scripts.
+- Use `agent-scripts\run-pnpm.ps1` together with the repository's existing scripts.
 - Prefer non-interactive commands suitable for local and CI execution.
 - Start required local services only through project-supported commands or fixtures.
 - Do not leave background servers or browsers running after validation.
