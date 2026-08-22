@@ -6,7 +6,7 @@ This guide defines the delivery order and minimum verification for the plan. It 
 
 - Branch: `002-configurable-provider-deployments`
 - Node.js: repository-supported Node 22 or newer
-- Package manager: repository-pinned pnpm 11.15.1
+- Package manager: repository-pinned pnpm 11.22.0
 - Database services: existing PostgreSQL 16 and Liquibase 4.30 workflow
 - Authoritative inputs: `requirements-brief.md`, `spec.md`, `plan.md`, `research.md`, `data-model.md`, and `contracts/`
 
