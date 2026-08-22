@@ -122,14 +122,19 @@ function Select-Pnpm {
         [string]$RequiredVersion
     )
 
+    $detected = [System.Collections.Generic.List[string]]::new()
     foreach ($path in $Candidates) {
         $version = Get-ToolVersion -Path $path
+        if ($version) {
+            [void]$detected.Add("$version ($path)")
+        }
         if ($version -eq $RequiredVersion) {
             return [pscustomobject]@{ Path = $path; Version = $version }
         }
     }
 
-    throw "No se encontró pnpm $RequiredVersion."
+    $available = if ($detected.Count -gt 0) { $detected -join '; ' } else { 'ninguna ruta candidata válida' }
+    throw "No se encontró pnpm $RequiredVersion. Candidatos inspeccionados: $available."
 }
 
 $requiredNodeMatch = [regex]::Match([string]$package.engines.node, '(\d+)')

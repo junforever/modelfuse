@@ -15,6 +15,15 @@ información relevante, usa como fuentes autoritativas:
 
 - Antes de cada bloque de implementación o validación, el agente principal/coordinador debe ejecutar `.\agent-scripts\initialize-runtime.ps1` desde la raíz del repositorio y detener el bloque si el comando devuelve un error.
 - La inicialización es idempotente: si `agent-scripts\runtime.local.json` contiene rutas y versiones válidas, termina sin reconfigurar el runtime. Si el runtime cambió, usar `-Force`.
+- Si la inicialización falla porque no existe la versión exacta requerida, el coordinador debe clasificarlo como `BLOQUEO_RUNTIME` externo y detener inmediatamente delegaciones, implementaciones y validaciones. Si el error ya informa las candidatas inspeccionadas, no hace falta otro comando; de lo contrario, solo puede realizar una comprobación diagnóstica inmediata para confirmar esas rutas y versiones. No debe instalar, descargar, activar ni reparar runtimes, modificar `PATH`, repetir el inicializador ni esperar a que el entorno cambie.
+- Ante ese bloqueo, la respuesta del coordinador debe conservar exactamente esta estructura, sustituyendo los valores observados:
+  ```text
+  BLOQUEO_RUNTIME
+  Requerido: pnpm <versión exacta de package.json>
+  Disponible: <versión(es) encontrada(s) o "no encontrado">
+  No se delegarán tareas ni se modificarán archivos.
+  Acción requerida: provisionar pnpm <versión exacta> en el runtime aprobado y repetir el preflight.
+  ```
 - Los subagentes no deben resolver otra instalación de Node/pnpm ni modificar `PATH`. Todo comando Node/pnpm debe ejecutarse mediante `.\agent-scripts\run-pnpm.ps1`; si el wrapper falla, deben reportar el bloqueo y detenerse.
 - El archivo `agent-scripts\runtime.local.json` es local, no contiene secretos y está excluido de Git. No se debe agregar a documentación de la feature.
 
