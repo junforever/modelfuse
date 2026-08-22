@@ -10,3 +10,9 @@ build/
 .vscode
 .agents/
 .codex/
+.husky/
+.specify/
+specs/
+test-results/
+agent-scripts/
+.claude/
