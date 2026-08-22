@@ -103,7 +103,11 @@ export function ConversationSidebar({
         Nueva conversación
       </Button>
       {isLoading && !hasItems && (
-        <p role="status" aria-label="Cargando conversaciones" className="text-sm text-muted-foreground">
+        <p
+          role="status"
+          aria-label="Cargando conversaciones"
+          className="text-sm text-muted-foreground"
+        >
           Cargando conversaciones…
         </p>
       )}
@@ -127,7 +131,10 @@ export function ConversationSidebar({
           </p>
           <div className="grid gap-1">
             {conversations.map((conversation, index) => (
-              <div key={conversation.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+              <div
+                key={conversation.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1"
+              >
                 <button
                   ref={node => {
                     if (node) selectionRefs.current.set(conversation.id, node);
@@ -136,11 +143,14 @@ export function ConversationSidebar({
                   type="button"
                   aria-label={conversation.title}
                   aria-current={selectedConversationId === conversation.id ? 'page' : undefined}
-                  className="min-w-0 rounded-xl px-3 py-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-w-0 rounded-xl px-3 py-2 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   onClick={() => onSelect(conversation.id)}
                 >
                   <span className="block truncate text-sm font-medium">{conversation.title}</span>
-                  <time className="block text-xs text-muted-foreground" dateTime={conversation.updatedAt}>
+                  <time
+                    className="block text-xs text-muted-foreground"
+                    dateTime={conversation.updatedAt}
+                  >
                     {dateFormatter.format(new Date(conversation.updatedAt))}
                   </time>
                 </button>
@@ -166,7 +176,11 @@ export function ConversationSidebar({
             </Alert>
           )}
           {isLoadingMore && (
-            <p role="status" aria-label="Cargando más conversaciones" className="text-sm text-muted-foreground">
+            <p
+              role="status"
+              aria-label="Cargando más conversaciones"
+              className="text-sm text-muted-foreground"
+            >
               Cargando más conversaciones…
             </p>
           )}

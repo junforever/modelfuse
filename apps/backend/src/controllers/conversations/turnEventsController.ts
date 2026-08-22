@@ -13,7 +13,7 @@ interface TurnParams {
 
 export function createTurnEventsController(
   conversationService: ConversationService,
-  publisher: TurnEventPublisher,
+  publisher: TurnEventPublisher
 ) {
   return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
     const { conversationId, turnId } = (request as ValidatedRequest).validatedParams as TurnParams;
@@ -48,7 +48,7 @@ export function createTurnEventsController(
       ({ terminal: latestTerminal, busy: latestBusy } = updateState(
         latestTerminal,
         latestBusy,
-        event,
+        event
       ));
       if (latestTerminal && !latestBusy) close();
     };
@@ -85,7 +85,7 @@ export function createTurnEventsController(
         ({ terminal: latestTerminal, busy: latestBusy } = updateState(
           latestTerminal,
           latestBusy,
-          event,
+          event
         ));
       }
       if (latestTerminal && !latestBusy) close();
@@ -99,15 +99,18 @@ export function createTurnEventsController(
 function snapshotEvents(snapshot: TurnEventSnapshot): TurnEvent[] {
   const eventSequence = snapshot.lastEventSequence;
   return [
-    ...snapshot.turn.responses.map(response => ({
-      event: 'slot_update' as const,
-      data: {
-        conversationId: snapshot.conversationId,
-        turnId: snapshot.turnId,
-        eventSequence,
-        response,
-      },
-    }) satisfies SlotUpdateEvent),
+    ...snapshot.turn.responses.map(
+      response =>
+        ({
+          event: 'slot_update' as const,
+          data: {
+            conversationId: snapshot.conversationId,
+            turnId: snapshot.turnId,
+            eventSequence,
+            response,
+          },
+        }) satisfies SlotUpdateEvent
+    ),
     {
       event: 'turn_update',
       data: {
@@ -137,26 +140,34 @@ function snapshotEvents(snapshot: TurnEventSnapshot): TurnEvent[] {
 function isRepresented(event: TurnEvent, snapshot: TurnEventSnapshot): boolean {
   if (event.event === 'slot_update') {
     const persisted = snapshot.turn.responses.find(({ slot }) => slot === event.data.response.slot);
-    return persisted ? compareResponse(event.data.response, event.data.eventSequence, persisted, snapshot.lastEventSequence) <= 0 : false;
+    return persisted
+      ? compareResponse(
+          event.data.response,
+          event.data.eventSequence,
+          persisted,
+          snapshot.lastEventSequence
+        ) <= 0
+      : false;
   }
-  const persistedUpdatedAt = event.event === 'turn_update'
-    ? snapshot.turn.updatedAt
-    : snapshot.updatedAt;
-  return compareVersion(
-    event.event === 'turn_update' ? event.data.turn.updatedAt : event.data.updatedAt,
-    0,
-    event.data.eventSequence,
-    persistedUpdatedAt,
-    0,
-    snapshot.lastEventSequence,
-  ) <= 0;
+  const persistedUpdatedAt =
+    event.event === 'turn_update' ? snapshot.turn.updatedAt : snapshot.updatedAt;
+  return (
+    compareVersion(
+      event.event === 'turn_update' ? event.data.turn.updatedAt : event.data.updatedAt,
+      0,
+      event.data.eventSequence,
+      persistedUpdatedAt,
+      0,
+      snapshot.lastEventSequence
+    ) <= 0
+  );
 }
 
 function compareResponse(
   candidate: ModelResponse,
   candidateSequence: number,
   persisted: ModelResponse,
-  persistedSequence: number,
+  persistedSequence: number
 ): number {
   return compareVersion(
     candidate.updatedAt,
@@ -164,7 +175,7 @@ function compareResponse(
     candidateSequence,
     persisted.updatedAt,
     persisted.attemptNo,
-    persistedSequence,
+    persistedSequence
   );
 }
 
@@ -174,7 +185,7 @@ function compareVersion(
   candidateSequence: number,
   persistedUpdatedAt: string,
   persistedAttempt: number,
-  persistedSequence: number,
+  persistedSequence: number
 ): number {
   const timestamp = candidateUpdatedAt.localeCompare(persistedUpdatedAt);
   if (timestamp !== 0) return timestamp;
@@ -185,7 +196,7 @@ function compareVersion(
 function updateState(
   terminal: boolean,
   busy: boolean,
-  event: TurnEvent,
+  event: TurnEvent
 ): { terminal: boolean; busy: boolean } {
   if (event.event === 'turn_update') terminal = isTerminal(event.data.turn.status);
   if (event.event === 'busy_update') busy = event.data.hasWorkInProgress;

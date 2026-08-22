@@ -58,8 +58,8 @@ describe('conversationMapper', () => {
       provider_request_body: { secret: 'must-not-leak' },
       raw_provider_response: { secret: 'must-not-leak' },
     });
-    const responses = (['base-2', 'consolidator', 'base-1', 'base-3'] as const).map((slot) =>
-      mapModelResponseRow(responseRow(slot)),
+    const responses = (['base-2', 'consolidator', 'base-1', 'base-3'] as const).map(slot =>
+      mapModelResponseRow(responseRow(slot))
     );
 
     const turn = mapTurnRow(turnRow, responses);
@@ -124,7 +124,7 @@ describe('conversationMapper', () => {
     expect(() => mapTurnRow(turnRow, [...responses.slice(0, 3), responses[0]])).toThrow();
 
     expect(JSON.stringify({ conversation, turn })).not.toMatch(
-      /turn_id|conversation_id|api_key|provider_request_body|raw_provider_response|measuredTokens|contextLimitTokens|thresholdTokens|must-not-leak/,
+      /turn_id|conversation_id|api_key|provider_request_body|raw_provider_response|measuredTokens|contextLimitTokens|thresholdTokens|must-not-leak/
     );
   });
 
@@ -144,13 +144,16 @@ describe('conversationMapper', () => {
       raw_provider_config: { apiKey: 'SECRET_MUST_NOT_LEAK' },
     }));
     const deployments = orderDeploymentSnapshots(rows.map(mapConversationDeploymentRow));
-    const detail = mapConversationDetail({
-      id: 'conversation-id',
-      title: 'Conversation',
-      has_work_in_progress: false,
-      created_at: createdAt,
-      updated_at: createdAt,
-    }, deployments);
+    const detail = mapConversationDetail(
+      {
+        id: 'conversation-id',
+        title: 'Conversation',
+        has_work_in_progress: false,
+        created_at: createdAt,
+        updated_at: createdAt,
+      },
+      deployments
+    );
 
     expect(detail.deployments).toEqual([
       {
@@ -182,6 +185,8 @@ describe('conversationMapper', () => {
         displayName: 'consolidator display',
       },
     ]);
-    expect(JSON.stringify(detail)).not.toMatch(/contextLimit|maxOutput|modalities|credential|apiKey|SECRET/);
+    expect(JSON.stringify(detail)).not.toMatch(
+      /contextLimit|maxOutput|modalities|credential|apiKey|SECRET/
+    );
   });
 });

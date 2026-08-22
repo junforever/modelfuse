@@ -63,8 +63,8 @@ export function useTurnEvents({
       void queryClient.invalidateQueries({ queryKey: turnKey });
     };
 
-    const handleEvent = (eventName: 'slot_update' | 'turn_update' | 'busy_update') =>
-      (message: Event) => {
+    const handleEvent =
+      (eventName: 'slot_update' | 'turn_update' | 'busy_update') => (message: Event) => {
         if (abortController.signal.aborted) return;
 
         try {

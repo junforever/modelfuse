@@ -47,7 +47,7 @@ export class FakeLlmProvider {
   constructor(
     readonly slot: ResponseSlot,
     private readonly error?: unknown,
-    content = `Deterministic ${slot} response`,
+    content = `Deterministic ${slot} response`
   ) {
     const identity = IDENTITIES[slot];
     this.provider = identity.provider;
@@ -64,7 +64,7 @@ export class FakeLlmProvider {
   async generate(request: FakeLlmRequest): Promise<FakeLlmResult> {
     this.calls.push({
       ...request,
-      messages: request.messages.map((message) => ({ ...message })),
+      messages: request.messages.map(message => ({ ...message })),
     });
 
     if (this.error !== undefined) {
@@ -78,12 +78,12 @@ export class FakeLlmProvider {
 export type FakeLlmProviders = Record<ResponseSlot, FakeLlmProvider>;
 
 export function createFakeLlmProviders(
-  overrides: Partial<Record<ResponseSlot, FakeLlmProviderOptions>> = {},
+  overrides: Partial<Record<ResponseSlot, FakeLlmProviderOptions>> = {}
 ): FakeLlmProviders {
   return Object.fromEntries(
-    (Object.keys(IDENTITIES) as ResponseSlot[]).map((slot) => [
+    (Object.keys(IDENTITIES) as ResponseSlot[]).map(slot => [
       slot,
       new FakeLlmProvider(slot, overrides[slot]?.error, overrides[slot]?.content),
-    ]),
+    ])
   ) as FakeLlmProviders;
 }

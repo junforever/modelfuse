@@ -25,7 +25,7 @@ export function AppShell({ sidebar, children }: AppShellProps) {
     <div className="min-h-screen bg-background text-foreground">
       <a
         href="#main-content"
-        className="sr-only fixed left-4 top-4 z-50 rounded-md bg-background px-3 py-2 text-sm font-medium shadow focus:not-sr-only"
+        className="sr-only fixed top-4 left-4 z-50 rounded-md bg-background px-3 py-2 text-sm font-medium shadow focus:not-sr-only"
         onClick={() => mainRef.current?.focus()}
       >
         Saltar al contenido principal
@@ -44,7 +44,7 @@ export function AppShell({ sidebar, children }: AppShellProps) {
         </Button>
       </header>
       <div className="grid min-h-[calc(100vh-3.5rem)] md:grid-cols-[18rem_1fr]">
-        <aside className="border-b p-4 md:border-b-0 md:border-r">{sidebar}</aside>
+        <aside className="border-b p-4 md:border-r md:border-b-0">{sidebar}</aside>
         <main
           ref={mainRef}
           id="main-content"

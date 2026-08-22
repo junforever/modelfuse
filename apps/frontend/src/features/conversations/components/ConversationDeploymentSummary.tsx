@@ -1,6 +1,4 @@
-import type {
-  DeploymentSummaryTuple,
-} from '../types/conversation';
+import type { DeploymentSummaryTuple } from '../types/conversation';
 import { RESPONSE_SLOT_LABELS } from '../types/conversation';
 
 export function ConversationDeploymentSummary({

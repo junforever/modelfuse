@@ -17,7 +17,7 @@ import type { ControlledProviders } from './controlledLlmProviders.js';
 export function createIntegrationBackend(
   pool: Pool,
   providers: ProviderRegistry | ControlledProviders,
-  definitions: readonly DeploymentDefinition[] = DEPLOYMENT_CATALOG,
+  definitions: readonly DeploymentDefinition[] = DEPLOYMENT_CATALOG
 ) {
   const providerRegistry = toProviderRegistry(providers);
   const modelCatalogService = new ModelCatalogService(definitions, providerRegistry);

@@ -14,9 +14,7 @@ describe('ResponsePanel async failures', () => {
       onRetry: vi.fn(),
       onContinueWithout: vi.fn(),
     };
-    const { rerender } = render(
-      <ResponsePanel response={modelResponse('base-1')} {...props} />
-    );
+    const { rerender } = render(<ResponsePanel response={modelResponse('base-1')} {...props} />);
 
     rerender(
       <ResponsePanel
@@ -34,9 +32,7 @@ describe('ResponsePanel async failures', () => {
     const retry = screen.getByRole('button', {
       name: 'Reintentar Base 1 · GPT-5.6 Sol',
     });
-    expect(retry).toHaveAccessibleDescription(
-      'El deployment tardó demasiado.'
-    );
+    expect(retry).toHaveAccessibleDescription('El deployment tardó demasiado.');
     expect(
       screen.getByRole('button', { name: 'Continuar sin Base 1 · GPT-5.6 Sol' })
     ).toHaveAccessibleDescription('El deployment tardó demasiado.');

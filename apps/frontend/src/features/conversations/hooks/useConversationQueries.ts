@@ -17,12 +17,7 @@ import {
   renameConversation,
 } from '../api/conversationsApi';
 import { conversationKeys } from '../queries/conversation-keys';
-import type {
-  ConversationPage,
-  ConversationSummary,
-  Turn,
-  TurnPage,
-} from '../types/conversation';
+import type { ConversationPage, ConversationSummary, Turn, TurnPage } from '../types/conversation';
 
 function uniqueConversations(pages: readonly ConversationPage[]): readonly ConversationSummary[] {
   return [...new Map(pages.flatMap(page => page.items).map(item => [item.id, item])).values()];
@@ -133,10 +128,7 @@ export function useConversationQueries(
     () => uniqueConversations(conversations.data?.pages ?? []),
     [conversations.data]
   );
-  const historyTurns = useMemo(
-    () => chronologicalTurns(history.data?.pages ?? []),
-    [history.data]
-  );
+  const historyTurns = useMemo(() => chronologicalTurns(history.data?.pages ?? []), [history.data]);
 
   return {
     catalog,

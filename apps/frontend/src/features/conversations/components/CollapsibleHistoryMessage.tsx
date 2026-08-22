@@ -7,10 +7,7 @@ interface CollapsibleHistoryMessageProps {
   readonly threshold?: number;
 }
 
-export function CollapsibleHistoryMessage({
-  content,
-  threshold,
-}: CollapsibleHistoryMessageProps) {
+export function CollapsibleHistoryMessage({ content, threshold }: CollapsibleHistoryMessageProps) {
   const [expanded, setExpanded] = useState(false);
   const characters = Array.from(content);
 
@@ -23,7 +20,12 @@ export function CollapsibleHistoryMessage({
       <p className="whitespace-pre-wrap">
         {expanded ? content : `${characters.slice(0, threshold).join('')}…`}
       </p>
-      <Button className="w-fit" variant="link" size="sm" onClick={() => setExpanded(value => !value)}>
+      <Button
+        className="w-fit"
+        variant="link"
+        size="sm"
+        onClick={() => setExpanded(value => !value)}
+      >
         {expanded ? 'Mostrar menos' : 'Mostrar más'}
       </Button>
     </div>

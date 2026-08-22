@@ -23,6 +23,7 @@ import type { ProviderRegistry } from '../../../types/llm.js';
 const CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000030';
 const DEFAULT_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000035';
 const UNAVAILABLE_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000039';
+const DUPLICATE_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000040';
 const PROMPT = 'Compare the four explicit deployments.';
 const DEPLOYMENT_IDS = {
   'base-1': 'openai-5.6-terra',
@@ -39,7 +40,7 @@ const DEFAULT_DEPLOYMENT_IDS = {
   consolidator: 'openrouter-qwen-3.8-max',
 } as const;
 const DEFAULT_SELECTED_DEFINITIONS = SLOT_ORDER.map(slot =>
-  definition(DEFAULT_DEPLOYMENT_IDS[slot]),
+  definition(DEFAULT_DEPLOYMENT_IDS[slot])
 );
 const PUBLIC_SUMMARIES = publicSummaries(SELECTED_DEFINITIONS);
 const DEFAULT_PUBLIC_SUMMARIES = publicSummaries(DEFAULT_SELECTED_DEFINITIONS);
@@ -64,6 +65,7 @@ const OWNED_CLIENT_REQUEST_IDS = [
   CLIENT_REQUEST_ID,
   DEFAULT_CLIENT_REQUEST_ID,
   UNAVAILABLE_CLIENT_REQUEST_ID,
+  DUPLICATE_CLIENT_REQUEST_ID,
   ...MISSING_PROVIDER_CASES.map(testCase => testCase.clientRequestId),
 ] as const;
 
@@ -171,7 +173,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       statesAtProviderStart.forEach(({ state }) => expectCompleteCommittedState(state));
 
       const detail = await request(backend.app).get(
-        `/api/v1/conversations/${created.body.conversation.id}`,
+        `/api/v1/conversations/${created.body.conversation.id}`
       );
       expect(detail.status).toBe(200);
       expect(detail.body.deployments).toEqual(PUBLIC_SUMMARIES);
@@ -219,21 +221,21 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       pool,
       DEFAULT_CLIENT_REQUEST_ID,
       callOrder,
-      statesAtProviderStart,
+      statesAtProviderStart
     );
     observeProviderStarts(
       google,
       pool,
       DEFAULT_CLIENT_REQUEST_ID,
       callOrder,
-      statesAtProviderStart,
+      statesAtProviderStart
     );
     observeProviderStarts(
       openrouter,
       pool,
       DEFAULT_CLIENT_REQUEST_ID,
       callOrder,
-      statesAtProviderStart,
+      statesAtProviderStart
     );
     const backend = createIntegrationBackend(pool, providerRegistry);
 
@@ -253,11 +255,11 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       expect(new Set(callOrder)).toEqual(new Set<ResponseSlot>(['base-1', 'base-2', 'base-3']));
       expect(statesAtProviderStart).toHaveLength(3);
       statesAtProviderStart.forEach(({ state }) =>
-        expectCompleteCommittedState(state, DEFAULT_SELECTED_DEFINITIONS),
+        expectCompleteCommittedState(state, DEFAULT_SELECTED_DEFINITIONS)
       );
       expectCompleteCommittedState(
         await readCreationState(pool, DEFAULT_CLIENT_REQUEST_ID),
-        DEFAULT_SELECTED_DEFINITIONS,
+        DEFAULT_SELECTED_DEFINITIONS
       );
     } finally {
       baseGates.forEach(gate => gate.resolve());
@@ -306,7 +308,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       } finally {
         await backend.conversationService.stop();
       }
-    },
+    }
   );
 
   it('rejects a directly selected unavailable deployment before persistence or provider calls', async () => {
@@ -347,6 +349,50 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       await backend.conversationService.stop();
     }
   });
+
+  it('returns 422 for a duplicate deployment without partial rows or provider calls', async () => {
+    const openai = new ControlledLlmProvider('base-1');
+    const google = new ControlledLlmProvider('base-2');
+    const openrouter = new ControlledLlmProvider('base-3', [], {
+      providerId: 'openrouter',
+      provider: 'openrouter-fake',
+      model: 'openrouter-test-model',
+    });
+    const backend = createIntegrationBackend(pool, { openai, google, openrouter });
+    const requestId = 't053-duplicate-assignment';
+
+    try {
+      const rejected = await request(backend.app)
+        .post('/api/v1/conversations')
+        .set('x-request-id', requestId)
+        .send({
+          clientRequestId: DUPLICATE_CLIENT_REQUEST_ID,
+          prompt: 'Reject this duplicate assignment atomically.',
+          deploymentIds: {
+            'base-1': 'openai-5.6-terra',
+            'base-2': 'gemini-3.7-flash',
+            'base-3': 'openai-5.6-terra',
+            consolidator: 'openrouter-qwen-3.8-max',
+          },
+        });
+
+      expect(rejected.status).toBe(422);
+      expect(rejected.body).toEqual({
+        code: 'DUPLICATE_DEPLOYMENT_ASSIGNMENT',
+        message: 'A deployment cannot be assigned to more than one slot.',
+        requestId,
+      });
+      expect(await readCreationState(pool, DUPLICATE_CLIENT_REQUEST_ID)).toEqual({
+        conversations: 0,
+        turns: 0,
+        deployments: [],
+        responses: [],
+      });
+      expect([...openai.calls, ...google.calls, ...openrouter.calls]).toEqual([]);
+    } finally {
+      await backend.conversationService.stop();
+    }
+  });
 });
 
 function observeProviderStarts(
@@ -357,7 +403,7 @@ function observeProviderStarts(
   observations: Array<{
     slot: ResponseSlot;
     state: Awaited<ReturnType<typeof readCreationState>>;
-  }>,
+  }>
 ): void {
   const generate = provider.generate.bind(provider);
   vi.spyOn(provider, 'generate').mockImplementation(async input => {
@@ -373,7 +419,7 @@ function observeProviderStarts(
 async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID) {
   const conversation = await pool.query<{ id: string }>(
     'SELECT id FROM conversations WHERE create_client_request_id = $1',
-    [clientRequestId],
+    [clientRequestId]
   );
   const conversationId = conversation.rows[0]?.id ?? null;
   const deployments = conversationId
@@ -406,7 +452,7 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
           ORDER BY CASE slot
             WHEN 'base-1' THEN 1 WHEN 'base-2' THEN 2
             WHEN 'base-3' THEN 3 WHEN 'consolidator' THEN 4 END`,
-        [conversationId],
+        [conversationId]
       )
     : { rows: [] };
   const turns = conversationId
@@ -427,7 +473,7 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
           ORDER BY CASE slot
             WHEN 'base-1' THEN 1 WHEN 'base-2' THEN 2
             WHEN 'base-3' THEN 3 WHEN 'consolidator' THEN 4 END`,
-        [turns.rows[0].id],
+        [turns.rows[0].id]
       )
     : { rows: [] };
 
@@ -441,12 +487,12 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
 
 function expectCompleteCommittedState(
   state: Awaited<ReturnType<typeof readCreationState>>,
-  selectedDefinitions: readonly DeploymentDefinition[] = SELECTED_DEFINITIONS,
+  selectedDefinitions: readonly DeploymentDefinition[] = SELECTED_DEFINITIONS
 ): void {
   expect(state.conversations).toBe(1);
   expect(state.turns).toBe(1);
   expect(
-    state.deployments.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...row }) => row),
+    state.deployments.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...row }) => row)
   ).toEqual(
     SLOT_ORDER.map((slot, index) => {
       const selected = selectedDefinitions[index]!;
@@ -461,7 +507,7 @@ function expectCompleteCommittedState(
         inputModalities: [...selected.inputModalities],
         outputModalities: [...selected.outputModalities],
       };
-    }),
+    })
   );
   state.deployments.forEach(row => expect(row.updatedAt).toEqual(row.createdAt));
   expect(state.responses).toEqual(
@@ -470,7 +516,7 @@ function expectCompleteCommittedState(
       role: slot === 'consolidator' ? 'consolidator' : 'base',
       provider: selectedDefinitions[index]!.providerId,
       model: selectedDefinitions[index]!.modelId,
-    })),
+    }))
   );
 }
 

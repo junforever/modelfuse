@@ -26,10 +26,8 @@ const logSink = vi.hoisted(() => {
     const emit = (sink: typeof info, args: unknown[]): void => {
       const [first, ...rest] = args;
       sink(
-        typeof first === 'object' && first !== null
-          ? { ...bindings, ...first }
-          : first,
-        ...rest,
+        typeof first === 'object' && first !== null ? { ...bindings, ...first } : first,
+        ...rest
       );
     };
 
@@ -37,8 +35,7 @@ const logSink = vi.hoisted(() => {
       info: (...args: unknown[]) => emit(info, args),
       warn: (...args: unknown[]) => emit(warn, args),
       error: (...args: unknown[]) => emit(error, args),
-      child: (childBindings: Record<string, unknown>) =>
-        bind({ ...bindings, ...childBindings }),
+      child: (childBindings: Record<string, unknown>) => bind({ ...bindings, ...childBindings }),
     };
   };
 
@@ -61,10 +58,8 @@ const LIMIT = 87_654_321;
 function logEntries(): Record<string, unknown>[] {
   return [logSink.info, logSink.warn, logSink.error].flatMap(sink =>
     sink.mock.calls.flatMap(([entry]) =>
-      typeof entry === 'object' && entry !== null
-        ? [entry as Record<string, unknown>]
-        : [],
-    ),
+      typeof entry === 'object' && entry !== null ? [entry as Record<string, unknown>] : []
+    )
   );
 }
 
@@ -106,20 +101,22 @@ describe('conversation observability safety', () => {
     requestContextMiddleware(request, response, vi.fn() as NextFunction);
     finish?.();
 
-    expect(logEntries()).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        operation: 'request_started',
-        requestId: 'request-1',
-        method: 'POST',
-        route: '/api/v1/conversations',
-      }),
-      expect.objectContaining({
-        operation: 'request_completed',
-        requestId: 'request-1',
-        statusCode: 202,
-        durationMs: expect.any(Number),
-      }),
-    ]));
+    expect(logEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: 'request_started',
+          requestId: 'request-1',
+          method: 'POST',
+          route: '/api/v1/conversations',
+        }),
+        expect.objectContaining({
+          operation: 'request_completed',
+          requestId: 'request-1',
+          statusCode: 202,
+          durationMs: expect.any(Number),
+        }),
+      ])
+    );
     expectLogsToExclude(PROMPT, AUTHORIZATION, USER_AGENT, 'authorization');
   });
 
@@ -127,7 +124,8 @@ describe('conversation observability safety', () => {
     const snapshot = createConversationFixture() as StoredTurnSnapshot;
     snapshot.turn.prompt = PROMPT;
     snapshot.turn.responses[0].content = RESPONSE_CONTENT;
-    const createTurn = vi.fn()
+    const createTurn = vi
+      .fn()
       .mockResolvedValueOnce({
         kind: 'replay',
         conversationId: snapshot.conversation.id,
@@ -151,25 +149,29 @@ describe('conversation observability safety', () => {
       clientRequestId: snapshot.turn.clientRequestId,
       prompt: PROMPT,
     });
-    await expect(service.createTurn(snapshot.conversation.id, {
-      clientRequestId: '00000000-0000-4000-8000-000000000004',
-      prompt: PROMPT,
-    })).rejects.toMatchObject({ code: 'CONVERSATION_BUSY' });
+    await expect(
+      service.createTurn(snapshot.conversation.id, {
+        clientRequestId: '00000000-0000-4000-8000-000000000004',
+        prompt: PROMPT,
+      })
+    ).rejects.toMatchObject({ code: 'CONVERSATION_BUSY' });
 
-    expect(logEntries()).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        operation: 'turn_replayed',
-        conversationId: snapshot.conversation.id,
-        turnId: snapshot.turn.id,
-        replay: true,
-        hasWorkInProgress: false,
-      }),
-      expect.objectContaining({
-        operation: 'conversation_busy',
-        conversationId: snapshot.conversation.id,
-        hasWorkInProgress: true,
-      }),
-    ]));
+    expect(logEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: 'turn_replayed',
+          conversationId: snapshot.conversation.id,
+          turnId: snapshot.turn.id,
+          replay: true,
+          hasWorkInProgress: false,
+        }),
+        expect.objectContaining({
+          operation: 'conversation_busy',
+          conversationId: snapshot.conversation.id,
+          hasWorkInProgress: true,
+        }),
+      ])
+    );
     expectLogsToExclude(PROMPT, RESPONSE_CONTENT);
   });
 
@@ -215,25 +217,20 @@ describe('conversation observability safety', () => {
       slot: 'qwen',
     });
 
-    expect(logEntries()).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        operation: 'llm_attempt_completed',
-        conversationId: 'conversation-1',
-        turnId: 'turn-1',
-        slot: 'qwen',
-        provider: 'qwen-provider',
-        model: 'qwen-model',
-        durationMs: 1_250,
-      }),
-    ]));
-    expectLogsToExclude(
-      PROMPT,
-      RESPONSE_CONTENT,
-      AUTHORIZATION,
-      MEASUREMENT,
-      LIMIT,
-      271_828,
+    expect(logEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: 'llm_attempt_completed',
+          conversationId: 'conversation-1',
+          turnId: 'turn-1',
+          slot: 'qwen',
+          provider: 'qwen-provider',
+          model: 'qwen-model',
+          durationMs: 1_250,
+        }),
+      ])
     );
+    expectLogsToExclude(PROMPT, RESPONSE_CONTENT, AUTHORIZATION, MEASUREMENT, LIMIT, 271_828);
   });
 
   it('logs SSE connection and closure without logging normalized event payloads', async () => {
@@ -284,22 +281,24 @@ describe('conversation observability safety', () => {
     await createTurnEventsController(conversationService, publisher)(
       request,
       response,
-      vi.fn() as NextFunction,
+      vi.fn() as NextFunction
     );
 
     expect(write).toHaveBeenCalledWith(expect.stringContaining(SSE_PAYLOAD));
-    expect(logEntries()).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        operation: 'sse_connected',
-        conversationId: snapshot.conversation.id,
-        turnId: snapshot.turn.id,
-      }),
-      expect.objectContaining({
-        operation: 'sse_closed',
-        conversationId: snapshot.conversation.id,
-        turnId: snapshot.turn.id,
-      }),
-    ]));
+    expect(logEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: 'sse_connected',
+          conversationId: snapshot.conversation.id,
+          turnId: snapshot.turn.id,
+        }),
+        expect.objectContaining({
+          operation: 'sse_closed',
+          conversationId: snapshot.conversation.id,
+          turnId: snapshot.turn.id,
+        }),
+      ])
+    );
     expectLogsToExclude(PROMPT, SSE_PAYLOAD, 'text/event-stream');
   });
 
@@ -349,14 +348,16 @@ describe('conversation observability safety', () => {
 
     await recoverInterruptedTurns(pool);
 
-    expect(logEntries()).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        operation: 'recovery_completed',
-        recoveredResponseCount: 3,
-        recoveredTurnCount: 1,
-        turnIds: [interrupted.id],
-      }),
-    ]));
+    expect(logEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: 'recovery_completed',
+          recoveredResponseCount: 3,
+          recoveredTurnCount: 1,
+          turnIds: [interrupted.id],
+        }),
+      ])
+    );
     expectLogsToExclude(PROMPT, RESPONSE_CONTENT, AUTHORIZATION);
     expect(release).toHaveBeenCalledOnce();
   });

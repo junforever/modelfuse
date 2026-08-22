@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 import {
   Select,
   SelectContent,
@@ -46,6 +48,19 @@ export function getDefaultDeploymentSelection(
     : EMPTY_DEPLOYMENT_SELECTION;
 }
 
+export function getDuplicateDeploymentIds(selection: DeploymentIds): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  for (const deploymentId of Object.values(selection)) {
+    if (!deploymentId) continue;
+    if (seen.has(deploymentId)) duplicates.add(deploymentId);
+    else seen.add(deploymentId);
+  }
+
+  return duplicates;
+}
+
 interface DeploymentSelectorsProps {
   readonly items: readonly DeploymentCatalogItem[];
   readonly selection: DeploymentIds;
@@ -63,7 +78,9 @@ export function DeploymentSelectors({
   disabled,
   onChange,
 }: DeploymentSelectorsProps) {
+  const duplicateErrorId = useId();
   const availableDeploymentIds = new Set(items.map(item => item.deploymentId));
+  const duplicateDeploymentIds = getDuplicateDeploymentIds(selection);
   const isEmpty = !isLoading && !isError && items.length === 0;
   const isDefaultUnavailable =
     !isLoading &&
@@ -98,6 +115,11 @@ export function DeploymentSelectors({
           Una selección ya no está disponible. Elige otro deployment para continuar.
         </p>
       )}
+      {duplicateDeploymentIds.size > 0 && (
+        <p id={duplicateErrorId} role="alert" className="text-sm text-destructive">
+          Cada slot debe usar un deployment distinto.
+        </p>
+      )}
       {isDefaultUnavailable && !hasUnavailableSelection && (
         <p role="status" className="text-sm text-muted-foreground">
           El perfil predeterminado no está disponible. Selecciona un deployment para cada slot.
@@ -108,6 +130,7 @@ export function DeploymentSelectors({
           const selectedUnavailable = Boolean(
             selection[slot] && !availableDeploymentIds.has(selection[slot])
           );
+          const selectedDuplicate = duplicateDeploymentIds.has(selection[slot]);
 
           return (
             <Select
@@ -119,7 +142,10 @@ export function DeploymentSelectors({
               }}
             >
               <SelectLabel>{SLOT_LABELS[slot]}</SelectLabel>
-              <SelectTrigger aria-invalid={selectedUnavailable}>
+              <SelectTrigger
+                aria-invalid={selectedUnavailable || selectedDuplicate}
+                aria-describedby={selectedDuplicate ? duplicateErrorId : undefined}
+              >
                 <SelectValue placeholder="Selecciona un deployment" />
               </SelectTrigger>
               <SelectContent>

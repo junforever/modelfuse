@@ -24,14 +24,12 @@ describe('provider input measurement contract', () => {
     ];
     const contentBytes = corpus.reduce(
       (total, message) => total + new TextEncoder().encode(message.content).length,
-      0,
+      0
     );
 
-    const measurements = providers.map((provider) => {
+    const measurements = providers.map(provider => {
       const empty = provider.context.measureInputTokens([]);
-      const oneRole = provider.context.measureInputTokens([
-        { role: 'user', content: '' },
-      ]);
+      const oneRole = provider.context.measureInputTokens([{ role: 'user', content: '' }]);
       const allRoles = provider.context.measureInputTokens([
         { role: 'system', content: '' },
         { role: 'user', content: '' },
@@ -57,6 +55,6 @@ describe('provider input measurement contract', () => {
       return measured;
     });
 
-    expect(new Set(measurements.map((measurement) => measurement.basis)).size).toBe(4);
+    expect(new Set(measurements.map(measurement => measurement.basis)).size).toBe(4);
   });
 });

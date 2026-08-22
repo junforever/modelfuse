@@ -10,7 +10,8 @@ import type { ProviderRegistry } from '../../types/llm.js';
 
 export type ExplicitAssignmentResolution =
   | { readonly kind: 'resolved'; readonly deployments: ConversationDeploymentSnapshotTuple }
-  | { readonly kind: 'unavailable' };
+  | { readonly kind: 'unavailable' }
+  | { readonly kind: 'duplicate' };
 
 export type DefaultAssignmentResolution =
   | { readonly kind: 'resolved'; readonly deployments: ConversationDeploymentSnapshotTuple }
@@ -48,6 +49,9 @@ export class ModelCatalogService {
   }
 
   resolveExplicitAssignment(assignment: DeploymentAssignment): ExplicitAssignmentResolution {
+    const deploymentIds = Object.values(assignment);
+    if (new Set(deploymentIds).size !== deploymentIds.length) return { kind: 'duplicate' };
+
     const base1 = this.resolveSnapshot('base-1', assignment['base-1']);
     const base2 = this.resolveSnapshot('base-2', assignment['base-2']);
     const base3 = this.resolveSnapshot('base-3', assignment['base-3']);
@@ -64,7 +68,7 @@ export class ModelCatalogService {
     const base3 = this.resolveSnapshot('base-3', DEFAULT_DEPLOYMENT_ASSIGNMENT['base-3']);
     const consolidator = this.resolveSnapshot(
       'consolidator',
-      DEFAULT_DEPLOYMENT_ASSIGNMENT.consolidator,
+      DEFAULT_DEPLOYMENT_ASSIGNMENT.consolidator
     );
     const missingDeploymentIds = [
       base1 ? undefined : DEFAULT_DEPLOYMENT_ASSIGNMENT['base-1'],
@@ -72,8 +76,7 @@ export class ModelCatalogService {
       base3 ? undefined : DEFAULT_DEPLOYMENT_ASSIGNMENT['base-3'],
       consolidator ? undefined : DEFAULT_DEPLOYMENT_ASSIGNMENT.consolidator,
     ].filter(
-      (deploymentId): deploymentId is NonNullable<typeof deploymentId> =>
-        deploymentId !== undefined,
+      (deploymentId): deploymentId is NonNullable<typeof deploymentId> => deploymentId !== undefined
     );
 
     return missingDeploymentIds.length === 0 && base1 && base2 && base3 && consolidator
@@ -83,7 +86,7 @@ export class ModelCatalogService {
 
   private resolveSnapshot<Slot extends ResponseSlot>(
     slot: Slot,
-    deploymentId: string,
+    deploymentId: string
   ): ConversationDeploymentSnapshot<Slot> | undefined {
     const definition = this.getAvailableDeployment(deploymentId);
     if (!definition) return undefined;

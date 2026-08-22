@@ -1,19 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type InfiniteData,
-} from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
 
 import { AppShell } from '../../../components/layout/AppShell';
 import { parseFrontendEnv } from '../../../config/env';
-import {
-  continueWithoutResponse,
-  getTurnSnapshot,
-  retryResponse,
-} from '../api/conversationsApi';
+import { continueWithoutResponse, getTurnSnapshot, retryResponse } from '../api/conversationsApi';
 import { createApiClient } from '../api/client';
 import { useConversationExecution } from '../hooks/useConversationExecution';
 import { useConversationQueries } from '../hooks/useConversationQueries';
@@ -34,6 +25,7 @@ import { ConversationSidebar } from './ConversationSidebar';
 import {
   DeploymentSelectors,
   getDefaultDeploymentSelection,
+  getDuplicateDeploymentIds,
 } from './DeploymentSelectors';
 import { HistoryTopSentinel } from './HistoryTopSentinel';
 import { PromptComposer } from './PromptComposer';
@@ -127,9 +119,7 @@ function ActiveTimeline({
   );
 }
 
-export function ConversationWorkspace({
-  withHistory = false,
-}: ConversationWorkspaceProps = {}) {
+export function ConversationWorkspace({ withHistory = false }: ConversationWorkspaceProps = {}) {
   const queryClient = useQueryClient();
   const historyRef = useRef<HTMLDivElement>(null);
   const [apiClient] = useState(() =>
@@ -138,16 +128,13 @@ export function ConversationWorkspace({
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
-  const [draftDeploymentSelection, setDraftDeploymentSelection] =
-    useState<DeploymentIds | null>(null);
+  const [draftDeploymentSelection, setDraftDeploymentSelection] = useState<DeploymentIds | null>(
+    null
+  );
   const [draftGeneration, setDraftGeneration] = useState(0);
   const [streamGeneration, setStreamGeneration] = useState(0);
   const environment = parseFrontendEnv(import.meta.env);
-  const management = useConversationQueries(
-    apiClient,
-    selectedConversationId,
-    withHistory
-  );
+  const management = useConversationQueries(apiClient, selectedConversationId, withHistory);
   const latestHistoricalTurn = withHistory ? management.history.turns.at(-1) : undefined;
   const activeSelection =
     selection ??
@@ -174,7 +161,6 @@ export function ConversationWorkspace({
         });
       }
     }
-
   }, [
     management.detail.data,
     management.history.turns,
@@ -311,14 +297,15 @@ export function ConversationWorkspace({
   const isPending = execution.isPending || retryMutation.isPending || continueMutation.isPending;
   const isNewConversation = selectedConversationId === null;
   const deploymentSelection =
-    draftDeploymentSelection ??
-    getDefaultDeploymentSelection(management.catalog.data?.items ?? []);
+    draftDeploymentSelection ?? getDefaultDeploymentSelection(management.catalog.data?.items ?? []);
   const availableDeploymentIds = new Set(
     management.catalog.data?.items.map(item => item.deploymentId) ?? []
   );
+  const hasDuplicateDeploymentIds = getDuplicateDeploymentIds(deploymentSelection).size > 0;
   const deploymentIds =
     isNewConversation &&
     management.catalog.isSuccess &&
+    !hasDuplicateDeploymentIds &&
     Object.values(deploymentSelection).every(deploymentId =>
       availableDeploymentIds.has(deploymentId)
     )
@@ -332,12 +319,10 @@ export function ConversationWorkspace({
       return cached ? [cached.turn] : [];
     }) ?? [];
   const historyTurnIds = new Set(management.history.turns.map(turn => turn.id));
-  const turns = (withHistory && selectedConversationId
-    ? [
-        ...management.history.turns,
-        ...localTurns.filter(turn => !historyTurnIds.has(turn.id)),
-      ]
-    : localTurns
+  const turns = (
+    withHistory && selectedConversationId
+      ? [...management.history.turns, ...localTurns.filter(turn => !historyTurnIds.has(turn.id))]
+      : localTurns
   ).map(turn => {
     if (!selectedConversationId) return turn;
     return (
@@ -356,23 +341,25 @@ export function ConversationWorkspace({
   const historyLoading =
     selectedConversationId !== null &&
     !historyInitialError &&
-    (management.detail.isPending || management.history.isPending ||
+    (management.detail.isPending ||
+      management.history.isPending ||
       (management.history.turns.length > 0 && !snapshot));
   const historyEmpty =
     selectedConversationId !== null &&
     management.detail.isSuccess &&
     management.history.isSuccess &&
     management.history.turns.length === 0;
-  const historyTopSentinel = withHistory && selectedConversationId ? (
-    <HistoryTopSentinel
-      containerRef={historyRef}
-      hasOlder={management.history.hasNextPage}
-      isError={management.history.isFetchNextPageError}
-      isLoading={management.history.isFetchingNextPage}
-      onLoadOlder={management.history.loadOlder}
-      pageCount={management.history.pageCount}
-    />
-  ) : undefined;
+  const historyTopSentinel =
+    withHistory && selectedConversationId ? (
+      <HistoryTopSentinel
+        containerRef={historyRef}
+        hasOlder={management.history.hasNextPage}
+        isError={management.history.isFetchNextPageError}
+        isLoading={management.history.isFetchingNextPage}
+        onLoadOlder={management.history.loadOlder}
+        pageCount={management.history.pageCount}
+      />
+    ) : undefined;
 
   const workspace = (
     <section aria-labelledby="workspace-title" className="mx-auto grid w-full max-w-5xl gap-6">

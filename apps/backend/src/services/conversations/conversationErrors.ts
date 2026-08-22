@@ -4,10 +4,21 @@ export class ConversationError extends Error {
   constructor(
     readonly status: number,
     readonly code: StandardApiErrorCode,
-    message: string,
+    message: string
   ) {
     super(message);
     this.name = 'ConversationError';
+  }
+}
+
+export class DuplicateDeploymentAssignmentError extends ConversationError {
+  constructor() {
+    super(
+      422,
+      'DUPLICATE_DEPLOYMENT_ASSIGNMENT',
+      'A deployment cannot be assigned to more than one slot.'
+    );
+    this.name = 'DuplicateDeploymentAssignmentError';
   }
 }
 

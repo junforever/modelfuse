@@ -37,7 +37,7 @@ interface LlmProvider {
 
   measureInputTokens(
     deployment: ConversationDeploymentSnapshot,
-    messages: readonly LlmMessage[],
+    messages: readonly LlmMessage[]
   ): Promise<number>;
 
   generate(request: {
@@ -67,13 +67,13 @@ type ProviderRegistry = Readonly<Partial<Record<ProviderId, LlmProvider>>>;
 
 Every request sends `deployment.maxOutputTokens` unchanged. No adapter clamps, negotiates, reduces, or retries the value.
 
-| Provider | Native request field |
-|---|---|
-| OpenAI | `max_completion_tokens` |
-| Google | `generationConfig.maxOutputTokens` |
-| MiniMax | `max_completion_tokens` |
-| Qwen | `parameters.max_tokens` |
-| OpenRouter | `max_tokens` |
+| Provider   | Native request field               |
+| ---------- | ---------------------------------- |
+| OpenAI     | `max_completion_tokens`            |
+| Google     | `generationConfig.maxOutputTokens` |
+| MiniMax    | `max_completion_tokens`            |
+| Qwen       | `parameters.max_tokens`            |
+| OpenRouter | `max_tokens`                       |
 
 If a provider rejects the value, the attempt is normalized as non-recoverable `provider_error` using the adapter's normal structured status/error mapping. The orchestrator must not retry automatically.
 
@@ -99,17 +99,17 @@ The numeric example represents the exact selected snapshot value, not a default 
 
 Classification uses HTTP status and only the structured response fields named below.
 
-| Condition | Normalized category | Recoverable |
-|---|---|---|
-| HTTP 401 | `authentication` | no |
-| HTTP 429 | `rate_limited` | per existing recovery policy |
-| HTTP 408, 502, or 503 | `provider_transient_error` | per existing recovery policy |
-| HTTP 402 | `provider_error` | no |
-| `error.metadata.error_type` equals `content_policy_violation` or `refusal` | `content_blocked` | no |
-| HTTP 403 and non-empty `error.metadata.reasons` array | `content_blocked` | no |
-| HTTP 403 and non-empty `error.metadata.patterns` array | `content_blocked` | no |
-| Any other HTTP 403 | `provider_error` | no |
-| Any output-limit rejection not covered above | `provider_error` | no |
+| Condition                                                                  | Normalized category        | Recoverable                  |
+| -------------------------------------------------------------------------- | -------------------------- | ---------------------------- |
+| HTTP 401                                                                   | `authentication`           | no                           |
+| HTTP 429                                                                   | `rate_limited`             | per existing recovery policy |
+| HTTP 408, 502, or 503                                                      | `provider_transient_error` | per existing recovery policy |
+| HTTP 402                                                                   | `provider_error`           | no                           |
+| `error.metadata.error_type` equals `content_policy_violation` or `refusal` | `content_blocked`          | no                           |
+| HTTP 403 and non-empty `error.metadata.reasons` array                      | `content_blocked`          | no                           |
+| HTTP 403 and non-empty `error.metadata.patterns` array                     | `content_blocked`          | no                           |
+| Any other HTTP 403                                                         | `provider_error`           | no                           |
+| Any output-limit rejection not covered above                               | `provider_error`           | no                           |
 
 Free-text message, detail, description, code text, headers, or serialized-body matching is forbidden. Structured fields used only for classification are not persisted or returned to clients.
 

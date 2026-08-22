@@ -20,7 +20,7 @@ type RequestPart = keyof RequestValidationSchemas;
 function addFieldError(
   fieldErrors: Record<string, string[]>,
   part: RequestPart,
-  issue: ZodIssue,
+  issue: ZodIssue
 ): void {
   const field = issue.path.length > 0 ? issue.path.join('.') : part;
   (fieldErrors[field] ??= []).push(issue.message);

@@ -30,7 +30,7 @@ export async function recoverInterruptedTurns(pool: Pool): Promise<void> {
               completed_at = now(),
               updated_at = now()
         WHERE status IN ('pending', 'running')
-      RETURNING turn_id, slot`,
+      RETURNING turn_id, slot`
     );
     const turnIds = [...new Set(responses.rows.map(({ turn_id }) => turn_id))];
     if (turnIds.length === 0) return { responseCount: 0, turnIds };
@@ -39,7 +39,7 @@ export async function recoverInterruptedTurns(pool: Pool): Promise<void> {
       `SELECT turn_id, slot, status, is_stale
          FROM model_responses
         WHERE turn_id = ANY($1::uuid[])`,
-      [turnIds],
+      [turnIds]
     );
     const statesByTurn = new Map<string, TurnSlotState[]>();
     for (const response of responseStates.rows) {
@@ -60,17 +60,16 @@ export async function recoverInterruptedTurns(pool: Pool): Promise<void> {
             SET status = $2, updated_at = now()
           WHERE id = $1
         RETURNING conversation_id`,
-        [turnId, state.status],
+        [turnId, state.status]
       );
       const conversationId = updated.rows[0]?.conversation_id;
       if (!conversationId) throw new Error('Interrupted turn disappeared during recovery');
       conversationIds.add(conversationId);
     }
 
-    await client.query(
-      'UPDATE conversations SET updated_at = now() WHERE id = ANY($1::uuid[])',
-      [[...conversationIds]],
-    );
+    await client.query('UPDATE conversations SET updated_at = now() WHERE id = ANY($1::uuid[])', [
+      [...conversationIds],
+    ]);
     return { responseCount: responses.rowCount ?? responses.rows.length, turnIds };
   });
 

@@ -8,7 +8,7 @@ const THRESHOLD_PERCENT = 90;
 const BASE_SLOTS = ['base-1', 'base-2', 'base-3'] as const;
 const fixtureUrl = new URL(
   '../services/conversations/__tests__/fixtures/consolidation-evaluation.json',
-  import.meta.url,
+  import.meta.url
 );
 
 const checkSchema = z.discriminatedUnion('type', [
@@ -17,24 +17,38 @@ const checkSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('no_duplicate_paragraphs') }).strict(),
 ]);
 
-const caseSchema = z.object({
-  id: z.string().trim().min(1),
-  prompt: z.string().trim().min(1),
-  baseResponses: z.object({
-    'base-1': z.string().trim().min(1),
-    'base-2': z.string().trim().min(1),
-    'base-3': z.string().trim().min(1),
-  }).strict(),
-  missingSlots: z.array(z.enum(BASE_SLOTS)).max(BASE_SLOTS.length)
-    .refine(slots => new Set(slots).size === slots.length, 'missingSlots must be unique'),
-  checks: z.array(checkSchema).min(1),
-}).strict();
+const caseSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    prompt: z.string().trim().min(1),
+    baseResponses: z
+      .object({
+        'base-1': z.string().trim().min(1),
+        'base-2': z.string().trim().min(1),
+        'base-3': z.string().trim().min(1),
+      })
+      .strict(),
+    missingSlots: z
+      .array(z.enum(BASE_SLOTS))
+      .max(BASE_SLOTS.length)
+      .refine(slots => new Set(slots).size === slots.length, 'missingSlots must be unique'),
+    checks: z.array(checkSchema).min(1),
+  })
+  .strict();
 
-const fixtureSchema = z.object({
-  version: z.literal(1),
-  cases: z.array(caseSchema).min(1).max(5)
-    .refine(cases => new Set(cases.map(testCase => testCase.id)).size === cases.length, 'case IDs must be unique'),
-}).strict();
+const fixtureSchema = z
+  .object({
+    version: z.literal(1),
+    cases: z
+      .array(caseSchema)
+      .min(1)
+      .max(5)
+      .refine(
+        cases => new Set(cases.map(testCase => testCase.id)).size === cases.length,
+        'case IDs must be unique'
+      ),
+  })
+  .strict();
 
 type EvaluationCase = z.infer<typeof caseSchema>;
 type Check = z.infer<typeof checkSchema>;
@@ -54,7 +68,9 @@ function checkResponse(content: string, check: Check): boolean {
 async function consolidate(testCase: EvaluationCase): Promise<string> {
   const available = BASE_SLOTS.filter(slot => !testCase.missingSlots.includes(slot));
   const fakeContent = available.map(slot => testCase.baseResponses[slot]).join('\n\n');
-  const consolidator = createFakeLlmProviders({ consolidator: { content: fakeContent } }).consolidator;
+  const consolidator = createFakeLlmProviders({
+    consolidator: { content: fakeContent },
+  }).consolidator;
   const result = await consolidator.generate({
     operationId: `consolidation-evaluation-${testCase.id}`,
     slot: 'consolidator',
@@ -94,7 +110,9 @@ async function main(): Promise<void> {
 
   const percentage = Number(((passed / total) * 100).toFixed(2));
   const status = percentage >= THRESHOLD_PERCENT ? 'pass' : 'fail';
-  console.log(JSON.stringify({ total, passed, percentage, status, failedCaseIds: [...failedCaseIds] }));
+  console.log(
+    JSON.stringify({ total, passed, percentage, status, failedCaseIds: [...failedCaseIds] })
+  );
   if (status === 'fail') process.exitCode = 1;
 }
 

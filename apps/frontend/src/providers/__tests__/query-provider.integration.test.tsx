@@ -6,7 +6,9 @@ import { QueryProvider } from '../query-provider';
 
 function QueryClientProbe() {
   const queryClient = useQueryClient();
-  return <output>{queryClient.getDefaultOptions().queries?.staleTime?.toString() ?? 'ready'}</output>;
+  return (
+    <output>{queryClient.getDefaultOptions().queries?.staleTime?.toString() ?? 'ready'}</output>
+  );
 }
 
 describe('QueryProvider', () => {

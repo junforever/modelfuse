@@ -18,9 +18,7 @@ describe('PromptComposer', () => {
   it('keeps composition text-only and emits the trimmed prompt with creation deployment IDs', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    const randomUUID = vi
-      .spyOn(globalThis.crypto, 'randomUUID')
-      .mockReturnValue(stableRequestId);
+    const randomUUID = vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(stableRequestId);
 
     const { container } = render(
       <PromptComposer
@@ -54,9 +52,7 @@ describe('PromptComposer', () => {
 
   it('disables submission while the conversation or mutation is busy', () => {
     const onSubmit = vi.fn();
-    const view = render(
-      <PromptComposer isBusy isPending={false} onSubmit={onSubmit} />
-    );
+    const view = render(<PromptComposer isBusy isPending={false} onSubmit={onSubmit} />);
 
     expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
 

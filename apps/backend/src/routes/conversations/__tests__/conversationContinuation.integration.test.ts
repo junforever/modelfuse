@@ -139,8 +139,8 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
             expect.objectContaining({
               deploymentId: `integration-${provider.slot}`,
               slot: provider.slot,
-            }),
-          ),
+            })
+          )
         );
       });
     } finally {

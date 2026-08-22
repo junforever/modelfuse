@@ -5,7 +5,7 @@
 **Status**: Draft  
 **Input**: Fuente normativa: `specs/002-configurable-provider-deployments/requirements-brief.md`
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Elegir deployments al crear una conversación (Priority: P1)
 
@@ -138,7 +138,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - Un provider rechaza el `maxOutputTokens` configurado: el intento termina como `provider_error`, sin reducción, negociación ni retry automático.
 - Una petición, evento SSE o fila intenta usar `openai`, `google`, `minimax` o `qwen` como slot: se rechaza porque solo `base-1`, `base-2`, `base-3` y `consolidator` pertenecen al contrato nuevo.
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -162,18 +162,18 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - **FR-013**: El catálogo MUST NOT contener claves, endpoints secretos, prompts ni precios.
 - **FR-014**: El catálogo inicial MUST contener exactamente estas definiciones:
 
-| deploymentId | displayName | providerId | modelId enviado al provider | contextLimitTokens | maxOutputTokens |
-|---|---|---|---|---:|---:|
-| `openrouter-minimax-m3` | MiniMax M3 | `openrouter` | `minimax/minimax-m3` | 524288 | 512000 |
-| `openrouter-minimax-m2.7` | MiniMax M2.7 | `openrouter` | `minimax/minimax-m2.7` | 204800 | 204800 |
-| `openrouter-qwen-3.8-max` | Qwen 3.8 Max | `openrouter` | `qwen/qwen3.8-max` | 1000000 | 131072 |
-| `openrouter-kimi-k3` | Kimi K3 | `openrouter` | `moonshotai/kimi-k3` | 1048576 | 1048576 |
-| `openrouter-glm-5.2` | GLM 5.2 | `openrouter` | `z-ai/glm-5.2` | 1048576 | 1048576 |
-| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` | 1048576 | 393216 |
-| `gemini-3.7-flash` | Gemini 3.7 Flash | `google` | `gemini-3.7-flash` | 1048576 | 65536 |
-| `openai-5.6-sol` | GPT-5.6 Sol | `openai` | `gpt-5.6-sol` | 1050000 | 128000 |
-| `openai-5.6-terra` | GPT-5.6 Terra | `openai` | `gpt-5.6-terra` | 1050000 | 128000 |
-| `openai-5.6-luna` | GPT-5.6 Luna | `openai` | `gpt-5.6-luna` | 1050000 | 128000 |
+| deploymentId                        | displayName            | providerId   | modelId enviado al provider       | contextLimitTokens | maxOutputTokens |
+| ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------: |
+| `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 |          512000 |
+| `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 |          204800 |
+| `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 |          131072 |
+| `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 |         1048576 |
+| `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 |         1048576 |
+| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 |          393216 |
+| `gemini-3.7-flash`                  | Gemini 3.7 Flash       | `google`     | `gemini-3.7-flash`                |            1048576 |           65536 |
+| `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 |          128000 |
+| `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 |          128000 |
+| `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 |          128000 |
 
 Los `maxOutputTokens` de esta tabla son valores operativos iniciales normativos,
 incluidos los aprobados para MiniMax M2.7, Kimi K3 y GLM 5.2. No son límites de
@@ -181,18 +181,18 @@ entrada ni autorizan ajuste dinámico.
 
 Las capacidades iniciales exactas son:
 
-| deploymentId | inputModalities | outputModalities |
-|---|---|---|
-| `openrouter-minimax-m3` | `text`, `image`, `video` | `text` |
-| `openrouter-minimax-m2.7` | `text` | `text` |
-| `openrouter-qwen-3.8-max` | `text`, `image`, `video` | `text` |
-| `openrouter-kimi-k3` | `text`, `image`, `video` | `text` |
-| `openrouter-glm-5.2` | `text` | `text` |
-| `openrouter-deepseek-v4-flash-0731` | `text` | `text` |
-| `gemini-3.7-flash` | `text`, `image`, `video`, `audio`, `pdf` | `text` |
-| `openai-5.6-sol` | `text`, `image` | `text` |
-| `openai-5.6-terra` | `text`, `image` | `text` |
-| `openai-5.6-luna` | `text`, `image` | `text` |
+| deploymentId                        | inputModalities                          | outputModalities |
+| ----------------------------------- | ---------------------------------------- | ---------------- |
+| `openrouter-minimax-m3`             | `text`, `image`, `video`                 | `text`           |
+| `openrouter-minimax-m2.7`           | `text`                                   | `text`           |
+| `openrouter-qwen-3.8-max`           | `text`, `image`, `video`                 | `text`           |
+| `openrouter-kimi-k3`                | `text`, `image`, `video`                 | `text`           |
+| `openrouter-glm-5.2`                | `text`                                   | `text`           |
+| `openrouter-deepseek-v4-flash-0731` | `text`                                   | `text`           |
+| `gemini-3.7-flash`                  | `text`, `image`, `video`, `audio`, `pdf` | `text`           |
+| `openai-5.6-sol`                    | `text`, `image`                          | `text`           |
+| `openai-5.6-terra`                  | `text`, `image`                          | `text`           |
+| `openai-5.6-luna`                   | `text`, `image`                          | `text`           |
 
 - **FR-015**: Para deployments de OpenRouter, `contextLimitTokens` MUST representar `top_provider.context_length`, la cota efectiva de la ruta seleccionada.
 - **FR-016**: El catálogo inicial MUST NOT incluir variantes `:batch`, `:free`, aliases `latest` ni modelos distintos de los diez definidos; GLM MUST usar `z-ai/glm-5.2` y DeepSeek MUST usar `deepseek/deepseek-v4-flash-0731`.
@@ -260,7 +260,7 @@ Las capacidades iniciales exactas son:
 - **Instantánea de deployment por slot**: Registro inmutable asociado a una conversación y un slot, con los datos necesarios para ejecutar todos sus turnos sin volver a consultar el catálogo mutable.
 - **Conversación**: Agregado que posee exactamente cuatro instantáneas, una por slot, y conserva esa asignación durante toda su vida.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 

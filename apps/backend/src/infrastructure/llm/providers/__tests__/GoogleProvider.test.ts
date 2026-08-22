@@ -1,11 +1,7 @@
 import { expect, vi } from 'vitest';
 
 import { GoogleProvider } from '../GoogleProvider.js';
-import {
-  adapterConfig,
-  axiosError,
-  runProviderContract,
-} from './providerContract.js';
+import { adapterConfig, axiosError, runProviderContract } from './providerContract.js';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 
@@ -31,7 +27,7 @@ runProviderContract({
       totalTokenCount: 18,
     },
   },
-  assertMappedRequest: (request) => {
+  assertMappedRequest: request => {
     expect(request).toMatchObject({
       method: 'POST',
       url: adapterConfig.endpoint,
@@ -69,7 +65,11 @@ runProviderContract({
       }),
     },
     { expectedCode: 'invalid_prompt_size', recoverable: false, upstream: axiosError(413) },
-    { expectedCode: 'invalid_response', recoverable: false, successfulResponse: { candidates: [] } },
+    {
+      expectedCode: 'invalid_response',
+      recoverable: false,
+      successfulResponse: { candidates: [] },
+    },
     { expectedCode: 'provider_transient_error', recoverable: true, upstream: axiosError(503) },
     { expectedCode: 'provider_error', recoverable: false, upstream: axiosError(400) },
   ],

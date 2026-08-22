@@ -22,13 +22,13 @@ function waitForTurnStream(page: Page): Promise<Response> {
 async function waitForTerminalTurn(
   page: Page,
   conversationId: string,
-  turnId: string,
+  turnId: string
 ): Promise<void> {
   await page.evaluate(
     ({ backendOrigin, conversationId: id, turnId: currentTurnId }) =>
       new Promise<void>((resolve, reject) => {
         const source = new EventSource(
-          `${backendOrigin}/api/v1/conversations/${id}/turns/${currentTurnId}/events`,
+          `${backendOrigin}/api/v1/conversations/${id}/turns/${currentTurnId}/events`
         );
         let terminal = false;
         let idle = false;
@@ -58,7 +58,7 @@ async function waitForTerminalTurn(
           reject(new Error('Auxiliary conversation SSE failed before terminal state'));
         });
       }),
-    { backendOrigin: E2E_BACKEND_ORIGIN, conversationId, turnId },
+    { backendOrigin: E2E_BACKEND_ORIGIN, conversationId, turnId }
   );
 }
 

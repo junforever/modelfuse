@@ -39,10 +39,10 @@ const unavailableDefaultCases = [
 ] as const;
 
 const definitions = [
-  definition('deployment-z', 'Zulu', 'openai'),
+  definition('deployment-z', 'Zulu', 'openai', 'shared-model'),
   definition('deployment-a-1', 'Alpha', 'google'),
   definition('deployment-b', 'Bravo', 'openai'),
-  definition('deployment-a-2', 'Alpha', 'google'),
+  definition('deployment-a-2', 'Alpha', 'google', 'shared-model'),
   definition('deployment-offline', 'Offline', 'openrouter'),
 ] as const;
 
@@ -75,16 +75,17 @@ describe('ModelCatalogService', () => {
     expect(Object.keys(providers)).toEqual(['openai', 'google', 'minimax', 'qwen']);
     expect(providers.minimax?.providerId).toBe('minimax');
     expect(providers.qwen?.providerId).toBe('qwen');
-    expect(new ModelCatalogService(DEPLOYMENT_CATALOG, providers).listAvailableDeployments())
-      .toEqual([
-        publicDefinition(DEPLOYMENT_CATALOG[6]),
-        publicDefinition(DEPLOYMENT_CATALOG[9]),
-        publicDefinition(DEPLOYMENT_CATALOG[7]),
-        publicDefinition(DEPLOYMENT_CATALOG[8]),
-      ]);
+    expect(
+      new ModelCatalogService(DEPLOYMENT_CATALOG, providers).listAvailableDeployments()
+    ).toEqual([
+      publicDefinition(DEPLOYMENT_CATALOG[6]),
+      publicDefinition(DEPLOYMENT_CATALOG[9]),
+      publicDefinition(DEPLOYMENT_CATALOG[7]),
+      publicDefinition(DEPLOYMENT_CATALOG[8]),
+    ]);
   });
 
-  it('resolves arbitrary available IDs into the canonical snapshot order', () => {
+  it('accepts distinct IDs from the same provider and for the same underlying model', () => {
     const service = new ModelCatalogService(definitions, registry('openai', 'google'));
 
     const result = service.resolveExplicitAssignment({
@@ -105,6 +106,19 @@ describe('ModelCatalogService', () => {
     });
   });
 
+  it('rejects an exact deployment ID repeated across slots', () => {
+    const service = new ModelCatalogService(definitions, registry('openai', 'google'));
+
+    expect(
+      service.resolveExplicitAssignment({
+        'base-1': 'deployment-a-1',
+        'base-2': 'deployment-b',
+        'base-3': 'deployment-a-1',
+        consolidator: 'deployment-z',
+      })
+    ).toEqual({ kind: 'duplicate' });
+  });
+
   it('rejects unknown and currently unavailable deployment IDs with one safe outcome', () => {
     const service = new ModelCatalogService(definitions, registry('openai', 'google'));
     const valid = {
@@ -118,14 +132,14 @@ describe('ModelCatalogService', () => {
       kind: 'unavailable',
     });
     expect(
-      service.resolveExplicitAssignment({ ...valid, consolidator: 'deployment-offline' }),
+      service.resolveExplicitAssignment({ ...valid, consolidator: 'deployment-offline' })
     ).toEqual({ kind: 'unavailable' });
   });
 
   it('resolves the exact four-slot default only when every required provider is available', () => {
     const service = new ModelCatalogService(
       DEPLOYMENT_CATALOG,
-      registry('openai', 'google', 'openrouter'),
+      registry('openai', 'google', 'openrouter')
     );
 
     const result = service.resolveDefaultAssignment();
@@ -133,9 +147,7 @@ describe('ModelCatalogService', () => {
     expect(result.kind).toBe('resolved');
     if (result.kind !== 'resolved') throw new Error('Expected the complete default profile');
     expect(
-      Object.fromEntries(
-        result.deployments.map(({ slot, deploymentId }) => [slot, deploymentId]),
-      ),
+      Object.fromEntries(result.deployments.map(({ slot, deploymentId }) => [slot, deploymentId]))
     ).toEqual(defaultDeploymentIds);
   });
 
@@ -148,7 +160,7 @@ describe('ModelCatalogService', () => {
         kind: 'unavailable',
         missingDeploymentIds: missing,
       });
-    },
+    }
   );
 });
 
@@ -156,28 +168,37 @@ function definition(
   deploymentId: string,
   displayName: string,
   providerId: DeploymentDefinition['providerId'],
+  modelId = `${deploymentId}-model`
 ): DeploymentDefinition {
   return {
     deploymentId,
     displayName,
     providerId,
-    modelId: `${deploymentId}-model`,
+    modelId,
     contextLimitTokens: 10_000,
     maxOutputTokens: 1_000,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    credentialEnv: providerId === 'google' ? 'GOOGLE_API_KEY' : providerId === 'openrouter'
-      ? 'OPENROUTER_API_KEY'
-      : 'OPENAI_API_KEY',
+    credentialEnv:
+      providerId === 'google'
+        ? 'GOOGLE_API_KEY'
+        : providerId === 'openrouter'
+          ? 'OPENROUTER_API_KEY'
+          : 'OPENAI_API_KEY',
   };
 }
 
 function registry(...providerIds: DeploymentDefinition['providerId'][]): ProviderRegistry {
-  return Object.fromEntries(providerIds.map(providerId => [providerId, {
-    providerId,
-    measureInputTokens: vi.fn(async () => 1),
-    generate: vi.fn(),
-  } satisfies LlmProvider]));
+  return Object.fromEntries(
+    providerIds.map(providerId => [
+      providerId,
+      {
+        providerId,
+        measureInputTokens: vi.fn(async () => 1),
+        generate: vi.fn(),
+      } satisfies LlmProvider,
+    ])
+  );
 }
 
 function publicDefinition({ credentialEnv: _credentialEnv, ...definition }: DeploymentDefinition) {

@@ -11,11 +11,7 @@ export type IsoDateTime = string;
 export type ProviderId = 'openai' | 'google' | 'minimax' | 'qwen' | 'openrouter';
 export type Modality = 'text' | 'image' | 'video' | 'audio' | 'pdf';
 export type CredentialEnvironmentVariable =
-  | 'OPENAI_API_KEY'
-  | 'GOOGLE_API_KEY'
-  | 'MINIMAX_API_KEY'
-  | 'QWEN_API_KEY'
-  | 'OPENROUTER_API_KEY';
+  'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'MINIMAX_API_KEY' | 'QWEN_API_KEY' | 'OPENROUTER_API_KEY';
 
 export interface DeploymentDefinition {
   readonly deploymentId: string;

@@ -23,7 +23,7 @@ The implementation refactors the existing provider registry from `Record<Respons
 
 ## Constitution Check
 
-*GATE: Passed before Phase 0 and re-checked after Phase 1 design.*
+_GATE: Passed before Phase 0 and re-checked after Phase 1 design._
 
 - [x] Work remains within `apps/frontend`, `apps/backend`, `packages/ui`, and `db`; no cross-application internal imports are introduced.
 - [x] Backend responsibilities remain separated: `app.ts` mounts routers, routes bind controllers, controllers translate HTTP, services own selection/orchestration rules, and infrastructure owns PostgreSQL, environment configuration, the static catalog, and adapters.

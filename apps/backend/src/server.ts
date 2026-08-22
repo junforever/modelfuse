@@ -34,9 +34,7 @@ export async function startServer(port?: number): Promise<Server> {
     environment = parseEnv(process.env);
   }
   const resolvedPort = resolvePort(port, environment);
-  const resources = environment
-    ? await createProductionDependencies(environment)
-    : undefined;
+  const resources = environment ? await createProductionDependencies(environment) : undefined;
 
   const server = createApp(resources?.dependencies, environment).listen(resolvedPort);
 
@@ -65,18 +63,28 @@ function waitUntilListening(server: Server): Promise<void> {
   });
 }
 
-async function createProductionDependencies(environment: Environment): Promise<ProductionResources> {
-  const [poolModule, repositoryModule, contextRepositoryModule, turnRepositoryModule, publisherModule, contextBuilderModule, orchestratorModule, serviceModule] =
-    await Promise.all([
-      import('./infrastructure/postgres/postgresPool.js'),
-      import('./infrastructure/postgres/repositories/conversationRepository.js'),
-      import('./infrastructure/postgres/repositories/contextRepository.js'),
-      import('./infrastructure/postgres/repositories/turnRepository.js'),
-      import('./services/conversations/turnEventPublisher.js'),
-      import('./services/conversations/ContextBuilder.js'),
-      import('./services/conversations/TurnOrchestrator.js'),
-      import('./services/conversations/ConversationService.js'),
-    ]);
+async function createProductionDependencies(
+  environment: Environment
+): Promise<ProductionResources> {
+  const [
+    poolModule,
+    repositoryModule,
+    contextRepositoryModule,
+    turnRepositoryModule,
+    publisherModule,
+    contextBuilderModule,
+    orchestratorModule,
+    serviceModule,
+  ] = await Promise.all([
+    import('./infrastructure/postgres/postgresPool.js'),
+    import('./infrastructure/postgres/repositories/conversationRepository.js'),
+    import('./infrastructure/postgres/repositories/contextRepository.js'),
+    import('./infrastructure/postgres/repositories/turnRepository.js'),
+    import('./services/conversations/turnEventPublisher.js'),
+    import('./services/conversations/ContextBuilder.js'),
+    import('./services/conversations/TurnOrchestrator.js'),
+    import('./services/conversations/ConversationService.js'),
+  ]);
   const poolFactory = poolModule as unknown as {
     createPostgresPool?: (configuration: Environment) => Pool;
     postgresPool?: Pool;
@@ -162,7 +170,7 @@ export async function stopServer(server: Server): Promise<void> {
 
 function closeServer(server: Server): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    server.close((error) => {
+    server.close(error => {
       if (error) {
         reject(error);
         return;

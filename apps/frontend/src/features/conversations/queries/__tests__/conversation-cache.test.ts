@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { applyConversationEvent } from '../conversation-cache';
-import type {
-  DeploymentSummaryTuple,
-  ModelResponse,
-  ResponseSlot,
-} from '../../types/conversation';
+import type { DeploymentSummaryTuple, ModelResponse, ResponseSlot } from '../../types/conversation';
 import type { TurnEvent, TurnEventSnapshot } from '../../types/sse';
 
 const conversationId = '123e4567-e89b-42d3-a456-426614174000';
@@ -97,9 +93,11 @@ function snapshot(): TurnEventSnapshot {
   };
 }
 
-function slotUpdate(
-  overrides: { eventSequence: number; updatedAt?: string; attemptNo?: number }
-): Extract<TurnEvent, { event: 'slot_update' }> {
+function slotUpdate(overrides: {
+  eventSequence: number;
+  updatedAt?: string;
+  attemptNo?: number;
+}): Extract<TurnEvent, { event: 'slot_update' }> {
   return {
     event: 'slot_update',
     data: {

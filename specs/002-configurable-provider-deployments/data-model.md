@@ -25,17 +25,17 @@ Catalog/snapshot metadata strings. Initial values are `text`, `image`, `video`, 
 
 Backend-only immutable configuration, not persisted as a catalog table.
 
-| Field | Type | Rule |
-|---|---|---|
-| `deploymentId` | string | Public, unique, stable; exact normative identifier |
-| `displayName` | string | Non-blank user-visible label |
-| `providerId` | ProviderId | Adapter key |
-| `modelId` | string | Exact upstream model value |
-| `contextLimitTokens` | positive integer | Input limit used by `ContextBuilder` |
-| `maxOutputTokens` | positive integer | Exact operational output limit sent on every attempt |
-| `inputModalities` | non-empty readonly string list | Exact normative metadata |
-| `outputModalities` | non-empty readonly string list | Exact normative metadata; all initial entries are text-only output |
-| `credentialEnv` | credential-name enum | Backend-only availability selector; never serialized |
+| Field                | Type                           | Rule                                                               |
+| -------------------- | ------------------------------ | ------------------------------------------------------------------ |
+| `deploymentId`       | string                         | Public, unique, stable; exact normative identifier                 |
+| `displayName`        | string                         | Non-blank user-visible label                                       |
+| `providerId`         | ProviderId                     | Adapter key                                                        |
+| `modelId`            | string                         | Exact upstream model value                                         |
+| `contextLimitTokens` | positive integer               | Input limit used by `ContextBuilder`                               |
+| `maxOutputTokens`    | positive integer               | Exact operational output limit sent on every attempt               |
+| `inputModalities`    | non-empty readonly string list | Exact normative metadata                                           |
+| `outputModalities`   | non-empty readonly string list | Exact normative metadata; all initial entries are text-only output |
+| `credentialEnv`      | credential-name enum           | Backend-only availability selector; never serialized               |
 
 Availability is derived from whether the corresponding adapter was created from a configured credential. Definitions are never mutated or discovered from providers.
 
@@ -43,31 +43,31 @@ Availability is derived from whether the corresponding adapter was created from 
 
 The static constant contains these ten rows and no variants, aliases, or discovered entries:
 
-| deploymentId | displayName | providerId | modelId | contextLimitTokens | maxOutputTokens | credentialEnv |
-|---|---|---|---|---:|---:|---|
-| `openrouter-minimax-m3` | MiniMax M3 | `openrouter` | `minimax/minimax-m3` | 524288 | 512000 | `OPENROUTER_API_KEY` |
-| `openrouter-minimax-m2.7` | MiniMax M2.7 | `openrouter` | `minimax/minimax-m2.7` | 204800 | 204800 | `OPENROUTER_API_KEY` |
-| `openrouter-qwen-3.8-max` | Qwen 3.8 Max | `openrouter` | `qwen/qwen3.8-max` | 1000000 | 131072 | `OPENROUTER_API_KEY` |
-| `openrouter-kimi-k3` | Kimi K3 | `openrouter` | `moonshotai/kimi-k3` | 1048576 | 1048576 | `OPENROUTER_API_KEY` |
-| `openrouter-glm-5.2` | GLM 5.2 | `openrouter` | `z-ai/glm-5.2` | 1048576 | 1048576 | `OPENROUTER_API_KEY` |
-| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` | 1048576 | 393216 | `OPENROUTER_API_KEY` |
-| `gemini-3.7-flash` | Gemini 3.7 Flash | `google` | `gemini-3.7-flash` | 1048576 | 65536 | `GOOGLE_API_KEY` |
-| `openai-5.6-sol` | GPT-5.6 Sol | `openai` | `gpt-5.6-sol` | 1050000 | 128000 | `OPENAI_API_KEY` |
-| `openai-5.6-terra` | GPT-5.6 Terra | `openai` | `gpt-5.6-terra` | 1050000 | 128000 | `OPENAI_API_KEY` |
-| `openai-5.6-luna` | GPT-5.6 Luna | `openai` | `gpt-5.6-luna` | 1050000 | 128000 | `OPENAI_API_KEY` |
+| deploymentId                        | displayName            | providerId   | modelId                           | contextLimitTokens | maxOutputTokens | credentialEnv        |
+| ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------: | -------------------- |
+| `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 |          512000 | `OPENROUTER_API_KEY` |
+| `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 |          204800 | `OPENROUTER_API_KEY` |
+| `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 |          131072 | `OPENROUTER_API_KEY` |
+| `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 |         1048576 | `OPENROUTER_API_KEY` |
+| `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 |         1048576 | `OPENROUTER_API_KEY` |
+| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 |          393216 | `OPENROUTER_API_KEY` |
+| `gemini-3.7-flash`                  | Gemini 3.7 Flash       | `google`     | `gemini-3.7-flash`                |            1048576 |           65536 | `GOOGLE_API_KEY`     |
+| `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 |          128000 | `OPENAI_API_KEY`     |
+| `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 |          128000 | `OPENAI_API_KEY`     |
+| `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 |          128000 | `OPENAI_API_KEY`     |
 
-| deploymentId | inputModalities | outputModalities |
-|---|---|---|
-| `openrouter-minimax-m3` | `text`, `image`, `video` | `text` |
-| `openrouter-minimax-m2.7` | `text` | `text` |
-| `openrouter-qwen-3.8-max` | `text`, `image`, `video` | `text` |
-| `openrouter-kimi-k3` | `text`, `image`, `video` | `text` |
-| `openrouter-glm-5.2` | `text` | `text` |
-| `openrouter-deepseek-v4-flash-0731` | `text` | `text` |
-| `gemini-3.7-flash` | `text`, `image`, `video`, `audio`, `pdf` | `text` |
-| `openai-5.6-sol` | `text`, `image` | `text` |
-| `openai-5.6-terra` | `text`, `image` | `text` |
-| `openai-5.6-luna` | `text`, `image` | `text` |
+| deploymentId                        | inputModalities                          | outputModalities |
+| ----------------------------------- | ---------------------------------------- | ---------------- |
+| `openrouter-minimax-m3`             | `text`, `image`, `video`                 | `text`           |
+| `openrouter-minimax-m2.7`           | `text`                                   | `text`           |
+| `openrouter-qwen-3.8-max`           | `text`, `image`, `video`                 | `text`           |
+| `openrouter-kimi-k3`                | `text`, `image`, `video`                 | `text`           |
+| `openrouter-glm-5.2`                | `text`                                   | `text`           |
+| `openrouter-deepseek-v4-flash-0731` | `text`                                   | `text`           |
+| `gemini-3.7-flash`                  | `text`, `image`, `video`, `audio`, `pdf` | `text`           |
+| `openai-5.6-sol`                    | `text`, `image`                          | `text`           |
+| `openai-5.6-terra`                  | `text`, `image`                          | `text`           |
+| `openai-5.6-luna`                   | `text`, `image`                          | `text`           |
 
 The approved `maxOutputTokens` values above are initial normative values. They are copied unchanged into the conversation snapshot and sent unchanged by the selected adapter; they are not input limits and are never adjusted dynamically.
 
@@ -88,20 +88,20 @@ If absent, the resolver uses the exact default profile. The resolved form contai
 
 One immutable snapshot row per conversation slot.
 
-| Column | PostgreSQL type | Null | Rule |
-|---|---|---:|---|
-| `conversation_id` | `uuid` | no | FK to `conversations(id)` with `ON DELETE CASCADE` |
-| `slot` | `varchar(16)` | no | One of four canonical slots |
-| `deployment_id` | `varchar(128)` | no | Non-blank stable catalog identifier copied at creation |
-| `provider_id` | `varchar(32)` | no | Non-blank adapter key copied at creation |
-| `model_id` | `varchar(256)` | no | Non-blank exact upstream model copied at creation |
-| `display_name` | `varchar(128)` | no | Non-blank user-visible name copied at creation |
-| `context_limit_tokens` | `integer` | no | Greater than zero |
-| `max_output_tokens` | `integer` | no | Greater than zero |
-| `input_modalities` | `text[]` | no | Cardinality greater than zero |
-| `output_modalities` | `text[]` | no | Cardinality greater than zero |
-| `created_at` | `timestamptz` | no | `now()` on insert |
-| `updated_at` | `timestamptz` | no | Same insertion timestamp; never updated |
+| Column                 | PostgreSQL type | Null | Rule                                                   |
+| ---------------------- | --------------- | ---: | ------------------------------------------------------ |
+| `conversation_id`      | `uuid`          |   no | FK to `conversations(id)` with `ON DELETE CASCADE`     |
+| `slot`                 | `varchar(16)`   |   no | One of four canonical slots                            |
+| `deployment_id`        | `varchar(128)`  |   no | Non-blank stable catalog identifier copied at creation |
+| `provider_id`          | `varchar(32)`   |   no | Non-blank adapter key copied at creation               |
+| `model_id`             | `varchar(256)`  |   no | Non-blank exact upstream model copied at creation      |
+| `display_name`         | `varchar(128)`  |   no | Non-blank user-visible name copied at creation         |
+| `context_limit_tokens` | `integer`       |   no | Greater than zero                                      |
+| `max_output_tokens`    | `integer`       |   no | Greater than zero                                      |
+| `input_modalities`     | `text[]`        |   no | Cardinality greater than zero                          |
+| `output_modalities`    | `text[]`        |   no | Cardinality greater than zero                          |
+| `created_at`           | `timestamptz`   |   no | `now()` on insert                                      |
+| `updated_at`           | `timestamptz`   |   no | Same insertion timestamp; never updated                |
 
 ### Keys and constraints
 

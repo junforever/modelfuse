@@ -1,8 +1,4 @@
-import type {
-  ConversationDeploymentSnapshot,
-  ProviderId,
-  ResponseSlot,
-} from './conversations.js';
+import type { ConversationDeploymentSnapshot, ProviderId, ResponseSlot } from './conversations.js';
 
 export interface LlmMessage {
   readonly role: 'system' | 'user' | 'assistant';
@@ -35,7 +31,7 @@ export interface LlmProvider {
   readonly providerId: ProviderId;
   measureInputTokens(
     deployment: ConversationDeploymentSnapshot,
-    messages: readonly LlmMessage[],
+    messages: readonly LlmMessage[]
   ): Promise<number>;
   generate(request: LlmRequest): Promise<LlmResult>;
 }

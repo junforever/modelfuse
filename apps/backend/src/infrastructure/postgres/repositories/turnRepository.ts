@@ -70,11 +70,10 @@ export class TurnRepository {
   constructor(private readonly pool: Pool) {}
 
   getTurnSnapshot(conversationId: string, turnId: string): Promise<StoredTurnSnapshot | null> {
-    return withTransaction(
-      this.pool,
-      client => this.readSnapshot(client, conversationId, turnId),
-      { isolationLevel: 'REPEATABLE READ', readOnly: true },
-    );
+    return withTransaction(this.pool, client => this.readSnapshot(client, conversationId, turnId), {
+      isolationLevel: 'REPEATABLE READ',
+      readOnly: true,
+    });
   }
 
   startResponseAttempt(input: {
@@ -85,7 +84,7 @@ export class TurnRepository {
     return withTransaction(this.pool, async client => {
       const conversation = await client.query<{ id: string }>(
         'SELECT id FROM conversations WHERE id = $1 FOR UPDATE',
-        [input.conversationId],
+        [input.conversationId]
       );
       if (conversation.rowCount === 0) return null;
 
@@ -101,7 +100,7 @@ export class TurnRepository {
             AND mr.slot = $3
             AND mr.status = 'pending'
           RETURNING mr.attempt_no`,
-        [input.conversationId, input.turnId, input.slot],
+        [input.conversationId, input.turnId, input.slot]
       );
       const row = started.rows[0];
       if (!row) return null;
@@ -146,7 +145,7 @@ export class TurnRepository {
           JSON.stringify(input.metadata ?? {}),
           input.startedAt,
           input.completedAt,
-        ],
+        ]
       );
       if (persisted.rowCount === 0) return null;
 
@@ -158,7 +157,7 @@ export class TurnRepository {
                   error_code = NULL, error_message = NULL, error_recoverable = NULL,
                   started_at = NULL, completed_at = NULL, updated_at = now()
             WHERE turn_id = $1 AND slot = 'consolidator' AND status NOT IN ('pending', 'running')`,
-          [input.turnId],
+          [input.turnId]
         );
       }
 
@@ -180,7 +179,7 @@ export class TurnRepository {
     return withTransaction(this.pool, async client => {
       const conversation = await client.query<{ id: string }>(
         'SELECT id FROM conversations WHERE id = $1 FOR UPDATE',
-        [conversationId],
+        [conversationId]
       );
       if (conversation.rowCount === 0) return null;
 
@@ -200,7 +199,7 @@ export class TurnRepository {
             AND mr.turn_id = $2
             AND mr.status IN ('pending', 'running')
         RETURNING mr.slot`,
-        [conversationId, turnId],
+        [conversationId, turnId]
       );
       if (reconciled.rowCount === 0) return null;
 
@@ -215,12 +214,12 @@ export class TurnRepository {
   prepareRetry(
     conversationId: string,
     turnId: string,
-    slot: ResponseSlot,
+    slot: ResponseSlot
   ): Promise<RetryPreparation> {
     return withTransaction(this.pool, async client => {
       const conversation = await client.query<{ id: string }>(
         'SELECT id FROM conversations WHERE id = $1 FOR UPDATE',
-        [conversationId],
+        [conversationId]
       );
       if (conversation.rowCount === 0) return { kind: 'conversation_not_found' };
 
@@ -230,7 +229,7 @@ export class TurnRepository {
            JOIN turns t ON t.id = mr.turn_id
           WHERE t.conversation_id = $1 AND t.id = $2 AND mr.slot = $3
           FOR UPDATE OF mr`,
-        [conversationId, turnId, slot],
+        [conversationId, turnId, slot]
       );
       const state = response.rows[0];
       if (!state) return { kind: 'response_not_found' };
@@ -245,7 +244,7 @@ export class TurnRepository {
             WHERE t.conversation_id = $1 AND t.id <> $2
               AND mr.status IN ('pending', 'running')
          ) AS busy`,
-        [conversationId, turnId],
+        [conversationId, turnId]
       );
       if (otherTurnBusy.rows[0]?.busy === true) return { kind: 'conversation_busy' };
       if (state.status === 'pending' || state.status === 'running') {
@@ -268,16 +267,17 @@ export class TurnRepository {
             AND status = 'failed' AND error_recoverable = true
             AND continued_without_at IS NULL
           RETURNING attempt_no`,
-        [turnId, slot],
+        [turnId, slot]
       );
       const acceptedRow = accepted.rows[0];
       if (!acceptedRow) return { kind: 'retry_in_progress' };
 
-      await client.query(
-        "UPDATE turns SET status = 'running', updated_at = now() WHERE id = $1",
-        [turnId],
-      );
-      await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId]);
+      await client.query("UPDATE turns SET status = 'running', updated_at = now() WHERE id = $1", [
+        turnId,
+      ]);
+      await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [
+        conversationId,
+      ]);
       const snapshot = await this.requireSnapshot(client, conversationId, turnId);
       return { kind: 'accepted', attemptNo: acceptedRow.attempt_no, snapshot };
     });
@@ -286,12 +286,12 @@ export class TurnRepository {
   continueWithout(
     conversationId: string,
     turnId: string,
-    slot: ResponseSlot,
+    slot: ResponseSlot
   ): Promise<ContinueWithoutResult> {
     return withTransaction(this.pool, async client => {
       const conversation = await client.query<{ id: string }>(
         'SELECT id FROM conversations WHERE id = $1 FOR UPDATE',
-        [conversationId],
+        [conversationId]
       );
       if (conversation.rowCount === 0) return { kind: 'conversation_not_found' };
 
@@ -301,7 +301,7 @@ export class TurnRepository {
            JOIN turns t ON t.id = mr.turn_id
           WHERE t.conversation_id = $1 AND t.id = $2 AND mr.slot = $3
           FOR UPDATE OF mr`,
-        [conversationId, turnId, slot],
+        [conversationId, turnId, slot]
       );
       const state = response.rows[0];
       if (!state) return { kind: 'response_not_found' };
@@ -312,7 +312,7 @@ export class TurnRepository {
           `UPDATE model_responses
               SET continued_without_at = now(), updated_at = now()
             WHERE turn_id = $1 AND slot = $2`,
-          [turnId, slot],
+          [turnId, slot]
         );
       }
       const snapshot = await this.requireSnapshot(client, conversationId, turnId);
@@ -328,7 +328,7 @@ export class TurnRepository {
          FROM model_responses
         WHERE turn_id = $1 AND role = 'base' AND status = 'completed'
         ORDER BY CASE slot WHEN 'base-1' THEN 1 WHEN 'base-2' THEN 2 ELSE 3 END`,
-      [turnId],
+      [turnId]
     );
     return rows.rows.map(mapModelResponseRow);
   }
@@ -336,26 +336,31 @@ export class TurnRepository {
   private async recalculateTurnWith(
     client: PoolClient,
     conversationId: string,
-    turnId: string,
+    turnId: string
   ): Promise<void> {
     const turn = await client.query<{ id: string }>(
       'SELECT id FROM turns WHERE id = $1 AND conversation_id = $2 FOR UPDATE',
-      [turnId, conversationId],
+      [turnId, conversationId]
     );
     if (turn.rowCount === 0) throw new Error('Turn disappeared during state transition');
 
     const responses = await client.query<Pick<ModelResponseRow, 'slot' | 'status' | 'is_stale'>>(
       'SELECT slot, status, is_stale FROM model_responses WHERE turn_id = $1',
-      [turnId],
+      [turnId]
     );
     const state = calculateTurnState(responses.rows);
-    await client.query('UPDATE turns SET status = $2, updated_at = now() WHERE id = $1', [turnId, state.status]);
-    await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [conversationId]);
+    await client.query('UPDATE turns SET status = $2, updated_at = now() WHERE id = $1', [
+      turnId,
+      state.status,
+    ]);
+    await client.query('UPDATE conversations SET updated_at = now() WHERE id = $1', [
+      conversationId,
+    ]);
   }
 
   private async lockConversationForTurn(
     client: PoolClient,
-    turnId: string,
+    turnId: string
   ): Promise<string | null> {
     const conversation = await client.query<{ id: string }>(
       `SELECT conversation.id
@@ -363,7 +368,7 @@ export class TurnRepository {
          JOIN turns turn_row ON turn_row.conversation_id = conversation.id
         WHERE turn_row.id = $1
         FOR UPDATE OF conversation`,
-      [turnId],
+      [turnId]
     );
     return conversation.rows[0]?.id ?? null;
   }
@@ -371,7 +376,7 @@ export class TurnRepository {
   private async requireSnapshot(
     client: DatabaseClient,
     conversationId: string,
-    turnId: string,
+    turnId: string
   ): Promise<StoredTurnSnapshot> {
     const snapshot = await this.readSnapshot(client, conversationId, turnId);
     if (!snapshot) throw new Error('Committed turn snapshot is unavailable');
@@ -381,7 +386,7 @@ export class TurnRepository {
   private async readSnapshot(
     client: DatabaseClient,
     conversationId: string,
-    turnId: string,
+    turnId: string
   ): Promise<StoredTurnSnapshot | null> {
     const conversations = await client.query<ConversationRow>(
       `SELECT c.id, c.title, c.created_at, c.updated_at,
@@ -398,7 +403,7 @@ export class TurnRepository {
          FROM conversations c
          JOIN turns owned_turn ON owned_turn.conversation_id = c.id
         WHERE c.id = $1 AND owned_turn.id = $2`,
-      [conversationId, turnId],
+      [conversationId, turnId]
     );
     const conversation = conversations.rows[0];
     if (!conversation) return null;
@@ -406,7 +411,7 @@ export class TurnRepository {
     const turns = await client.query<TurnRow>(
       `SELECT id, client_request_id, ordinal, user_content, status, created_at, updated_at
          FROM turns WHERE id = $1 AND conversation_id = $2`,
-      [turnId, conversationId],
+      [turnId, conversationId]
     );
     const turn = turns.rows[0];
     if (!turn) return null;
@@ -416,20 +421,18 @@ export class TurnRepository {
               error_recoverable, continued_without_at, is_stale, attempt_no, metadata,
               started_at, completed_at, created_at, updated_at
          FROM model_responses WHERE turn_id = $1`,
-      [turnId],
+      [turnId]
     );
     const deployments = await client.query<ConversationDeploymentRow>(
       `SELECT slot, deployment_id, provider_id, model_id, display_name,
               context_limit_tokens, max_output_tokens, input_modalities, output_modalities
          FROM conversation_deployments
         WHERE conversation_id = $1`,
-      [conversationId],
+      [conversationId]
     );
     return {
       conversation: mapConversationRow(conversation),
-      deployments: orderDeploymentSnapshots(
-        deployments.rows.map(mapConversationDeploymentRow),
-      ),
+      deployments: orderDeploymentSnapshots(deployments.rows.map(mapConversationDeploymentRow)),
       turn: mapTurnRow(turn, responses.rows.map(mapModelResponseRow)),
     };
   }

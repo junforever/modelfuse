@@ -33,7 +33,7 @@ describe('conversation management frontend integration', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test/api/v1');
     vi.stubEnv('VITE_HISTORY_COLLAPSE_CHAR_THRESHOLD', '20');
     api.getConversation.mockImplementation(async (_client, id: string) =>
-      conversation(id === FIRST_ID ? 'Primera' : 'Segunda', false, id),
+      conversation(id === FIRST_ID ? 'Primera' : 'Segunda', false, id)
     );
     api.listConversationTurns.mockResolvedValue({ items: [], olderCursor: null, hasOlder: false });
   });
@@ -71,10 +71,11 @@ describe('conversation management frontend integration', () => {
     await user.click(menuTrigger);
     await user.keyboard('{ArrowDown}');
     const menu = screen.getByRole('menu');
-    expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      'Renombrar',
-      'Eliminar',
-    ]);
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map(item => item.textContent)
+    ).toEqual(['Renombrar', 'Eliminar']);
     await user.click(within(menu).getByRole('menuitem', { name: 'Renombrar' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Renombrar conversación' });
@@ -113,7 +114,9 @@ describe('conversation management frontend integration', () => {
     const failed = deferred<ConversationSummary>();
     const succeeded = deferred<ConversationSummary>();
     api.listConversations.mockImplementation(async () => ({ items, nextCursor: null }));
-    api.renameConversation.mockReturnValueOnce(failed.promise).mockReturnValueOnce(succeeded.promise);
+    api.renameConversation
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(succeeded.promise);
     const user = userEvent.setup();
     const { queryClient, unmount } = renderWithQueryClient(<App />);
 
@@ -166,7 +169,7 @@ describe('conversation management frontend integration', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Renombrar' })).not.toHaveAttribute(
       'aria-disabled',
-      'true',
+      'true'
     );
     const deleteItem = screen.getByRole('menuitem', { name: 'Eliminar' });
     const busyReason = screen.getByText(/no puedes eliminar mientras se procesan respuestas/i);
@@ -192,7 +195,9 @@ describe('conversation management frontend integration', () => {
     const failed = deferred<void>();
     const succeeded = deferred<void>();
     api.listConversations.mockImplementation(async () => ({ items, nextCursor: null }));
-    api.deleteConversation.mockReturnValueOnce(failed.promise).mockReturnValueOnce(succeeded.promise);
+    api.deleteConversation
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(succeeded.promise);
     const user = userEvent.setup();
     const { queryClient, unmount } = renderWithQueryClient(<App />);
 
@@ -200,7 +205,9 @@ describe('conversation management frontend integration', () => {
     await user.keyboard('{ArrowDown}');
     const deleteItem = screen.getByRole('menuitem', { name: 'Eliminar' });
     expect(deleteItem).not.toHaveAttribute('aria-describedby');
-    expect(screen.queryByText(/no puedes eliminar mientras se procesan respuestas/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/no puedes eliminar mientras se procesan respuestas/i)
+    ).not.toBeInTheDocument();
     await user.click(deleteItem);
     const dialog = screen.getByRole('dialog', { name: 'Eliminar conversación' });
     const confirm = within(dialog).getByRole('button', { name: 'Eliminar' });
@@ -245,11 +252,7 @@ describe('conversation management frontend integration', () => {
   });
 });
 
-function conversation(
-  title: string,
-  hasWorkInProgress: boolean,
-  id: string,
-): ConversationSummary {
+function conversation(title: string, hasWorkInProgress: boolean, id: string): ConversationSummary {
   return { id, title, hasWorkInProgress, createdAt: eventTime, updatedAt: eventTime };
 }
 

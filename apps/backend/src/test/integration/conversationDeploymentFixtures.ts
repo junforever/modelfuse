@@ -24,11 +24,11 @@ export const TEST_DEPLOYMENT_SUMMARIES = TEST_DEPLOYMENT_SNAPSHOTS.map(
     providerId,
     modelId,
     displayName,
-  }),
+  })
 ) as readonly ConversationDeploymentSummary[];
 
 export const TEST_DEPLOYMENT_ASSIGNMENT = Object.fromEntries(
-  TEST_DEPLOYMENT_SNAPSHOTS.map(({ slot, deploymentId }) => [slot, deploymentId]),
+  TEST_DEPLOYMENT_SNAPSHOTS.map(({ slot, deploymentId }) => [slot, deploymentId])
 ) as DeploymentAssignment;
 
 export const TEST_DEPLOYMENT_DEFINITIONS = TEST_DEPLOYMENT_SNAPSHOTS.map(snapshot => ({
@@ -39,7 +39,7 @@ export const TEST_DEPLOYMENT_DEFINITIONS = TEST_DEPLOYMENT_SNAPSHOTS.map(snapsho
 export async function insertConversationDeployments(
   pool: Pool,
   conversationId: string,
-  snapshots: ConversationDeploymentSnapshotTuple = TEST_DEPLOYMENT_SNAPSHOTS,
+  snapshots: ConversationDeploymentSnapshotTuple = TEST_DEPLOYMENT_SNAPSHOTS
 ): Promise<void> {
   for (const deployment of snapshots) {
     await pool.query(
@@ -59,14 +59,14 @@ export async function insertConversationDeployments(
         deployment.maxOutputTokens,
         deployment.inputModalities,
         deployment.outputModalities,
-      ],
+      ]
     );
   }
 }
 
 function snapshot(
   slot: ConversationDeploymentSnapshotTuple[number]['slot'],
-  providerId: ConversationDeploymentSnapshotTuple[number]['providerId'],
+  providerId: ConversationDeploymentSnapshotTuple[number]['providerId']
 ) {
   return {
     slot,
@@ -82,7 +82,7 @@ function snapshot(
 }
 
 function credentialEnvironment(
-  providerId: ConversationDeploymentSnapshotTuple[number]['providerId'],
+  providerId: ConversationDeploymentSnapshotTuple[number]['providerId']
 ): CredentialEnvironmentVariable {
   switch (providerId) {
     case 'openai':

@@ -65,7 +65,7 @@ export function protectContext({
   }
 
   if (!fits && auxiliary.length > 0) {
-    auxiliary = auxiliary.map((message) => {
+    auxiliary = auxiliary.map(message => {
       const labelEnd = message.content.indexOf('\n');
       const label = labelEnd >= 0 ? message.content.slice(0, labelEnd + 1) : '';
       return { ...message, content: `${label}${CONTEXT_TRUNCATION_MARKER}` };

@@ -26,9 +26,9 @@ Ruta objetivo:
       },
       "missingSlots": [],
       "checks": [
-        {"type": "includes", "pattern": "hecho observable"},
-        {"type": "excludes", "pattern": "contradicción concreta"},
-        {"type": "no_duplicate_paragraphs"}
+        { "type": "includes", "pattern": "hecho observable" },
+        { "type": "excludes", "pattern": "contradicción concreta" },
+        { "type": "no_duplicate_paragraphs" }
       ]
     }
   ]

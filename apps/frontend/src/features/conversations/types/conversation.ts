@@ -10,8 +10,9 @@ export const RESPONSE_SLOT_LABELS: Readonly<Record<ResponseSlot, string>> = {
   consolidator: 'Consolidador',
 };
 export type BaseResponseSlot = Exclude<ResponseSlot, 'consolidator'>;
-export type ResponseRole<Slot extends ResponseSlot = ResponseSlot> =
-  Slot extends 'consolidator' ? 'consolidator' : 'base';
+export type ResponseRole<Slot extends ResponseSlot = ResponseSlot> = Slot extends 'consolidator'
+  ? 'consolidator'
+  : 'base';
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 export type Modality = (typeof MODALITIES)[number];
 export type ResponseStatus = 'pending' | 'running' | 'completed' | 'failed';

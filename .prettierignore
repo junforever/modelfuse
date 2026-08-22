@@ -8,3 +8,5 @@ build/
 *.min.js
 *.min.css
 .vscode
+.agents/
+.codex/

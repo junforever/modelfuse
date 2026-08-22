@@ -32,7 +32,10 @@ const unknownApiError: ApiError = {
   requestId: 'unavailable',
 };
 
-async function validated<T>(request: Promise<AxiosResponse<unknown>>, schema: ZodType<T>): Promise<T> {
+async function validated<T>(
+  request: Promise<AxiosResponse<unknown>>,
+  schema: ZodType<T>
+): Promise<T> {
   let response: AxiosResponse<unknown>;
   try {
     response = await request;
@@ -114,10 +117,7 @@ export function renameConversation(
   );
 }
 
-export function deleteConversation(
-  client: AxiosInstance,
-  conversationId: string
-): Promise<void> {
+export function deleteConversation(client: AxiosInstance, conversationId: string): Promise<void> {
   return completed(client.delete(`/conversations/${conversationId}`));
 }
 

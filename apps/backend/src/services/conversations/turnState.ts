@@ -21,12 +21,12 @@ function requireCanonicalSlots(slots: readonly TurnSlotState[]): readonly TurnSl
     throw new Error(`Expected exactly ${RESPONSE_SLOTS.length} response slots`);
   }
 
-  const bySlot = new Map(slots.map((slot) => [slot.slot, slot]));
+  const bySlot = new Map(slots.map(slot => [slot.slot, slot]));
   if (bySlot.size !== RESPONSE_SLOTS.length) {
     throw new Error('Response slots must be unique');
   }
 
-  return RESPONSE_SLOTS.map((slot) => {
+  return RESPONSE_SLOTS.map(slot => {
     const state = bySlot.get(slot);
     if (state === undefined) {
       throw new Error(`Missing response slot: ${slot}`);
@@ -38,7 +38,7 @@ function requireCanonicalSlots(slots: readonly TurnSlotState[]): readonly TurnSl
 export function calculateTurnState(slots: readonly TurnSlotState[]): CalculatedTurnState {
   const canonicalSlots = requireCanonicalSlots(slots);
   const hasWorkInProgress = canonicalSlots.some(
-    ({ status }) => status === 'pending' || status === 'running',
+    ({ status }) => status === 'pending' || status === 'running'
   );
 
   if (hasWorkInProgress) {
@@ -46,7 +46,7 @@ export function calculateTurnState(slots: readonly TurnSlotState[]): CalculatedT
   }
 
   const usefulResponses = canonicalSlots.filter(
-    ({ status, isStale }) => status === 'completed' && isStale !== true,
+    ({ status, isStale }) => status === 'completed' && isStale !== true
   ).length;
 
   if (usefulResponses === RESPONSE_SLOTS.length) {

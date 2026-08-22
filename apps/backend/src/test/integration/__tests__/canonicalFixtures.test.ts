@@ -2,13 +2,16 @@ import { readFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
 
-import { RESPONSE_SLOTS, type ConversationDeploymentSnapshot } from '../../../types/conversations.js';
+import {
+  RESPONSE_SLOTS,
+  type ConversationDeploymentSnapshot,
+} from '../../../types/conversations.js';
 import { createIntegrationBackend } from '../createIntegrationBackend.js';
 import { createControlledProviders, deferred } from '../controlledLlmProviders.js';
 
 const fixtureUrl = new URL(
   '../../../services/conversations/__tests__/fixtures/consolidation-evaluation.json',
-  import.meta.url,
+  import.meta.url
 );
 
 describe('canonical integration fixtures', () => {
@@ -28,7 +31,9 @@ describe('canonical integration fixtures', () => {
 
     expect(Object.keys(providers)).toEqual(RESPONSE_SLOTS);
     expect(providers.consolidator.calls).toEqual([request]);
-    expect(await providers.consolidator.measureInputTokens(request.deployment, request.messages)).toBe(1);
+    expect(
+      await providers.consolidator.measureInputTokens(request.deployment, request.messages)
+    ).toBe(1);
 
     gate.resolve();
     await expect(pending).resolves.toMatchObject({
@@ -46,14 +51,16 @@ describe('canonical integration fixtures', () => {
     expect(createIntegrationBackend).toBeTypeOf('function');
     for (const testCase of fixture.cases) {
       expect(Object.keys(testCase.baseResponses)).toEqual(RESPONSE_SLOTS.slice(0, 3));
-      expect(testCase.missingSlots.every(slot => RESPONSE_SLOTS.slice(0, 3).includes(slot as never))).toBe(true);
+      expect(
+        testCase.missingSlots.every(slot => RESPONSE_SLOTS.slice(0, 3).includes(slot as never))
+      ).toBe(true);
     }
   });
 });
 
 function deployment(
   slot: ConversationDeploymentSnapshot['slot'],
-  providerId: ConversationDeploymentSnapshot['providerId'],
+  providerId: ConversationDeploymentSnapshot['providerId']
 ): ConversationDeploymentSnapshot {
   return {
     slot,

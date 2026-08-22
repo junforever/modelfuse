@@ -30,7 +30,7 @@ export class ContextBuilder {
       contextRepository: ContextRepositoryPort;
       maxTurns: number;
       thresholdRatio: number;
-    },
+    }
   ) {}
 
   async build(input: {
@@ -41,30 +41,33 @@ export class ContextBuilder {
     currentBaseResponses?: readonly CurrentBaseResponse[];
     context: LlmContextCapabilities;
   }) {
-    const history = input.slot === 'consolidator'
-      ? await this.dependencies.contextRepository.getConsolidatorContext({
-          conversationId: input.conversationId,
-          beforeOrdinal: input.currentOrdinal,
-          maxTurns: this.dependencies.maxTurns,
-        })
-      : await this.dependencies.contextRepository.getBaseContext({
-          conversationId: input.conversationId,
-          beforeOrdinal: input.currentOrdinal,
-          slot: input.slot,
-          maxTurns: this.dependencies.maxTurns,
-        });
+    const history =
+      input.slot === 'consolidator'
+        ? await this.dependencies.contextRepository.getConsolidatorContext({
+            conversationId: input.conversationId,
+            beforeOrdinal: input.currentOrdinal,
+            maxTurns: this.dependencies.maxTurns,
+          })
+        : await this.dependencies.contextRepository.getBaseContext({
+            conversationId: input.conversationId,
+            beforeOrdinal: input.currentOrdinal,
+            slot: input.slot,
+            maxTurns: this.dependencies.maxTurns,
+          });
 
     const protectedContext = protectContext({
       systemMessage: {
         role: 'system',
-        content: input.slot === 'consolidator'
-          ? 'Consolidate the available model answers into one final answer.'
-          : 'Provide a complete, accurate answer to the user prompt.',
+        content:
+          input.slot === 'consolidator'
+            ? 'Consolidate the available model answers into one final answer.'
+            : 'Provide a complete, accurate answer to the user prompt.',
       },
       historicalTurns: history.map(this.toHistoricalTurn),
-      auxiliaryMessages: input.slot === 'consolidator'
-        ? this.baseResponseMessages(input.currentBaseResponses ?? [])
-        : [],
+      auxiliaryMessages:
+        input.slot === 'consolidator'
+          ? this.baseResponseMessages(input.currentBaseResponses ?? [])
+          : [],
       currentPrompt: { role: 'user', content: input.prompt },
       currentOrdinal: input.currentOrdinal,
       context: input.context,
@@ -77,16 +80,19 @@ export class ContextBuilder {
       contextWindow: {
         ...protectedContext.contextWindow,
         truncated: true,
-        protectionApplied: protectedContext.contextWindow.protectionApplied === 'truncate'
-          ? 'turn-window-and-truncate'
-          : protectedContext.contextWindow.protectionApplied === 'none'
-            ? 'turn-window'
-            : protectedContext.contextWindow.protectionApplied,
+        protectionApplied:
+          protectedContext.contextWindow.protectionApplied === 'truncate'
+            ? 'turn-window-and-truncate'
+            : protectedContext.contextWindow.protectionApplied === 'none'
+              ? 'turn-window'
+              : protectedContext.contextWindow.protectionApplied,
       },
     };
   }
 
-  private readonly toHistoricalTurn = (turn: ContextTurn): {
+  private readonly toHistoricalTurn = (
+    turn: ContextTurn
+  ): {
     ordinal: number;
     messages: LlmMessage[];
   } => ({

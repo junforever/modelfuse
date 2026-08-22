@@ -3,10 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DeploymentCatalogItem, DeploymentIds } from '../../types/conversation';
-import {
-  DeploymentSelectors,
-  getDefaultDeploymentSelection,
-} from '../DeploymentSelectors';
+import { DeploymentSelectors, getDefaultDeploymentSelection } from '../DeploymentSelectors';
 
 const emptySelection: DeploymentIds = {
   'base-1': '',
@@ -66,7 +63,7 @@ describe('DeploymentSelectors', () => {
       />
     );
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'No se pudo cargar el catálogo de deployments',
+      'No se pudo cargar el catálogo de deployments'
     );
     expect(screen.getByRole('group', { name: 'Deployments' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /reintentar/i })).not.toBeInTheDocument();
@@ -101,7 +98,7 @@ describe('DeploymentSelectors', () => {
         expect(
           within(listbox).getByRole('option', {
             name: `${item.displayName} · ${item.providerId}`,
-          }),
+          })
         ).toBeVisible();
       }
       await user.click(within(listbox).getByRole('option', { name: optionName }));
@@ -132,13 +129,17 @@ describe('DeploymentSelectors', () => {
     });
     expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveTextContent('openai-5.6-sol');
     expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent('gemini-3.7-flash');
-    expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent('openrouter-minimax-m3');
-    expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent('openrouter-qwen-3.8-max');
+    expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent(
+      'openrouter-minimax-m3'
+    );
+    expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent(
+      'openrouter-qwen-3.8-max'
+    );
   });
 
   it('shows no partial defaults when any required deployment is missing', () => {
     const incompleteItems = defaultItems.filter(
-      item => item.deploymentId !== 'openrouter-qwen-3.8-max',
+      item => item.deploymentId !== 'openrouter-qwen-3.8-max'
     );
     const selection = getDefaultDeploymentSelection(incompleteItems);
     render(
@@ -153,7 +154,7 @@ describe('DeploymentSelectors', () => {
 
     expect(selection).toEqual(emptySelection);
     expect(screen.getByRole('status')).toHaveTextContent(
-      'El perfil predeterminado no está disponible',
+      'El perfil predeterminado no está disponible'
     );
     for (const selector of screen.getAllByRole('combobox')) {
       expect(selector).toHaveTextContent('Selecciona un deployment');
@@ -172,19 +173,41 @@ describe('DeploymentSelectors', () => {
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Una selección ya no está disponible. Elige otro deployment para continuar.',
+      'Una selección ya no está disponible. Elige otro deployment para continuar.'
     );
     expect(screen.getByRole('group', { name: 'Deployments' })).toBeEnabled();
     expect(
-      screen.queryByText('El perfil predeterminado no está disponible', { exact: false }),
+      screen.queryByText('El perfil predeterminado no está disponible', { exact: false })
     ).not.toBeInTheDocument();
+  });
+
+  it('announces duplicate deploymentIds and describes each affected selector', () => {
+    render(
+      <DeploymentSelectors
+        items={items}
+        selection={{
+          'base-1': 'deployment-1',
+          'base-2': 'deployment-1',
+          'base-3': 'deployment-3',
+          consolidator: 'deployment-4',
+        }}
+        isLoading={false}
+        disabled={false}
+        onChange={vi.fn()}
+      />
+    );
+
+    const error = 'Cada slot debe usar un deployment distinto.';
+    expect(screen.getByRole('alert')).toHaveTextContent(error);
+    expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveAccessibleDescription(error);
+    expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveAccessibleDescription(error);
   });
 });
 
 function deployment(
   deploymentId: string,
   displayName: string,
-  providerId: DeploymentCatalogItem['providerId'],
+  providerId: DeploymentCatalogItem['providerId']
 ): DeploymentCatalogItem {
   return {
     deploymentId,

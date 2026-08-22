@@ -9,7 +9,7 @@ const conversationId = '00000000-0000-4000-8000-000000000001';
 
 function slotUpdate(turnId: string, slot: ResponseSlot, content: string) {
   const storedResponse = createConversationFixture().turn.responses.find(
-    response => response.slot === slot,
+    response => response.slot === slot
   );
   if (!storedResponse) throw new Error(`Missing canonical fixture slot: ${slot}`);
   const response = {
@@ -36,20 +36,22 @@ describe('TurnEventPublisher', () => {
     const firstA = publisher.publish(slotUpdate('turn-a', 'base-1', 'first same-version value'));
     const firstB = publisher.publish(slotUpdate('turn-b', 'base-2', 'independent turn value'));
     const secondA = publisher.publish(
-      slotUpdate('turn-a', 'consolidator', 'second same-version value'),
+      slotUpdate('turn-a', 'consolidator', 'second same-version value')
     );
 
     expect([firstA.data.eventSequence, secondA.data.eventSequence]).toEqual([1, 2]);
     expect(firstB.data.eventSequence).toBe(1);
     expect(
-      turnAEvents.mock.calls.map(([event]) => event.event === 'slot_update'
-        ? {
-            sequence: event.data.eventSequence,
-            slot: event.data.response.slot,
-            role: event.data.response.role,
-            content: event.data.response.content,
-          }
-        : null),
+      turnAEvents.mock.calls.map(([event]) =>
+        event.event === 'slot_update'
+          ? {
+              sequence: event.data.eventSequence,
+              slot: event.data.response.slot,
+              role: event.data.response.role,
+              content: event.data.response.content,
+            }
+          : null
+      )
     ).toEqual([
       {
         sequence: 1,
@@ -94,9 +96,9 @@ describe('TurnEventPublisher', () => {
     });
     publisher.subscribe('turn-a', healthyListener);
 
-    expect(() => publisher.publish(
-      slotUpdate('turn-a', 'consolidator', 'terminal value'),
-    )).not.toThrow();
+    expect(() =>
+      publisher.publish(slotUpdate('turn-a', 'consolidator', 'terminal value'))
+    ).not.toThrow();
     expect(healthyListener).toHaveBeenCalledOnce();
     expect(healthyListener.mock.calls[0]?.[0].data.eventSequence).toBe(1);
   });

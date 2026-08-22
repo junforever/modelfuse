@@ -11,14 +11,14 @@ describe('fake LLM providers', () => {
     const signal = new AbortController().signal;
 
     const results = await Promise.all(
-      Object.values(providers).map((provider) =>
+      Object.values(providers).map(provider =>
         provider.generate({
           operationId: `operation-${provider.slot}`,
           slot: provider.slot,
           messages,
           signal,
-        }),
-      ),
+        })
+      )
     );
     messages[0].content = 'mutated after calls';
 
@@ -44,21 +44,23 @@ describe('fake LLM providers', () => {
         content: 'Deterministic consolidator response',
       },
     ]);
-    expect(Object.values(providers).map((provider) => provider.calls)).toEqual(
-      Object.values(providers).map((provider) => [
+    expect(Object.values(providers).map(provider => provider.calls)).toEqual(
+      Object.values(providers).map(provider => [
         {
           operationId: `operation-${provider.slot}`,
           slot: provider.slot,
           messages: [{ role: 'user', content: fixture.turn.prompt }],
           signal,
         },
-      ]),
+      ])
     );
   });
 
   it('records the call and rejects with the configured controlled error', async () => {
     const controlledError = new Error('controlled provider failure');
-    const provider = createFakeLlmProviders({ consolidator: { error: controlledError } }).consolidator;
+    const provider = createFakeLlmProviders({
+      consolidator: { error: controlledError },
+    }).consolidator;
     const request = {
       operationId: 'operation-error',
       slot: 'consolidator' as const,

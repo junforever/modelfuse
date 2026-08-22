@@ -65,7 +65,7 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
       });
 
       const history = await request(recreated.app).get(
-        `/api/v1/conversations/${recoveryCase.id}/turns`,
+        `/api/v1/conversations/${recoveryCase.id}/turns`
       );
       expect(history.status).toBe(200);
       expect(history.body).toMatchObject({ hasOlder: false, olderCursor: null });
@@ -73,12 +73,12 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
         history.body.items.map(({ id, ordinal }: { id: string; ordinal: number }) => ({
           id,
           ordinal,
-        })),
+        }))
       ).toEqual(recoveryCase.turns.map(({ id, ordinal }) => ({ id, ordinal })));
 
       for (const expectedTurn of recoveryCase.turns) {
         const actualTurn = history.body.items.find(
-          ({ id }: { id: string }) => id === expectedTurn.id,
+          ({ id }: { id: string }) => id === expectedTurn.id
         );
         expect(actualTurn).toMatchObject({
           id: expectedTurn.id,
@@ -88,12 +88,12 @@ describe(`startup recovery PostgreSQL integration fixture v${RECOVERY_FIXTURE_VE
           status: expectedTurn.expectedStatus,
         });
         expect(actualTurn.responses.map(({ slot }: { slot: string }) => slot)).toEqual(
-          CANONICAL_SLOTS,
+          CANONICAL_SLOTS
         );
 
         for (const expectedResponse of expectedTurn.responses) {
           const actualResponse = actualTurn.responses.find(
-            ({ slot }: { slot: string }) => slot === expectedResponse.slot,
+            ({ slot }: { slot: string }) => slot === expectedResponse.slot
           );
           expect(actualResponse).toMatchObject(expectedResponseAfterRecovery(expectedResponse));
         }
@@ -110,7 +110,7 @@ async function seedRecoveryCases(pool: Pool): Promise<void> {
       `INSERT INTO conversations
          (id, create_client_request_id, title, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $4)`,
-      [recoveryCase.id, recoveryCase.clientRequestId, recoveryCase.title, FIXTURE_TIME],
+      [recoveryCase.id, recoveryCase.clientRequestId, recoveryCase.title, FIXTURE_TIME]
     );
     await insertConversationDeployments(pool, recoveryCase.id);
 
@@ -120,11 +120,7 @@ async function seedRecoveryCases(pool: Pool): Promise<void> {
   }
 }
 
-async function seedTurn(
-  pool: Pool,
-  conversationId: string,
-  turn: RecoveryTurnCase,
-): Promise<void> {
+async function seedTurn(pool: Pool, conversationId: string, turn: RecoveryTurnCase): Promise<void> {
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
@@ -137,7 +133,7 @@ async function seedTurn(
       turn.prompt,
       turn.status,
       FIXTURE_TIME,
-    ],
+    ]
   );
 
   for (const response of turn.responses) {
@@ -162,7 +158,7 @@ async function seedTurn(
         response.status === 'running' ? FIXTURE_TIME : null,
         response.status === 'completed' || response.status === 'failed' ? FIXTURE_TIME : null,
         FIXTURE_TIME,
-      ],
+      ]
     );
   }
 }

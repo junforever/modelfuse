@@ -52,7 +52,7 @@ feature queda lista para implementación.
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
 - [x] `apps/frontend`, `apps/backend`, `packages/ui` y `db` mantienen ownership
       independiente y no importan internals de otra aplicación.
@@ -344,19 +344,19 @@ en servicios; controllers no observan repositorios ni reglas de dominio.
 
 ### HTTP surface
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/conversations` | Create/replay; `202` |
-| `GET` | `/api/v1/conversations` | Página de sidebar |
-| `GET` | `/api/v1/conversations/:id` | Detalle persistido y busy |
-| `PATCH` | `/api/v1/conversations/:id` | Rename durante busy |
-| `DELETE` | `/api/v1/conversations/:id` | Cascade o `409 CONVERSATION_BUSY` |
-| `GET` | `/api/v1/conversations/:id/turns` | Historial por bloques de tres |
-| `POST` | `/api/v1/conversations/:id/turns` | Create/replay; `202` o 409 |
-| `GET` | `/api/v1/conversations/:id/turns/:turnId` | Snapshot persistido puntual |
-| `GET` | `/api/v1/conversations/:id/turns/:turnId/events` | Stream SSE del turno |
-| `POST` | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/retry` | Retry CAS |
-| `POST` | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/continue-without` | Ausencia irreversible |
+| Method   | Path                                                                       | Purpose                           |
+| -------- | -------------------------------------------------------------------------- | --------------------------------- |
+| `POST`   | `/api/v1/conversations`                                                    | Create/replay; `202`              |
+| `GET`    | `/api/v1/conversations`                                                    | Página de sidebar                 |
+| `GET`    | `/api/v1/conversations/:id`                                                | Detalle persistido y busy         |
+| `PATCH`  | `/api/v1/conversations/:id`                                                | Rename durante busy               |
+| `DELETE` | `/api/v1/conversations/:id`                                                | Cascade o `409 CONVERSATION_BUSY` |
+| `GET`    | `/api/v1/conversations/:id/turns`                                          | Historial por bloques de tres     |
+| `POST`   | `/api/v1/conversations/:id/turns`                                          | Create/replay; `202` o 409        |
+| `GET`    | `/api/v1/conversations/:id/turns/:turnId`                                  | Snapshot persistido puntual       |
+| `GET`    | `/api/v1/conversations/:id/turns/:turnId/events`                           | Stream SSE del turno              |
+| `POST`   | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/retry`            | Retry CAS                         |
+| `POST`   | `/api/v1/conversations/:id/turns/:turnId/responses/:slot/continue-without` | Ausencia irreversible             |
 
 ## Persistence and Liquibase
 

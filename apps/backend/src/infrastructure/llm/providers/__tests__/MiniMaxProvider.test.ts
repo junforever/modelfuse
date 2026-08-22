@@ -1,12 +1,7 @@
 import { expect, vi } from 'vitest';
 
 import { MiniMaxProvider } from '../MiniMaxProvider.js';
-import {
-  adapterConfig,
-  axiosError,
-  messages,
-  runProviderContract,
-} from './providerContract.js';
+import { adapterConfig, axiosError, messages, runProviderContract } from './providerContract.js';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 
@@ -28,7 +23,7 @@ runProviderContract({
     choices: [{ message: { content: 'Normalized answer' } }],
     usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
   },
-  assertMappedRequest: (request) => {
+  assertMappedRequest: request => {
     expect(request).toMatchObject({
       method: 'POST',
       url: adapterConfig.endpoint,

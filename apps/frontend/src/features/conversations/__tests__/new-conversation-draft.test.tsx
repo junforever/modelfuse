@@ -11,11 +11,7 @@ import { renderWithQueryClient } from '../../../test/query-test-utils';
 import { createTestQueryClient } from '../../../test/query-test-utils';
 import { ResponseTabs } from '../components/ResponseTabs';
 import { useConversationExecution } from '../hooks/useConversationExecution';
-import type {
-  ConversationDetail,
-  ConversationSummary,
-  DeploymentIds,
-} from '../types/conversation';
+import type { ConversationDetail, ConversationSummary, DeploymentIds } from '../types/conversation';
 
 const api = vi.hoisted(() => ({
   createConversation: vi.fn(),
@@ -53,7 +49,10 @@ describe('new conversation draft', () => {
     vi.stubGlobal('EventSource', NoopEventSource);
 
     api.listConversations.mockResolvedValue({
-      items: [summary(FIRST_ID, 'Conversación anterior'), summary(SECOND_ID, 'Conversación conservada')],
+      items: [
+        summary(FIRST_ID, 'Conversación anterior'),
+        summary(SECOND_ID, 'Conversación conservada'),
+      ],
       nextCursor: null,
     });
     api.listAvailableDeployments.mockResolvedValue({ items: catalogItems() });
@@ -67,7 +66,10 @@ describe('new conversation draft', () => {
             modelResponse('base-1', { status: 'completed', content: 'Base 1 anterior' }),
             modelResponse('base-2', { status: 'completed', content: 'Base 2 anterior' }),
             modelResponse('base-3', { status: 'completed', content: 'Base 3 anterior' }),
-            modelResponse('consolidator', { status: 'completed', content: 'Consolidación anterior' }),
+            modelResponse('consolidator', {
+              status: 'completed',
+              content: 'Consolidación anterior',
+            }),
           ],
         }),
       ],
@@ -114,10 +116,18 @@ describe('new conversation draft', () => {
     queryClient.clear();
   });
 
-  it('preselects and submits the exact complete default profile for a new draft', async () => {
+  it('submits distinct deploymentIds even when they share providerId and modelId', async () => {
     const user = userEvent.setup();
-    vi.spyOn(globalThis.crypto, 'randomUUID')
-      .mockReturnValue('623e4567-e89b-42d3-a456-426614174000');
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '623e4567-e89b-42d3-a456-426614174000'
+    );
+    api.listAvailableDeployments.mockResolvedValue({
+      items: catalogItems().map(item => ({
+        ...item,
+        providerId: 'openrouter' as const,
+        modelId: 'shared-model',
+      })),
+    });
     api.createConversation.mockResolvedValue({
       conversation: detail(FIRST_ID, 'Nueva'),
       turn: turnFixture(),
@@ -126,19 +136,49 @@ describe('new conversation draft', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveTextContent('openai-5.6-sol');
-      expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent('gemini-3.7-flash');
-      expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent('openrouter-minimax-m3');
-      expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent('openrouter-qwen-3.8-max');
+      expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent(
+        'gemini-3.7-flash'
+      );
+      expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent(
+        'openrouter-minimax-m3'
+      );
+      expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent(
+        'openrouter-qwen-3.8-max'
+      );
     });
 
     await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Usar perfil completo');
     await user.click(screen.getByRole('button', { name: 'Enviar' }));
 
-    await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(expect.anything(), {
-      clientRequestId: '623e4567-e89b-42d3-a456-426614174000',
-      prompt: 'Usar perfil completo',
-      deploymentIds: defaultDeploymentIds,
-    }));
+    await waitFor(() =>
+      expect(api.createConversation).toHaveBeenCalledWith(expect.anything(), {
+        clientRequestId: '623e4567-e89b-42d3-a456-426614174000',
+        prompt: 'Usar perfil completo',
+        deploymentIds: defaultDeploymentIds,
+      })
+    );
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('blocks creation before the request when two slots use the same deploymentId', async () => {
+    const user = userEvent.setup();
+    const { queryClient, unmount } = renderWithQueryClient(<App />);
+
+    await user.click(await screen.findByRole('combobox', { name: 'Base 2' }));
+    await user.click(
+      within(await screen.findByRole('listbox')).getByRole('option', {
+        name: 'GPT-5.6 Sol · openai',
+      })
+    );
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'No enviar duplicados');
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Cada slot debe usar un deployment distinto.'
+    );
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
+    expect(api.createConversation).not.toHaveBeenCalled();
 
     unmount();
     queryClient.clear();
@@ -155,7 +195,7 @@ describe('new conversation draft', () => {
     const { queryClient, unmount } = renderWithQueryClient(<App />);
 
     expect(
-      await screen.findByText('El perfil predeterminado no está disponible', { exact: false }),
+      await screen.findByText('El perfil predeterminado no está disponible', { exact: false })
     ).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Requiere selección');
 
@@ -176,34 +216,42 @@ describe('new conversation draft', () => {
     const { result, rerender, unmount } = renderHook(
       ({ conversationId }: { conversationId: string | null }) =>
         useConversationExecution({ apiClient: client, conversationId, onSuccess }),
-      { initialProps: { conversationId: null }, wrapper },
+      { initialProps: { conversationId: null }, wrapper }
     );
     const creationResult = { conversation: detail(FIRST_ID, 'Nueva'), turn: turnFixture() };
     api.createConversation.mockResolvedValue(creationResult);
     api.createTurn.mockResolvedValue(creationResult);
 
-    act(() => result.current.execute({
-      clientRequestId: '423e4567-e89b-42d3-a456-426614174000',
-      prompt: 'Crear',
-      deploymentIds,
-    }));
-    await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(client, {
-      clientRequestId: '423e4567-e89b-42d3-a456-426614174000',
-      prompt: 'Crear',
-      deploymentIds,
-    }));
+    act(() =>
+      result.current.execute({
+        clientRequestId: '423e4567-e89b-42d3-a456-426614174000',
+        prompt: 'Crear',
+        deploymentIds,
+      })
+    );
+    await waitFor(() =>
+      expect(api.createConversation).toHaveBeenCalledWith(client, {
+        clientRequestId: '423e4567-e89b-42d3-a456-426614174000',
+        prompt: 'Crear',
+        deploymentIds,
+      })
+    );
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
     rerender({ conversationId: FIRST_ID });
-    act(() => result.current.execute({
-      clientRequestId: '523e4567-e89b-42d3-a456-426614174000',
-      prompt: 'Continuar',
-      deploymentIds,
-    }));
-    await waitFor(() => expect(api.createTurn).toHaveBeenCalledWith(client, FIRST_ID, {
-      clientRequestId: '523e4567-e89b-42d3-a456-426614174000',
-      prompt: 'Continuar',
-    }));
+    act(() =>
+      result.current.execute({
+        clientRequestId: '523e4567-e89b-42d3-a456-426614174000',
+        prompt: 'Continuar',
+        deploymentIds,
+      })
+    );
+    await waitFor(() =>
+      expect(api.createTurn).toHaveBeenCalledWith(client, FIRST_ID, {
+        clientRequestId: '523e4567-e89b-42d3-a456-426614174000',
+        prompt: 'Continuar',
+      })
+    );
 
     unmount();
     queryClient.clear();
@@ -212,6 +260,7 @@ describe('new conversation draft', () => {
   it('renders response tabs with only the four canonical logical slots', () => {
     render(
       <ResponseTabs
+        deployments={detail(FIRST_ID, 'Nueva').deployments}
         responses={turnFixture().responses}
         runtimeStages={{}}
         hasWorkInProgress={false}
@@ -221,10 +270,10 @@ describe('new conversation draft', () => {
     );
 
     expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
-      'Base 1',
-      'Base 2',
-      'Base 3',
-      'Consolidador',
+      'Base 1 · GPT',
+      'Base 2 · Gemini',
+      'Base 3 · MiniMax',
+      'Consolidador · Qwen',
     ]);
   });
 });
@@ -243,10 +292,34 @@ function detail(id: string, title: string): ConversationDetail {
   return {
     ...summary(id, title),
     deployments: [
-      { slot: 'base-1', deploymentId: 'deployment-1', providerId: 'openai', modelId: 'model-1', displayName: 'GPT' },
-      { slot: 'base-2', deploymentId: 'deployment-2', providerId: 'google', modelId: 'model-2', displayName: 'Gemini' },
-      { slot: 'base-3', deploymentId: 'deployment-3', providerId: 'openrouter', modelId: 'model-3', displayName: 'MiniMax' },
-      { slot: 'consolidator', deploymentId: 'deployment-4', providerId: 'openrouter', modelId: 'model-4', displayName: 'Qwen' },
+      {
+        slot: 'base-1',
+        deploymentId: 'deployment-1',
+        providerId: 'openai',
+        modelId: 'model-1',
+        displayName: 'GPT',
+      },
+      {
+        slot: 'base-2',
+        deploymentId: 'deployment-2',
+        providerId: 'google',
+        modelId: 'model-2',
+        displayName: 'Gemini',
+      },
+      {
+        slot: 'base-3',
+        deploymentId: 'deployment-3',
+        providerId: 'openrouter',
+        modelId: 'model-3',
+        displayName: 'MiniMax',
+      },
+      {
+        slot: 'consolidator',
+        deploymentId: 'deployment-4',
+        providerId: 'openrouter',
+        modelId: 'model-4',
+        displayName: 'Qwen',
+      },
     ],
   };
 }
@@ -263,7 +336,7 @@ function catalogItems() {
 function catalogItem(
   deploymentId: string,
   displayName: string,
-  providerId: 'openai' | 'google' | 'openrouter',
+  providerId: 'openai' | 'google' | 'openrouter'
 ) {
   return {
     deploymentId,

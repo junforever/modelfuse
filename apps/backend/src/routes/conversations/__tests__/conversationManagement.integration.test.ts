@@ -81,7 +81,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
     expect(response.body.title).toBe(title);
     const persisted = await pool.query<{ title: string }>(
       'SELECT title FROM conversations WHERE id = $1',
-      [IDLE_ID],
+      [IDLE_ID]
     );
     expect(persisted.rows).toEqual([{ title }]);
   });
@@ -179,7 +179,7 @@ async function seedConversation(
   pool: Pool,
   conversationId: string,
   status: 'completed' | 'running',
-  title: string,
+  title: string
 ): Promise<void> {
   const discriminator = conversationId === IDLE_ID ? '1' : '2';
   const turnId = `91100000-0000-4000-8000-00000000009${discriminator}`;
@@ -187,15 +187,20 @@ async function seedConversation(
     `INSERT INTO conversations
        (id, create_client_request_id, title, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5)`,
-    [conversationId, `91200000-0000-4000-8000-00000000009${discriminator}`, title, NOW,
-      `2026-07-26T20:00:0${discriminator}.000Z`],
+    [
+      conversationId,
+      `91200000-0000-4000-8000-00000000009${discriminator}`,
+      title,
+      NOW,
+      `2026-07-26T20:00:0${discriminator}.000Z`,
+    ]
   );
   await insertConversationDeployments(pool, conversationId);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
      VALUES ($1, $2, $3, 1, 'Prompt', $4, $5, $5)`,
-    [turnId, conversationId, `91300000-0000-4000-8000-00000000009${discriminator}`, status, NOW],
+    [turnId, conversationId, `91300000-0000-4000-8000-00000000009${discriminator}`, status, NOW]
   );
   await pool.query(
     `INSERT INTO model_responses
@@ -209,13 +214,16 @@ async function seedConversation(
             CASE WHEN $2::varchar = 'completed' THEN $3::timestamptz ELSE NULL END,
             $3::timestamptz, $3::timestamptz
        FROM unnest(ARRAY['base-1', 'base-2', 'base-3', 'consolidator']) AS slot`,
-    [turnId, status, NOW],
+    [turnId, status, NOW]
   );
 }
 
 async function storedTitle(pool: Pool, conversationId: string): Promise<string | undefined> {
-  return (await pool.query<{ title: string }>('SELECT title FROM conversations WHERE id = $1', [conversationId]))
-    .rows[0]?.title;
+  return (
+    await pool.query<{ title: string }>('SELECT title FROM conversations WHERE id = $1', [
+      conversationId,
+    ])
+  ).rows[0]?.title;
 }
 
 async function rowCounts(pool: Pool, conversationId: string) {
@@ -231,7 +239,7 @@ async function rowCounts(pool: Pool, conversationId: string) {
        (SELECT count(*)::int FROM turns WHERE conversation_id = $1) AS turns,
        (SELECT count(*)::int FROM model_responses mr JOIN turns t ON t.id = mr.turn_id
          WHERE t.conversation_id = $1) AS responses`,
-    [conversationId],
+    [conversationId]
   );
   return result.rows[0];
 }

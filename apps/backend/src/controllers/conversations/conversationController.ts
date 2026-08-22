@@ -49,7 +49,8 @@ export function createConversationController(service: ConversationService) {
     },
     getConversation: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId } = (request as ValidatedRequest).validatedParams as ConversationParams;
+        const { conversationId } = (request as ValidatedRequest)
+          .validatedParams as ConversationParams;
         response.json(await service.getConversation(conversationId));
       } catch (error) {
         next(error);
@@ -57,7 +58,8 @@ export function createConversationController(service: ConversationService) {
     },
     renameConversation: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId } = (request as ValidatedRequest).validatedParams as ConversationParams;
+        const { conversationId } = (request as ValidatedRequest)
+          .validatedParams as ConversationParams;
         const body = (request as ValidatedRequest).validatedBody as RenameConversationBody;
         response.json(await service.renameConversation(conversationId, body));
       } catch (error) {
@@ -66,7 +68,8 @@ export function createConversationController(service: ConversationService) {
     },
     deleteConversation: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId } = (request as ValidatedRequest).validatedParams as ConversationParams;
+        const { conversationId } = (request as ValidatedRequest)
+          .validatedParams as ConversationParams;
         await service.deleteConversation(conversationId);
         response.status(204).send();
       } catch (error) {
@@ -75,7 +78,8 @@ export function createConversationController(service: ConversationService) {
     },
     listTurns: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId } = (request as ValidatedRequest).validatedParams as ConversationParams;
+        const { conversationId } = (request as ValidatedRequest)
+          .validatedParams as ConversationParams;
         const { before } = (request as ValidatedRequest).validatedQuery as ListTurnsQuery;
         response.json(await service.listTurns(conversationId, before));
       } catch (error) {
@@ -84,7 +88,8 @@ export function createConversationController(service: ConversationService) {
     },
     createTurn: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId } = (request as ValidatedRequest).validatedParams as ConversationParams;
+        const { conversationId } = (request as ValidatedRequest)
+          .validatedParams as ConversationParams;
         const body = (request as ValidatedRequest).validatedBody as CreateTurnBody;
         response.status(202).json(await service.createTurn(conversationId, body));
       } catch (error) {
@@ -93,7 +98,8 @@ export function createConversationController(service: ConversationService) {
     },
     getTurn: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId, turnId } = (request as ValidatedRequest).validatedParams as TurnParams;
+        const { conversationId, turnId } = (request as ValidatedRequest)
+          .validatedParams as TurnParams;
         response.json(await service.getTurn(conversationId, turnId));
       } catch (error) {
         next(error);
@@ -101,7 +107,8 @@ export function createConversationController(service: ConversationService) {
     },
     retryResponse: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId, turnId, slot } = (request as ValidatedRequest).validatedParams as ResponseParams;
+        const { conversationId, turnId, slot } = (request as ValidatedRequest)
+          .validatedParams as ResponseParams;
         response.status(202).json(await service.retryResponse(conversationId, turnId, slot));
       } catch (error) {
         next(error);
@@ -109,7 +116,8 @@ export function createConversationController(service: ConversationService) {
     },
     continueWithout: async (request: Request, response: Response, next: NextFunction) => {
       try {
-        const { conversationId, turnId, slot } = (request as ValidatedRequest).validatedParams as ResponseParams;
+        const { conversationId, turnId, slot } = (request as ValidatedRequest)
+          .validatedParams as ResponseParams;
         response.json(await service.continueWithout(conversationId, turnId, slot));
       } catch (error) {
         next(error);

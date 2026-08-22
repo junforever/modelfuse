@@ -108,9 +108,7 @@ describe('conversation history frontend integration', () => {
     expect(alert).not.toHaveTextContent('transport detail');
 
     await user.click(within(alert).getByRole('button', { name: 'Reintentar conversaciones' }));
-    expect(
-      await screen.findByRole('button', { name: /^Recuperada$/ }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Recuperada$/ })).toBeInTheDocument();
     expect(screen.queryByText(/^No hay conversaciones guardadas\.?$/)).not.toBeInTheDocument();
     rerendered.unmount();
     rerendered.queryClient.clear();
@@ -123,9 +121,7 @@ describe('conversation history frontend integration', () => {
       .mockReturnValueOnce(pending.promise);
     const { queryClient, unmount } = renderWithQueryClient(<App />);
 
-    expect(
-      await screen.findByRole('button', { name: /^Página 1$/ }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Página 1$/ })).toBeInTheDocument();
     await waitFor(() => expect(api.listConversations).toHaveBeenCalledTimes(2));
     const sentinel = screen.getByLabelText('Cargar más conversaciones');
     act(() => {
@@ -135,16 +131,15 @@ describe('conversation history frontend integration', () => {
     expect(api.listConversations).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      pending.resolve({ items: [summary('Página 2', false, 'a0000000-0000-4000-8000-000000000093')], nextCursor: null });
+      pending.resolve({
+        items: [summary('Página 2', false, 'a0000000-0000-4000-8000-000000000093')],
+        nextCursor: null,
+      });
       await pending.promise;
     });
+    expect(await screen.findByRole('button', { name: /^Página 2$/ })).toBeInTheDocument();
     expect(
-      await screen.findByRole('button', { name: /^Página 2$/ }),
-    ).toBeInTheDocument();
-    expect(
-      ['Página 1', 'Página 2'].map(name =>
-        screen.getByRole('button', { name: exactName(name) }),
-      ),
+      ['Página 1', 'Página 2'].map(name => screen.getByRole('button', { name: exactName(name) }))
     ).toHaveLength(2);
     unmount();
     queryClient.clear();
@@ -176,13 +171,9 @@ describe('conversation history frontend integration', () => {
     expect(alert).toHaveTextContent('No se pudieron cargar más conversaciones');
     await user.click(within(alert).getByRole('button', { name: 'Reintentar conversaciones' }));
 
+    expect(await screen.findByRole('button', { name: /^Añadida$/ })).toBeInTheDocument();
     expect(
-      await screen.findByRole('button', { name: /^Añadida$/ }),
-    ).toBeInTheDocument();
-    expect(
-      ['Visible', 'Añadida'].map(name =>
-        screen.getByRole('button', { name: exactName(name) }),
-      ),
+      ['Visible', 'Añadida'].map(name => screen.getByRole('button', { name: exactName(name) }))
     ).toHaveLength(2);
     unmount();
     queryClient.clear();
@@ -191,7 +182,10 @@ describe('conversation history frontend integration', () => {
   it('prepends history after a manual retry, preserves content and compensates scroll once', async () => {
     const failedOlder = deferred<TurnPage>();
     const retriedOlder = deferred<TurnPage>();
-    api.listConversations.mockResolvedValue({ items: [summary('Con historial')], nextCursor: null });
+    api.listConversations.mockResolvedValue({
+      items: [summary('Con historial')],
+      nextCursor: null,
+    });
     api.listConversationTurns
       .mockResolvedValueOnce(turnPage([5, 6, 7], 'older-5'))
       .mockReturnValueOnce(failedOlder.promise)
@@ -199,9 +193,7 @@ describe('conversation history frontend integration', () => {
     const user = userEvent.setup();
     const { queryClient, unmount } = renderWithQueryClient(<App />);
 
-    await user.click(
-      await screen.findByRole('button', { name: /^Con historial$/ }),
-    );
+    await user.click(await screen.findByRole('button', { name: /^Con historial$/ }));
     expect(await screen.findByRole('heading', { name: 'Turno 7' })).toBeInTheDocument();
     const history = screen.getByRole('region', { name: 'Historial de conversación' });
     let scrollHeight = 300;
@@ -250,18 +242,14 @@ describe('conversation history frontend integration', () => {
     api.listConversationTurns.mockResolvedValue(turnPage([1], null));
 
     const firstView = renderWithQueryClient(<App />);
-    await user.click(
-      await screen.findByRole('button', { name: /^Asignación persistida$/ })
-    );
+    await user.click(await screen.findByRole('button', { name: /^Asignación persistida$/ }));
 
     await expectStoredAssignment();
     firstView.unmount();
     firstView.queryClient.clear();
 
     const reloadedView = renderWithQueryClient(<App />);
-    await user.click(
-      await screen.findByRole('button', { name: /^Asignación persistida$/ })
-    );
+    await user.click(await screen.findByRole('button', { name: /^Asignación persistida$/ }));
 
     await expectStoredAssignment();
     expect(api.getConversation).toHaveBeenCalledTimes(2);
@@ -290,7 +278,7 @@ async function expectStoredAssignment() {
 function summary(
   title: string,
   hasWorkInProgress = false,
-  id = CONVERSATION_ID,
+  id = CONVERSATION_ID
 ): ConversationSummary {
   return { id, title, hasWorkInProgress, createdAt: eventTime, updatedAt: eventTime };
 }

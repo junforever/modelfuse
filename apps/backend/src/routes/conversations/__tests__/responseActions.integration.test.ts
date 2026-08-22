@@ -250,7 +250,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
       expect(retry.body.code).toBe('RESPONSE_NOT_RETRYABLE');
       expect(await readPersistedActionState(pool)).toEqual(afterContinue);
       expect(Object.values(providers).flatMap(({ calls }) => calls)).toHaveLength(0);
-    },
+    }
   );
 
   it('accepts an exclusive consolidator retry without invoking base providers', async () => {
@@ -265,10 +265,15 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     await providers.consolidator.waitUntilCalled();
     await idle;
 
-    const persisted = await pool.query<{ status: string; content: string; attempt_no: number; error_recoverable: boolean }>(
+    const persisted = await pool.query<{
+      status: string;
+      content: string;
+      attempt_no: number;
+      error_recoverable: boolean;
+    }>(
       `SELECT status, content, attempt_no, error_recoverable
          FROM model_responses WHERE turn_id = $1 AND slot = 'consolidator'`,
-      [TURN_ID],
+      [TURN_ID]
     );
     expect(persisted.rows[0]).toEqual({
       status: 'completed',
@@ -310,10 +315,14 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
       expect(late).toBeNull();
       expect(events).toHaveLength(eventsBeforeLateResult);
 
-      const active = await pool.query<{ status: string; content: string | null; attempt_no: number }>(
+      const active = await pool.query<{
+        status: string;
+        content: string | null;
+        attempt_no: number;
+      }>(
         `SELECT status, content, attempt_no FROM model_responses
           WHERE turn_id = $1 AND slot = 'base-1'`,
-        [TURN_ID],
+        [TURN_ID]
       );
       expect(active.rows[0]).toMatchObject({ status: 'running', content: null, attempt_no: 2 });
     } finally {
@@ -350,38 +359,41 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
     ['invalid_response', false],
     ['provider_transient_error', true],
     ['provider_error', false],
-  ] as const)('maps %s to recoverable=%s and preserves it through Continue-without', async (errorCode, recoverable) => {
-    await seedPendingTurn(pool);
-    const providers = createControlledProviders();
-    providers['base-1'].enqueueError({ code: errorCode, safeMessage: `Safe ${errorCode}` });
-    const backend = createIntegrationBackend(pool, providers);
+  ] as const)(
+    'maps %s to recoverable=%s and preserves it through Continue-without',
+    async (errorCode, recoverable) => {
+      await seedPendingTurn(pool);
+      const providers = createControlledProviders();
+      providers['base-1'].enqueueError({ code: errorCode, safeMessage: `Safe ${errorCode}` });
+      const backend = createIntegrationBackend(pool, providers);
 
-    await backend.orchestrator.executeTurn({
-      conversationId: CONVERSATION_ID,
-      turnId: TURN_ID,
-      prompt: 'Classify provider failures',
-      deployments: TEST_DEPLOYMENT_SNAPSHOTS,
-      signal: new AbortController().signal,
-    });
+      await backend.orchestrator.executeTurn({
+        conversationId: CONVERSATION_ID,
+        turnId: TURN_ID,
+        prompt: 'Classify provider failures',
+        deployments: TEST_DEPLOYMENT_SNAPSHOTS,
+        signal: new AbortController().signal,
+      });
 
-    const before = await readPersistedActionState(pool);
-    const failed = before.find(row => row.slot === 'base-1');
-    expect(failed).toMatchObject({
-      status: 'failed',
-      error_code: errorCode,
-      error_recoverable: recoverable,
-      attempt_no: 1,
-    });
-    const continued = await request(backend.app).post(actionPath('base-1', 'continue-without'));
-    expect(continued.status).toBe(200);
-    const after = await readPersistedActionState(pool);
-    expect(after.find(row => row.slot === 'base-1')).toMatchObject({
-      status: 'failed',
-      error_code: errorCode,
-      error_recoverable: recoverable,
-      attempt_no: 1,
-    });
-  });
+      const before = await readPersistedActionState(pool);
+      const failed = before.find(row => row.slot === 'base-1');
+      expect(failed).toMatchObject({
+        status: 'failed',
+        error_code: errorCode,
+        error_recoverable: recoverable,
+        attempt_no: 1,
+      });
+      const continued = await request(backend.app).post(actionPath('base-1', 'continue-without'));
+      expect(continued.status).toBe(200);
+      const after = await readPersistedActionState(pool);
+      expect(after.find(row => row.slot === 'base-1')).toMatchObject({
+        status: 'failed',
+        error_code: errorCode,
+        error_recoverable: recoverable,
+        attempt_no: 1,
+      });
+    }
+  );
 });
 
 function actionPath(slot: string, action: 'retry' | 'continue-without') {
@@ -465,7 +477,7 @@ async function seedFailedTurn(
         `${slot}-test-model`,
         status,
         content,
-        status === 'failed' ? options.errorCode ?? 'timeout' : null,
+        status === 'failed' ? (options.errorCode ?? 'timeout') : null,
         status === 'failed' ? 'Safe provider timeout' : null,
         status === 'failed' ? options.recoverable : false,
         active || status === 'completed' ? NOW : null,
@@ -489,7 +501,7 @@ async function seedFailedTurn(
             is_stale, attempt_no, started_at, completed_at, created_at, updated_at)
          VALUES (gen_random_uuid(), $1, 'base-1', 'base', 'openai-fake', 'openai-test-model',
                  'running', NULL, false, false, 1, $2, NULL, $2, $2)`,
-        [OTHER_TURN_ID, NOW],
+        [OTHER_TURN_ID, NOW]
       );
     }
   }
@@ -499,14 +511,14 @@ async function seedPendingTurn(pool: Pool): Promise<void> {
   await pool.query(
     `INSERT INTO conversations (id, create_client_request_id, title, created_at, updated_at)
      VALUES ($1, '10000000-0000-4000-8000-000000000243', 'Classification integration', $2, $2)`,
-    [CONVERSATION_ID, NOW],
+    [CONVERSATION_ID, NOW]
   );
   await insertConversationDeployments(pool, CONVERSATION_ID);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
      VALUES ($1, $2, '40000000-0000-4000-8000-000000000043', 1, 'Classification prompt', 'pending', $3, $3)`,
-    [TURN_ID, CONVERSATION_ID, NOW],
+    [TURN_ID, CONVERSATION_ID, NOW]
   );
   for (const slot of CANONICAL_SLOTS) {
     await pool.query(
@@ -522,7 +534,7 @@ async function seedPendingTurn(pool: Pool): Promise<void> {
         `${slot}-fake`,
         `${slot}-test-model`,
         NOW,
-      ],
+      ]
     );
   }
 }

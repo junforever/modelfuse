@@ -33,7 +33,9 @@ export function createIntegrationPool(options: IntegrationPoolOptions = {}): Poo
   const pool = new Pool({
     connectionString: value,
     max: 8,
-    ...(integrationSchema ? { options: `-c search_path=${quoteIdentifier(integrationSchema)},public` } : {}),
+    ...(integrationSchema
+      ? { options: `-c search_path=${quoteIdentifier(integrationSchema)},public` }
+      : {}),
   }) as IntegrationPool;
   pool.integrationSchema = integrationSchema;
   return pool;

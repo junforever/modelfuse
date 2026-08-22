@@ -41,13 +41,43 @@ const DEFAULT_DEPLOYMENT_IDS: DeploymentIds = {
   consolidator: 'openrouter-qwen-3.8-max',
 };
 const CATALOG_ITEMS = [
-  deployment('openai-5.6-terra', 'GPT-5.6 Terra', 'openai', 'gpt-5.6-terra', 1_050_000, 128_000, ['text', 'image']),
-  deployment('gemini-3.7-flash', 'Gemini 3.7 Flash', 'google', 'gemini-3.7-flash', 1_048_576, 65_536, ['text', 'image', 'video', 'audio', 'pdf']),
-  deployment('openrouter-minimax-m3', 'MiniMax M3', 'openrouter', 'minimax/minimax-m3', 524_288, 512_000, ['text', 'image', 'video']),
-  deployment('openrouter-qwen-3.8-max', 'Qwen 3.8 Max', 'openrouter', 'qwen/qwen3.8-max', 1_000_000, 131_072, ['text', 'image', 'video']),
+  deployment('openai-5.6-terra', 'GPT-5.6 Terra', 'openai', 'gpt-5.6-terra', 1_050_000, 128_000, [
+    'text',
+    'image',
+  ]),
+  deployment(
+    'gemini-3.7-flash',
+    'Gemini 3.7 Flash',
+    'google',
+    'gemini-3.7-flash',
+    1_048_576,
+    65_536,
+    ['text', 'image', 'video', 'audio', 'pdf']
+  ),
+  deployment(
+    'openrouter-minimax-m3',
+    'MiniMax M3',
+    'openrouter',
+    'minimax/minimax-m3',
+    524_288,
+    512_000,
+    ['text', 'image', 'video']
+  ),
+  deployment(
+    'openrouter-qwen-3.8-max',
+    'Qwen 3.8 Max',
+    'openrouter',
+    'qwen/qwen3.8-max',
+    1_000_000,
+    131_072,
+    ['text', 'image', 'video']
+  ),
 ] as const;
 const DEFAULT_CATALOG_ITEMS = [
-  deployment('openai-5.6-sol', 'GPT-5.6 Sol', 'openai', 'gpt-5.6-sol', 1_050_000, 128_000, ['text', 'image']),
+  deployment('openai-5.6-sol', 'GPT-5.6 Sol', 'openai', 'gpt-5.6-sol', 1_050_000, 128_000, [
+    'text',
+    'image',
+  ]),
   CATALOG_ITEMS[1],
   CATALOG_ITEMS[2],
   CATALOG_ITEMS[3],
@@ -101,7 +131,7 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
 
     try {
       expect(
-        await screen.findByText('No se pudo cargar el catálogo de deployments.'),
+        await screen.findByText('No se pudo cargar el catálogo de deployments.')
       ).toBeVisible();
       expect(requestCount).toBe(1);
       expect(screen.getByRole('group', { name: 'Deployments' })).toBeDisabled();
@@ -131,16 +161,16 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       await waitFor(() => expect(requestCount).toBe(2));
       await waitFor(() => {
         expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveTextContent(
-          'openai-5.6-sol',
+          'openai-5.6-sol'
         );
         expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent(
-          'gemini-3.7-flash',
+          'gemini-3.7-flash'
         );
         expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent(
-          'openrouter-minimax-m3',
+          'openrouter-minimax-m3'
         );
         expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent(
-          'openrouter-qwen-3.8-max',
+          'openrouter-qwen-3.8-max'
         );
       });
       expect(queryClient.getQueryData(conversationKeys.catalog)).toEqual({
@@ -164,7 +194,7 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       await user.click(
         within(await screen.findByRole('listbox')).getByRole('option', {
           name: 'GPT-5.6 Terra · openai',
-        }),
+        })
       );
       expect(base1).toHaveTextContent('openai-5.6-terra');
 
@@ -173,8 +203,8 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
 
       expect(
         await screen.findByText(
-          'Una selección ya no está disponible. Elige otro deployment para continuar.',
-        ),
+          'Una selección ya no está disponible. Elige otro deployment para continuar.'
+        )
       ).toBeVisible();
       expect(queryClient.getQueryData(conversationKeys.catalog)).toEqual({ items });
       expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
@@ -200,8 +230,8 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
           config,
           creationResponse(
             data as { clientRequestId: string; prompt: string },
-            DEFAULT_CATALOG_ITEMS,
-          ),
+            DEFAULT_CATALOG_ITEMS
+          )
         );
       }
       throw new Error(`Unexpected T035 transport request: ${method.toUpperCase()} ${path}`);
@@ -220,10 +250,18 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
 
     try {
       await waitFor(() => {
-        expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveTextContent('openai-5.6-sol');
-        expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent('gemini-3.7-flash');
-        expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent('openrouter-minimax-m3');
-        expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent('openrouter-qwen-3.8-max');
+        expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveTextContent(
+          'openai-5.6-sol'
+        );
+        expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveTextContent(
+          'gemini-3.7-flash'
+        );
+        expect(screen.getByRole('combobox', { name: 'Base 3' })).toHaveTextContent(
+          'openrouter-minimax-m3'
+        );
+        expect(screen.getByRole('combobox', { name: 'Consolidador' })).toHaveTextContent(
+          'openrouter-qwen-3.8-max'
+        );
       });
       expect(queryClient.getQueryData(conversationKeys.catalog)).toEqual({
         items: DEFAULT_CATALOG_ITEMS,
@@ -247,13 +285,15 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
 
       const expected = creationResponse(
         createRequest.data as { clientRequestId: string; prompt: string },
-        DEFAULT_CATALOG_ITEMS,
+        DEFAULT_CATALOG_ITEMS
       );
       await waitFor(() => {
         expect(queryClient.getQueryData(conversationKeys.detail(CONVERSATION_ID))).toEqual(
-          expected.conversation,
+          expected.conversation
         );
-        expect(queryClient.getQueryData(conversationKeys.turn(CONVERSATION_ID, TURN_ID))).toMatchObject({
+        expect(
+          queryClient.getQueryData(conversationKeys.turn(CONVERSATION_ID, TURN_ID))
+        ).toMatchObject({
           conversationId: CONVERSATION_ID,
           turnId: TURN_ID,
           turn: expected.turn,
@@ -277,7 +317,10 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
         return response(config, { items: CATALOG_ITEMS });
       }
       if (method === 'post' && path === '/conversations') {
-        return response(config, creationResponse(data as { clientRequestId: string; prompt: string }));
+        return response(
+          config,
+          creationResponse(data as { clientRequestId: string; prompt: string })
+        );
       }
       throw new Error(`Unexpected T030 transport request: ${method.toUpperCase()} ${path}`);
     };
@@ -334,12 +377,16 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       });
       expect(captured[0]).toEqual({ method: 'get', path: '/model-catalog', data: undefined });
 
-      const expected = creationResponse(createRequest.data as { clientRequestId: string; prompt: string });
+      const expected = creationResponse(
+        createRequest.data as { clientRequestId: string; prompt: string }
+      );
       await waitFor(() => {
         expect(queryClient.getQueryData(conversationKeys.detail(CONVERSATION_ID))).toEqual(
-          expected.conversation,
+          expected.conversation
         );
-        expect(queryClient.getQueryData(conversationKeys.turn(CONVERSATION_ID, TURN_ID))).toMatchObject({
+        expect(
+          queryClient.getQueryData(conversationKeys.turn(CONVERSATION_ID, TURN_ID))
+        ).toMatchObject({
           conversationId: CONVERSATION_ID,
           turnId: TURN_ID,
           turn: expected.turn,
@@ -382,7 +429,7 @@ function creationResponse(
     clientRequestId: string;
     prompt: string;
   },
-  catalogItems: readonly DeploymentCatalogItem[] = CATALOG_ITEMS,
+  catalogItems: readonly DeploymentCatalogItem[] = CATALOG_ITEMS
 ): ConversationTurnResponse {
   const summaries = catalogItems.map((item, index) => ({
     slot: (['base-1', 'base-2', 'base-3', 'consolidator'] as const)[index]!,
@@ -393,7 +440,7 @@ function creationResponse(
   }));
   const responses = summaries.map(summary => ({
     slot: summary.slot,
-    role: summary.slot === 'consolidator' ? 'consolidator' as const : 'base' as const,
+    role: summary.slot === 'consolidator' ? ('consolidator' as const) : ('base' as const),
     provider: summary.providerId,
     model: summary.modelId,
     status: 'completed' as const,
@@ -439,7 +486,7 @@ function deployment(
   modelId: string,
   contextLimitTokens: number,
   maxOutputTokens: number,
-  inputModalities: DeploymentCatalogItem['inputModalities'],
+  inputModalities: DeploymentCatalogItem['inputModalities']
 ): DeploymentCatalogItem {
   return {
     deploymentId,

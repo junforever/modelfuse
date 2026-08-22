@@ -1,6 +1,5 @@
 ---
-
-description: "Task list template for feature implementation"
+description: 'Task list template for feature implementation'
 ---
 
 # Tasks: [FEATURE NAME]
@@ -48,21 +47,21 @@ critical cross-product journeys.
 - **Mobile**: `api/src/`, `ios/src/` or `android/src/`
 - Paths shown below assume single project - adjust based on plan.md structure
 
-<!-- 
+<!--
   ============================================================================
   IMPORTANT: The tasks below are SAMPLE TASKS for illustration purposes only.
-  
+
   The /speckit-tasks command MUST replace these with actual tasks based on:
   - User stories from spec.md (with their priorities P1, P2, P3...)
   - Feature requirements from plan.md
   - Entities from data-model.md
   - Endpoints from contracts/
-  
+
   Tasks MUST be organized by user story so each story can be:
   - Implemented independently
   - Tested independently
   - Delivered as an MVP increment
-  
+
   DO NOT keep these sample tasks in the generated tasks.md file.
   ============================================================================
 -->
@@ -102,7 +101,7 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 1 *(required for non-trivial behavior)* ⚠️
+### Tests for User Story 1 _(required for non-trivial behavior)_ ⚠️
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
@@ -128,7 +127,7 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 2 *(required for non-trivial behavior)* ⚠️
+### Tests for User Story 2 _(required for non-trivial behavior)_ ⚠️
 
 - [ ] T018 [P] [US2] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
 - [ ] T019 [P] [US2] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]
@@ -150,7 +149,7 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 3 *(required for non-trivial behavior)* ⚠️
+### Tests for User Story 3 _(required for non-trivial behavior)_ ⚠️
 
 - [ ] T024 [P] [US3] [UNIT] Isolated contract-unit test for [contract] in [exact test path]
 - [ ] T025 [P] [US3] [INTEGRATION] Browserless integration test for [boundary] in [exact test path]

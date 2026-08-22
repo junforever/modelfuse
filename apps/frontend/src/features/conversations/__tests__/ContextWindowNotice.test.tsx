@@ -13,7 +13,7 @@ describe('ContextWindowNotice', () => {
           lastIncludedOrdinal: 9,
           protectionApplied: 'turn-window-and-truncate',
         }}
-      />,
+      />
     );
 
     const notice = screen.getByRole('status');
@@ -28,7 +28,7 @@ describe('ContextWindowNotice', () => {
           lastIncludedOrdinal: 1,
           protectionApplied: 'none',
         }}
-      />,
+      />
     );
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });

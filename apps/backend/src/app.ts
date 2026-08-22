@@ -8,21 +8,19 @@ import { requestContextMiddleware } from '#middleware/logger/requestContext';
 import { requestTimeOut } from '#middleware/timeout/requestTimeOut';
 import { haltOnTimedout } from '#middleware/timeout/haltOnTimedout';
 import { globalErrorHandler } from '#middleware/global/globalErrorHandler';
-import {
-  parseAppEnv,
-  type AppEnvironment,
-} from './infrastructure/config/env.js';
+import { parseAppEnv, type AppEnvironment } from './infrastructure/config/env.js';
 import { createApiRouter, type ApiDependencies } from './routes/apiRouter.js';
 
 export const createApp = (
   dependencies?: ApiDependencies,
-  injectedEnvironment?: AppEnvironment,
+  injectedEnvironment?: AppEnvironment
 ): Express => {
   const app: Express = express();
   const environment = injectedEnvironment ?? parseAppEnv(process.env);
-  const frontendOrigin = environment.NODE_ENV === 'production'
-    ? environment.FRONTEND_URL
-    : environment.FRONTEND_URL_LOCALHOST;
+  const frontendOrigin =
+    environment.NODE_ENV === 'production'
+      ? environment.FRONTEND_URL
+      : environment.FRONTEND_URL_LOCALHOST;
 
   app.disable('x-powered-by');
 
@@ -40,9 +38,7 @@ export const createApp = (
 
   const timeoutMiddleware = timeout(environment.REQUEST_TIMEOUT);
   app.use((request, response, next) =>
-    request.path.endsWith('/events')
-      ? next()
-      : timeoutMiddleware(request, response, next)
+    request.path.endsWith('/events') ? next() : timeoutMiddleware(request, response, next)
   );
   app.use(haltOnTimedout);
   app.use(requestTimeOut);

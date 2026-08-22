@@ -6,7 +6,7 @@ services:
     env_file:
       - ./apps/backend/.env
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_template_data:/var/lib/postgresql/data
     networks:
@@ -19,7 +19,7 @@ services:
     env_file:
       - ./apps/backend/.env
     ports:
-      - "8080:80"
+      - '8080:80'
     depends_on:
       - postgres_template
     networks:
@@ -34,7 +34,7 @@ services:
       - ./apps/backend/.env
     volumes:
       - ./db/changelogs:/liquibase/changelog
-    command: 
+    command:
       - --url=jdbc:postgresql://postgres_template:5432/${POSTGRES_DB:-db_dev}
       - --search-path=/liquibase/changelog
       - --changelog-file=db.changelog-master.xml

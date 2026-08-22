@@ -37,7 +37,7 @@ describe('TurnList', () => {
         hasWorkInProgress={false}
         onRetry={vi.fn()}
         onContinueWithout={vi.fn()}
-      />,
+      />
     );
 
     const timeline = screen.getByRole('list', { name: 'Turnos de la conversación' });

@@ -85,7 +85,7 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
 
       stream = await openSse(
         backend.app,
-        `/api/v1/conversations/${ownedConversationId}/turns/${turnId}/events`,
+        `/api/v1/conversations/${ownedConversationId}/turns/${turnId}/events`
       );
       await Promise.all([
         providers['base-2'].waitUntilCalled(),
@@ -109,7 +109,7 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
               recoverable: true,
             }),
           }),
-        }),
+        })
       );
       expect(initialEvents).toContainEqual(
         expect.objectContaining({
@@ -121,13 +121,13 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
               content: 'Qwen partial response',
             }),
           }),
-        }),
+        })
       );
       expect(initialEvents).toContainEqual(
         expect.objectContaining({
           event: 'turn_update',
           data: expect.objectContaining({ turn: expect.objectContaining({ status: 'partial' }) }),
-        }),
+        })
       );
       expect(unsubscribeCounts.active).toBe(0);
       expect(unsubscribeCounts.total).toBe(1);
@@ -156,7 +156,7 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
       });
 
       const retried = await request(backend.app).post(
-        `/api/v1/conversations/${ownedConversationId}/turns/${turnId}/responses/base-1/retry`,
+        `/api/v1/conversations/${ownedConversationId}/turns/${turnId}/responses/base-1/retry`
       );
       expect(retried.status).toBe(202);
       await terminalPromise;
@@ -186,7 +186,7 @@ describe('recoverable response and partial Qwen terminal SSE integration', () =>
 });
 
 async function readUntilClosed(
-  nextEvent: () => Promise<{ event: string; data: Record<string, unknown> } | null>,
+  nextEvent: () => Promise<{ event: string; data: Record<string, unknown> } | null>
 ): Promise<Array<{ event: string; data: Record<string, unknown> }>> {
   const events: Array<{ event: string; data: Record<string, unknown> }> = [];
   for (let index = 0; index < 64; index += 1) {
@@ -226,7 +226,7 @@ async function readTurnState(pool: Pool, turnId: string) {
        JOIN model_responses consolidator
          ON consolidator.turn_id = t.id AND consolidator.slot = 'consolidator'
       WHERE t.id = $1`,
-    [turnId],
+    [turnId]
   );
   return result.rows[0];
 }

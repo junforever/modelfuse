@@ -103,7 +103,7 @@ export const request = (slot: Slot, signal = new AbortController().signal) => ({
 
 export function axiosError(
   status: number | undefined,
-  overrides: Partial<UpstreamError> = {},
+  overrides: Partial<UpstreamError> = {}
 ): UpstreamError {
   return {
     isAxiosError: true,
@@ -136,7 +136,7 @@ export function runProviderContract(options: ContractOptions): void {
 
       expect(options.requestMock).toHaveBeenCalledTimes(1);
       options.assertMappedRequest(
-        options.requestMock.mock.calls[0]?.[0] as Record<string, unknown>,
+        options.requestMock.mock.calls[0]?.[0] as Record<string, unknown>
       );
       expect(provider).toMatchObject({
         slot: options.slot,
@@ -151,9 +151,7 @@ export function runProviderContract(options: ContractOptions): void {
       });
       expect(Date.parse(result.startedAt)).not.toBeNaN();
       expect(Date.parse(result.completedAt)).not.toBeNaN();
-      expect(Date.parse(result.completedAt)).toBeGreaterThanOrEqual(
-        Date.parse(result.startedAt),
-      );
+      expect(Date.parse(result.completedAt)).toBeGreaterThanOrEqual(Date.parse(result.startedAt));
       expect(JSON.stringify(result.metadata ?? {})).not.toContain(SECRET);
       expect(JSON.stringify(result.metadata ?? {})).not.toContain('Normalized answer');
     });
@@ -165,9 +163,9 @@ export function runProviderContract(options: ContractOptions): void {
             signal.addEventListener(
               'abort',
               () => reject(axiosError(undefined, { code: 'ERR_CANCELED' })),
-              { once: true },
+              { once: true }
             );
-          }),
+          })
       );
       const provider = new options.Provider(adapterConfig);
       const controller = new AbortController();

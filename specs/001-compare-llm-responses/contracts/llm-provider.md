@@ -37,8 +37,7 @@ type LlmResult = {
 };
 
 type InputTokenMeasurement =
-  | { kind: 'exact'; tokens: number }
-  | { kind: 'upper_bound'; tokens: number; basis: string };
+  { kind: 'exact'; tokens: number } | { kind: 'upper_bound'; tokens: number; basis: string };
 
 type LlmContextCapabilities = {
   limitTokens: number;
@@ -130,17 +129,17 @@ type LlmProviderError = {
 
 La clasificación es normativa y total:
 
-| `LlmErrorCode` | `recoverable` |
-|---|---:|
-| `authentication` | `false` |
-| `rate_limited` | `true` |
-| `timeout` | `true` |
-| `connectivity` | `true` |
-| `content_blocked` | `false` |
-| `invalid_prompt_size` | `false` |
-| `invalid_response` | `false` |
-| `provider_transient_error` | `true` |
-| `provider_error` | `false` |
+| `LlmErrorCode`             | `recoverable` |
+| -------------------------- | ------------: |
+| `authentication`           |       `false` |
+| `rate_limited`             |        `true` |
+| `timeout`                  |        `true` |
+| `connectivity`             |        `true` |
+| `content_blocked`          |       `false` |
+| `invalid_prompt_size`      |       `false` |
+| `invalid_response`         |       `false` |
+| `provider_transient_error` |        `true` |
+| `provider_error`           |       `false` |
 
 Los adapters traducen la condición upstream únicamente a `LlmErrorCode`. El
 helper común `isRecoverableLlmError(code)` completa `recoverable`; ningún adapter
@@ -166,7 +165,7 @@ no cubierta por un código más específico se normaliza como
 El registro es:
 
 ```ts
-Record<ResponseSlot, LlmProvider>
+Record<ResponseSlot, LlmProvider>;
 ```
 
 Una instancia por slot, sin factory hierarchy ni protocolo común.

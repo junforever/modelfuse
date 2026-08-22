@@ -8,7 +8,7 @@ const exactContext = (
   measureInputTokens: LlmContextCapabilities['measureInputTokens'] = () => ({
     kind: 'exact',
     tokens: 1,
-  }),
+  })
 ): LlmContextCapabilities => ({ limitTokens: 100, measureInputTokens });
 
 describe('ContextBuilder', () => {
@@ -110,14 +110,14 @@ describe('ContextBuilder', () => {
         expect.objectContaining({ content: expect.stringContaining('Current Google answer') }),
         expect.objectContaining({ content: expect.stringMatching(/minimax/i) }),
         { role: 'user', content: 'Current prompt' },
-      ]),
+      ])
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.messages.at(-1)).toEqual({ role: 'user', content: 'Current prompt' });
     expect(result.messages.map(({ content }) => content)).not.toContain('Prior prompt');
     expect(result.messages.some(({ content }) => content.includes(CONTEXT_TRUNCATION_MARKER))).toBe(
-      true,
+      true
     );
     expect(result.contextWindow).toEqual({
       truncated: true,

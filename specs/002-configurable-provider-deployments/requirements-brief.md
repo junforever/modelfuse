@@ -107,18 +107,18 @@ ajuste posterior se realiza modificando explícitamente el catálogo estático.
 
 Las capacidades iniciales exactas son:
 
-| deploymentId | inputModalities | outputModalities |
-|---|---|---|
-| `openrouter-minimax-m3` | `text`, `image`, `video` | `text` |
-| `openrouter-minimax-m2.7` | `text` | `text` |
-| `openrouter-qwen-3.8-max` | `text`, `image`, `video` | `text` |
-| `openrouter-kimi-k3` | `text`, `image`, `video` | `text` |
-| `openrouter-glm-5.2` | `text` | `text` |
-| `openrouter-deepseek-v4-flash-0731` | `text` | `text` |
-| `gemini-3.7-flash` | `text`, `image`, `video`, `audio`, `pdf` | `text` |
-| `openai-5.6-sol` | `text`, `image` | `text` |
-| `openai-5.6-terra` | `text`, `image` | `text` |
-| `openai-5.6-luna` | `text`, `image` | `text` |
+| deploymentId                        | inputModalities                          | outputModalities |
+| ----------------------------------- | ---------------------------------------- | ---------------- |
+| `openrouter-minimax-m3`             | `text`, `image`, `video`                 | `text`           |
+| `openrouter-minimax-m2.7`           | `text`                                   | `text`           |
+| `openrouter-qwen-3.8-max`           | `text`, `image`, `video`                 | `text`           |
+| `openrouter-kimi-k3`                | `text`, `image`, `video`                 | `text`           |
+| `openrouter-glm-5.2`                | `text`                                   | `text`           |
+| `openrouter-deepseek-v4-flash-0731` | `text`                                   | `text`           |
+| `gemini-3.7-flash`                  | `text`, `image`, `video`, `audio`, `pdf` | `text`           |
+| `openai-5.6-sol`                    | `text`, `image`                          | `text`           |
+| `openai-5.6-terra`                  | `text`, `image`                          | `text`           |
+| `openai-5.6-luna`                   | `text`, `image`                          | `text`           |
 
 Estas capacidades se exponen como metadata del catálogo. Esta feature conserva
 el composer de texto actual y no incorpora carga de imágenes, audio, video o

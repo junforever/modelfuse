@@ -1,9 +1,4 @@
-import type {
-  IsoDateTime,
-  ModelResponse,
-  ResponseSlot,
-  Turn,
-} from './conversations.js';
+import type { IsoDateTime, ModelResponse, ResponseSlot, Turn } from './conversations.js';
 
 /** Non-negative integer assigned monotonically within one turn by the in-process publisher. */
 export type EventSequence = number;

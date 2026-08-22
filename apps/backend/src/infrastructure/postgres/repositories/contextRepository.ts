@@ -41,7 +41,7 @@ export class ContextRepository {
       slot: ResponseSlot;
       maxTurns: number;
     },
-    excludeStale: boolean,
+    excludeStale: boolean
   ): Promise<ContextTurn[]> {
     const result = await this.pool.query<ContextTurnRow>(
       `SELECT recent.ordinal, recent.user_content AS prompt, response.content AS response
@@ -58,13 +58,7 @@ export class ContextRepository {
           AND response.status = 'completed'
           AND ($5::boolean = false OR response.is_stale = false)
         ORDER BY recent.ordinal`,
-      [
-        input.conversationId,
-        input.beforeOrdinal,
-        input.slot,
-        input.maxTurns,
-        excludeStale,
-      ],
+      [input.conversationId, input.beforeOrdinal, input.slot, input.maxTurns, excludeStale]
     );
     return result.rows;
   }

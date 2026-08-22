@@ -1,8 +1,4 @@
-import {
-  AxiosError,
-  type AxiosAdapter,
-  type InternalAxiosRequestConfig,
-} from 'axios';
+import { AxiosError, type AxiosAdapter, type InternalAxiosRequestConfig } from 'axios';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -27,10 +23,34 @@ const conversation = {
   title: 'Comparación inicial',
   hasWorkInProgress: true,
   deployments: [
-    { slot: 'base-1', deploymentId: 'deployment-1', providerId: 'openai', modelId: 'model-1', displayName: 'Model 1' },
-    { slot: 'base-2', deploymentId: 'deployment-2', providerId: 'google', modelId: 'model-2', displayName: 'Model 2' },
-    { slot: 'base-3', deploymentId: 'deployment-3', providerId: 'openrouter', modelId: 'model-3', displayName: 'Model 3' },
-    { slot: 'consolidator', deploymentId: 'deployment-4', providerId: 'openrouter', modelId: 'model-4', displayName: 'Model 4' },
+    {
+      slot: 'base-1',
+      deploymentId: 'deployment-1',
+      providerId: 'openai',
+      modelId: 'model-1',
+      displayName: 'Model 1',
+    },
+    {
+      slot: 'base-2',
+      deploymentId: 'deployment-2',
+      providerId: 'google',
+      modelId: 'model-2',
+      displayName: 'Model 2',
+    },
+    {
+      slot: 'base-3',
+      deploymentId: 'deployment-3',
+      providerId: 'openrouter',
+      modelId: 'model-3',
+      displayName: 'Model 3',
+    },
+    {
+      slot: 'consolidator',
+      deploymentId: 'deployment-4',
+      providerId: 'openrouter',
+      modelId: 'model-4',
+      displayName: 'Model 4',
+    },
   ],
   createdAt: eventTime,
   updatedAt: eventTime,
@@ -90,9 +110,9 @@ describe('conversations API contract', () => {
       createConversation(client, { clientRequestId, prompt: 'Primer prompt', deploymentIds })
     ).resolves.toEqual(conversationTurn);
     await expect(getTurnSnapshot(client, conversationId, turnId)).resolves.toEqual(snapshot);
-    await expect(
-      retryResponse(client, conversationId, turnId, 'base-1')
-    ).resolves.toEqual(conversationTurn);
+    await expect(retryResponse(client, conversationId, turnId, 'base-1')).resolves.toEqual(
+      conversationTurn
+    );
     await expect(
       continueWithoutResponse(client, conversationId, turnId, 'base-2')
     ).resolves.toEqual(conversationTurn);

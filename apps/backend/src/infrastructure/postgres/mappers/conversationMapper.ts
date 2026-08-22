@@ -127,7 +127,7 @@ function mapMetadata(value: unknown): ModelResponseMetadata | null {
 
 function requireResponse<Slot extends ResponseSlot>(
   responses: ReadonlyMap<ResponseSlot, ModelResponse>,
-  slot: Slot,
+  slot: Slot
 ): ModelResponse<Slot> {
   const response = responses.get(slot);
   if (response === undefined) {
@@ -142,7 +142,7 @@ function orderResponses(responses: readonly ModelResponse[]): TurnResponses {
     throw new Error(`Expected exactly ${RESPONSE_SLOTS.length} model response slots`);
   }
 
-  const bySlot = new Map(responses.map((response) => [response.slot, response]));
+  const bySlot = new Map(responses.map(response => [response.slot, response]));
   if (bySlot.size !== RESPONSE_SLOTS.length) {
     throw new Error('Model response slots must be unique');
   }
@@ -166,7 +166,7 @@ export function mapConversationRow(row: ConversationRow): ConversationSummary {
 }
 
 export function mapConversationDeploymentRow(
-  row: ConversationDeploymentRow,
+  row: ConversationDeploymentRow
 ): ConversationDeploymentSnapshot {
   return {
     slot: row.slot,
@@ -183,7 +183,7 @@ export function mapConversationDeploymentRow(
 
 function requireDeployment<Slot extends ResponseSlot>(
   deployments: ReadonlyMap<ResponseSlot, ConversationDeploymentSnapshot>,
-  slot: Slot,
+  slot: Slot
 ): ConversationDeploymentSnapshot<Slot> {
   const deployment = deployments.get(slot);
   if (!deployment) throw new Error(`Missing conversation deployment slot: ${slot}`);
@@ -191,7 +191,7 @@ function requireDeployment<Slot extends ResponseSlot>(
 }
 
 export function orderDeploymentSnapshots(
-  deployments: readonly ConversationDeploymentSnapshot[],
+  deployments: readonly ConversationDeploymentSnapshot[]
 ): ConversationDeploymentSnapshotTuple {
   if (deployments.length !== RESPONSE_SLOTS.length) {
     throw new Error(`Expected exactly ${RESPONSE_SLOTS.length} conversation deployments`);
@@ -210,7 +210,7 @@ export function orderDeploymentSnapshots(
 
 export function mapConversationDetail(
   row: ConversationRow,
-  deployments: ConversationDeploymentSnapshotTuple,
+  deployments: ConversationDeploymentSnapshotTuple
 ): ConversationDetail {
   return {
     ...mapConversationRow(row),
@@ -224,7 +224,7 @@ export function mapConversationDetail(
 }
 
 function toDeploymentSummary<Slot extends ResponseSlot>(
-  deployment: ConversationDeploymentSnapshot<Slot>,
+  deployment: ConversationDeploymentSnapshot<Slot>
 ): ConversationDeploymentSummary<Slot> {
   const { slot, deploymentId, providerId, modelId, displayName } = deployment;
   return { slot, deploymentId, providerId, modelId, displayName };

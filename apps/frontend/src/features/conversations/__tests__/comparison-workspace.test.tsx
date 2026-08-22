@@ -5,11 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConversationProcessingNotice } from '../components/ConversationProcessingNotice';
 import { PromptComposer } from '../components/PromptComposer';
 import { TurnCard } from '../components/TurnCard';
-import {
-  eventTime,
-  modelResponse,
-  turnFixture,
-} from '../../../test/conversation-fixtures';
+import { eventTime, modelResponse, turnFixture } from '../../../test/conversation-fixtures';
 
 describe('comparison workspace components', () => {
   it('keeps four labelled tabs and each response state isolated', async () => {
@@ -59,9 +55,7 @@ describe('comparison workspace components', () => {
     const googlePanel = screen.getByRole('tabpanel', { name: 'Google' });
     expect(googlePanel).toHaveTextContent('Google no respondió');
     expect(within(googlePanel).getByRole('button', { name: 'Reintentar Google' })).toBeEnabled();
-    expect(
-      within(googlePanel).getByRole('button', { name: 'Continuar sin Google' })
-    ).toBeEnabled();
+    expect(within(googlePanel).getByRole('button', { name: 'Continuar sin Google' })).toBeEnabled();
 
     await user.click(screen.getByRole('tab', { name: 'MiniMax' }));
     const minimaxPanel = screen.getByRole('tabpanel', { name: 'MiniMax' });

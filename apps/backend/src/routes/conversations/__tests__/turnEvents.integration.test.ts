@@ -224,7 +224,7 @@ describe('turn SSE protocol/PostgreSQL', () => {
           'completed',
           'Old base-1 response',
           '2026-08-07T09:59:59.000Z',
-          99,
+          99
         ),
       },
     });
@@ -298,9 +298,9 @@ describe('turn SSE protocol/PostgreSQL', () => {
           .filter(
             item =>
               item.event === 'slot_update' &&
-              (item.data.response as ModelResponse).slot === 'base-1',
+              (item.data.response as ModelResponse).slot === 'base-1'
           )
-          .map(({ data }) => (data.response as ModelResponse).content),
+          .map(({ data }) => (data.response as ModelResponse).content)
       ).toEqual([
         'Concurrent base-1 response 1',
         'Concurrent base-1 response 2',
@@ -370,7 +370,7 @@ function response(
   status: 'pending' | 'running' | 'completed',
   content: string | null,
   updatedAt = UPDATED_AT,
-  attemptNo = 1,
+  attemptNo = 1
 ): ModelResponse {
   return {
     slot,

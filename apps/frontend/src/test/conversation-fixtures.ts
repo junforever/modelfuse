@@ -63,9 +63,7 @@ export function turnFixture(overrides: Partial<Turn> = {}): Turn {
   };
 }
 
-export function turnSnapshotFixture(
-  overrides: Partial<TurnEventSnapshot> = {}
-): TurnEventSnapshot {
+export function turnSnapshotFixture(overrides: Partial<TurnEventSnapshot> = {}): TurnEventSnapshot {
   return {
     conversationId,
     turnId,

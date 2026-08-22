@@ -69,7 +69,11 @@ export function HistoryTopSentinel({
     <div className="grid gap-2">
       <div ref={sentinelRef} aria-label="Cargar turnos anteriores" className="h-px" />
       {isLoading && (
-        <p role="status" aria-label="Cargando turnos anteriores" className="text-sm text-muted-foreground">
+        <p
+          role="status"
+          aria-label="Cargando turnos anteriores"
+          className="text-sm text-muted-foreground"
+        >
           Cargando turnos anteriores…
         </p>
       )}

@@ -71,12 +71,12 @@ export function globalErrorHandler(
     return;
   }
   const response: ApiError = {
-    code: invalidCursor ? 'INVALID_CURSOR' : expected?.code ?? 'INTERNAL_ERROR',
+    code: invalidCursor ? 'INVALID_CURSOR' : (expected?.code ?? 'INTERNAL_ERROR'),
     message: invalidCursor
       ? 'The cursor is invalid.'
-      : expected?.message ?? 'An unexpected error occurred. Please try again later.',
+      : (expected?.message ?? 'An unexpected error occurred. Please try again later.'),
     requestId: req.requestId,
   };
 
-  res.status(invalidCursor ? 400 : expected?.status ?? 500).json(response);
+  res.status(invalidCursor ? 400 : (expected?.status ?? 500)).json(response);
 }

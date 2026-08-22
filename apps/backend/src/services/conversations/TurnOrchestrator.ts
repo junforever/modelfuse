@@ -30,7 +30,9 @@ interface TurnRepositoryPort {
     turnId: string;
     slot: ResponseSlot;
   }) => Promise<{ attemptNo: number; snapshot: StoredTurnSnapshot } | null>;
-  persistResponseAttempt(input: PersistResponseAttemptInput): Promise<StoredTurnSnapshot | null | undefined>;
+  persistResponseAttempt(
+    input: PersistResponseAttemptInput
+  ): Promise<StoredTurnSnapshot | null | undefined>;
   recalculateTurn?: (turnId: string) => Promise<StoredTurnSnapshot | null | undefined>;
   getAvailableBaseResponses?: (turnId: string) => Promise<ModelResponse[]>;
 }
@@ -73,7 +75,7 @@ export class TurnOrchestrator {
       publisher: PublisherPort;
       contextThresholdRatio?: number;
       contextBuilder?: unknown;
-    },
+    }
   ) {}
 
   getLastEventSequence(turnId: string): number {
@@ -82,7 +84,7 @@ export class TurnOrchestrator {
 
   async executeTurn(input: ExecuteTurnInput): Promise<void> {
     const baseResults = await Promise.all(
-      BASE_SLOTS.map(slot => this.executeSlot({ ...input, slot })),
+      BASE_SLOTS.map(slot => this.executeSlot({ ...input, slot }))
     );
     await this.executeSlot({
       ...input,
@@ -114,7 +116,7 @@ export class TurnOrchestrator {
 
   publishSnapshot(
     snapshot: StoredTurnSnapshot,
-    slots?: ResponseSlot | readonly ResponseSlot[],
+    slots?: ResponseSlot | readonly ResponseSlot[]
   ): void {
     for (const slot of slots ? (Array.isArray(slots) ? slots : [slots]) : []) {
       const response = snapshot.turn.responses.find(candidate => candidate.slot === slot);
@@ -156,7 +158,7 @@ export class TurnOrchestrator {
     input: ExecuteTurnInput & {
       slot: ResponseSlot;
       currentBaseResponses?: readonly Pick<ModelResponse, 'slot' | 'content'>[];
-    },
+    }
   ): Promise<SlotExecutionResult> {
     const deployment = input.deployments.find(candidate => candidate.slot === input.slot);
     if (!deployment) throw new Error(`Missing persisted deployment for slot ${input.slot}`);
@@ -226,14 +228,14 @@ export class TurnOrchestrator {
         attemptNo,
         attemptStartedAt,
         failure,
-        protectedContext.contextWindow,
+        protectedContext.contextWindow
       );
       this.logAttemptCompleted(
         input,
         deployment,
         Math.max(0, failedAt - Date.parse(attemptStartedAt)),
         'failed',
-        failure.code,
+        failure.code
       );
       return { slot: input.slot, result: null };
     }
@@ -245,28 +247,31 @@ export class TurnOrchestrator {
       currentBaseResponses?: readonly Pick<ModelResponse, 'slot' | 'content'>[];
     },
     provider: NonNullable<ProviderRegistry[keyof ProviderRegistry]>,
-    deployment: ConversationDeploymentSnapshot,
+    deployment: ConversationDeploymentSnapshot
   ): Promise<ProtectedContext> {
     // ponytail: US1 needs first-turn composition; T056 adds persisted history/windowing.
-    let auxiliaryMessages: LlmMessage[] = input.slot === 'consolidator'
-      ? (input.currentBaseResponses ?? []).flatMap(response =>
-          response.content
-            ? [{ role: 'user' as const, content: `${response.slot}:\n${response.content}` }]
-            : [],
-        )
-      : [];
+    let auxiliaryMessages: LlmMessage[] =
+      input.slot === 'consolidator'
+        ? (input.currentBaseResponses ?? []).flatMap(response =>
+            response.content
+              ? [{ role: 'user' as const, content: `${response.slot}:\n${response.content}` }]
+              : []
+          )
+        : [];
     const compose = (): LlmMessage[] => [
       {
         role: 'system',
-        content: input.slot === 'consolidator'
-          ? 'Consolidate the available model answers into one final answer.'
-          : 'Provide a complete, accurate answer to the user prompt.',
+        content:
+          input.slot === 'consolidator'
+            ? 'Consolidate the available model answers into one final answer.'
+            : 'Provide a complete, accurate answer to the user prompt.',
       },
       ...auxiliaryMessages,
       { role: 'user', content: input.prompt },
     ];
-    const threshold = deployment.contextLimitTokens
-      * (this.dependencies.contextThresholdRatio ?? CONTEXT_THRESHOLD_RATIO);
+    const threshold =
+      deployment.contextLimitTokens *
+      (this.dependencies.contextThresholdRatio ?? CONTEXT_THRESHOLD_RATIO);
     let messages = compose();
     let measured = await provider.measureInputTokens(deployment, messages);
     let truncated = false;
@@ -309,7 +314,7 @@ export class TurnOrchestrator {
     attemptNo: number,
     startedAt: string,
     failure: LlmProviderError,
-    contextWindow?: ContextWindowMetadata,
+    contextWindow?: ContextWindowMetadata
   ): Promise<void> {
     await this.persist(input, {
       attemptNo,
@@ -325,7 +330,7 @@ export class TurnOrchestrator {
 
   private async persist(
     input: Pick<ExecuteTurnInput, 'turnId'> & { slot: ResponseSlot },
-    attempt: Omit<PersistResponseAttemptInput, 'turnId' | 'slot'>,
+    attempt: Omit<PersistResponseAttemptInput, 'turnId' | 'slot'>
   ): Promise<void> {
     const reconsolidateConsolidator =
       input.slot !== 'consolidator' && attempt.status === 'completed' && attempt.attemptNo > 1;
@@ -338,7 +343,7 @@ export class TurnOrchestrator {
     if (snapshot) {
       this.publishSnapshot(
         snapshot,
-        reconsolidateConsolidator ? [input.slot, 'consolidator'] : input.slot,
+        reconsolidateConsolidator ? [input.slot, 'consolidator'] : input.slot
       );
     } else {
       await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
@@ -351,7 +356,7 @@ export class TurnOrchestrator {
 
   private normalizeFailure(
     error: unknown,
-    deployment: ConversationDeploymentSnapshot,
+    deployment: ConversationDeploymentSnapshot
   ): LlmProviderError {
     if (this.isProviderError(error)) {
       return {
@@ -380,7 +385,7 @@ export class TurnOrchestrator {
     deployment: ConversationDeploymentSnapshot,
     durationMs: number,
     status: 'completed' | 'failed',
-    errorCode?: string,
+    errorCode?: string
   ): void {
     logger.info({
       message: 'LLM attempt completed',
@@ -403,16 +408,19 @@ export class TurnOrchestrator {
   }
 
   private isLlmErrorCode(code: unknown): code is LlmErrorCode {
-    return typeof code === 'string' && [
-      'authentication',
-      'rate_limited',
-      'timeout',
-      'connectivity',
-      'content_blocked',
-      'invalid_prompt_size',
-      'invalid_response',
-      'provider_transient_error',
-      'provider_error',
-    ].includes(code);
+    return (
+      typeof code === 'string' &&
+      [
+        'authentication',
+        'rate_limited',
+        'timeout',
+        'connectivity',
+        'content_blocked',
+        'invalid_prompt_size',
+        'invalid_response',
+        'provider_transient_error',
+        'provider_error',
+      ].includes(code)
+    );
   }
 }

@@ -48,7 +48,7 @@ describe('createProviderRegistry', () => {
         MINIMAX_API_KEY: undefined,
         QWEN_API_KEY: undefined,
         OPENROUTER_API_KEY: undefined,
-      }),
+      })
     ).toEqual({});
   });
 });

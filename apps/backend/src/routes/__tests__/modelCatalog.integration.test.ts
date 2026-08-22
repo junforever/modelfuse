@@ -40,28 +40,22 @@ describe('GET /api/v1/model-catalog', () => {
         ...PROVIDER_ENVIRONMENT,
         OPENAI_API_KEY: providers.includes('openai') ? 'openai-test-key' : undefined,
         GOOGLE_API_KEY: providers.includes('google') ? 'google-test-key' : undefined,
-        OPENROUTER_API_KEY: providers.includes('openrouter')
-          ? 'openrouter-test-key'
-          : undefined,
+        OPENROUTER_API_KEY: providers.includes('openrouter') ? 'openrouter-test-key' : undefined,
       });
-      const modelCatalogService = new ModelCatalogService(
-        DEPLOYMENT_CATALOG,
-        providerRegistry,
-      );
+      const modelCatalogService = new ModelCatalogService(DEPLOYMENT_CATALOG, providerRegistry);
 
       const response = await request(createCatalogApp(modelCatalogService)).get(
-        '/api/v1/model-catalog',
+        '/api/v1/model-catalog'
       );
 
-      const expectedItems = DEPLOYMENT_CATALOG
-        .filter(item => providers.includes(item.providerId))
+      const expectedItems = DEPLOYMENT_CATALOG.filter(item => providers.includes(item.providerId))
         .map(({ credentialEnv: _credentialEnv, ...item }) => item)
         .sort((left, right) => left.displayName.localeCompare(right.displayName));
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toMatch(/^application\/json/);
       expect(response.body).toEqual({ items: expectedItems });
       expect(
-        response.body.items.map((item: Record<string, unknown>) => Object.keys(item).sort()),
+        response.body.items.map((item: Record<string, unknown>) => Object.keys(item).sort())
       ).toEqual(
         expectedItems.map(() => [
           'contextLimitTokens',
@@ -72,12 +66,12 @@ describe('GET /api/v1/model-catalog', () => {
           'modelId',
           'outputModalities',
           'providerId',
-        ]),
+        ])
       );
       expect(JSON.stringify(response.body)).not.toMatch(
-        /credentialEnv|secret|reason|price|cost|billing|credit|currency|budget/i,
+        /credentialEnv|secret|reason|price|cost|billing|credit|currency|budget/i
       );
-    },
+    }
   );
 
   it('assembles and serves the backend when every provider credential is absent', async () => {
@@ -99,10 +93,7 @@ describe('GET /api/v1/model-catalog', () => {
       CONVERSATION_SIDEBAR_PAGE_SIZE: '20',
     });
     const providerRegistry = createProviderRegistry(environment);
-    const modelCatalogService = new ModelCatalogService(
-      DEPLOYMENT_CATALOG,
-      providerRegistry,
-    );
+    const modelCatalogService = new ModelCatalogService(DEPLOYMENT_CATALOG, providerRegistry);
     const app = createCatalogApp(modelCatalogService);
 
     const response = await request(app).get('/api/v1/model-catalog');

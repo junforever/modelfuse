@@ -20,7 +20,9 @@ describe('conversation request schemas', () => {
     const schemas = [createConversationBodySchema, createTurnBodySchema];
 
     for (const schema of schemas) {
-      expect(schema.safeParse({ clientRequestId: 'not-a-uuid', prompt: 'Hello' }).success).toBe(false);
+      expect(schema.safeParse({ clientRequestId: 'not-a-uuid', prompt: 'Hello' }).success).toBe(
+        false
+      );
       expect(schema.safeParse({ clientRequestId, prompt: '' }).success).toBe(false);
       expect(schema.safeParse({ clientRequestId, prompt: '   ' }).success).toBe(false);
       expect(schema.safeParse({ clientRequestId, prompt: 'Hello' }).success).toBe(true);
@@ -36,11 +38,15 @@ describe('conversation request schemas', () => {
     expect(turnIdParamsSchema.safeParse({ conversationId: 'invalid', turnId }).success).toBe(false);
 
     for (const slot of ['base-1', 'base-2', 'base-3', 'consolidator']) {
-      expect(responseSlotParamsSchema.safeParse({ conversationId, turnId, slot }).success).toBe(true);
+      expect(responseSlotParamsSchema.safeParse({ conversationId, turnId, slot }).success).toBe(
+        true
+      );
     }
 
     for (const slot of ['openai', 'google', 'minimax', 'qwen', 'unknown']) {
-      expect(responseSlotParamsSchema.safeParse({ conversationId, turnId, slot }).success).toBe(false);
+      expect(responseSlotParamsSchema.safeParse({ conversationId, turnId, slot }).success).toBe(
+        false
+      );
     }
   });
 
@@ -64,8 +70,9 @@ describe('conversation request schemas', () => {
       { ...deploymentIds, openai: 'legacy-deployment' },
     ];
     for (const invalid of invalidAssignments) {
-      expect(createConversationBodySchema.safeParse({ ...request, deploymentIds: invalid }).success)
-        .toBe(false);
+      expect(
+        createConversationBodySchema.safeParse({ ...request, deploymentIds: invalid }).success
+      ).toBe(false);
     }
   });
 
@@ -94,7 +101,7 @@ describe('conversation request schemas', () => {
         title: eightyGraphemes,
       });
       expect(renameConversationBodySchema.safeParse({ title: eightyOneGraphemes }).success).toBe(
-        false,
+        false
       );
     }
   });

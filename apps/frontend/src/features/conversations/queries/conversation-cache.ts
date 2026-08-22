@@ -18,10 +18,7 @@ function isNewerVersion(
   return eventSequence > currentEventSequence;
 }
 
-function replaceResponse(
-  responses: TurnResponses,
-  nextResponse: ModelResponse
-): TurnResponses {
+function replaceResponse(responses: TurnResponses, nextResponse: ModelResponse): TurnResponses {
   return responses.map(response =>
     response.slot === nextResponse.slot ? nextResponse : response
   ) as unknown as TurnResponses;

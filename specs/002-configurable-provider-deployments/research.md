@@ -22,13 +22,13 @@ All implementation unknowns are resolved and no open decision remains.
 
 **Decision**:
 
-| Adapter | Request field |
-|---|---|
-| OpenAI Chat Completions | `max_completion_tokens` |
-| Google GenerateContent | `generationConfig.maxOutputTokens` |
-| MiniMax Chat Completion v2 | `max_completion_tokens` |
-| Qwen DashScope native API | `parameters.max_tokens` |
-| OpenRouter Chat Completions | `max_tokens` |
+| Adapter                     | Request field                      |
+| --------------------------- | ---------------------------------- |
+| OpenAI Chat Completions     | `max_completion_tokens`            |
+| Google GenerateContent      | `generationConfig.maxOutputTokens` |
+| MiniMax Chat Completion v2  | `max_completion_tokens`            |
+| Qwen DashScope native API   | `parameters.max_tokens`            |
+| OpenRouter Chat Completions | `max_tokens`                       |
 
 Every field receives the exact snapshot `maxOutputTokens`. No adapter reduces, negotiates, discovers, or retries a rejected value.
 

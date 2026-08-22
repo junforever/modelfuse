@@ -36,7 +36,7 @@
 
 - Q: ¿Cómo se reciben en tiempo real el progreso y los resultados de un turno? → A: La aplicación usa una arquitectura híbrida: REST para comandos y lectura de recursos persistidos, y Server-Sent Events (SSE) para recibir en tiempo real las actualizaciones del turno, de sus slots y de `hasWorkInProgress`.
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Comparar y consolidar respuestas (Priority: P1)
 
@@ -137,7 +137,7 @@ Como usuario, quiero limpiar la conversación actual para comenzar una nueva sin
 - Colapsar o expandir un mensaje histórico largo solo cambia su presentación local; no solicita otra página, no altera su contenido persistido y no afecta mensajes nuevos todavía no recuperados como historial.
 - Si la primera página de conversaciones no llena la altura visible del sidebar, el sistema solicita páginas adicionales hasta llenar el contenedor o agotar los resultados.
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -217,7 +217,7 @@ Los eventos SSE mínimos de producto son:
 - **Modelo participante**: Identidad visible y rol de OpenAI, Google o MiniMax como modelo base, o de Qwen como modelo consolidador.
 - **Configuración de credencial**: Disponibilidad y validez operativa de la credencial requerida por cada proveedor, sin formar parte del contenido conversacional.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 

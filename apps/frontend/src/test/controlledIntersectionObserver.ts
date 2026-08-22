@@ -34,7 +34,7 @@ export class ControlledIntersectionObserver implements IntersectionObserver {
     if (!observer) throw new Error('Target is not observed');
     observer.callback(
       [{ target, isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry],
-      observer,
+      observer
     );
   }
 

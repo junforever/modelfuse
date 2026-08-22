@@ -12,10 +12,7 @@ export function countTitleGraphemes(value: string): number {
   return count;
 }
 
-export function truncateTitleGraphemes(
-  value: string,
-  maximum = TITLE_MAX_GRAPHEMES,
-): string {
+export function truncateTitleGraphemes(value: string, maximum = TITLE_MAX_GRAPHEMES): string {
   if (maximum <= 0) {
     return '';
   }

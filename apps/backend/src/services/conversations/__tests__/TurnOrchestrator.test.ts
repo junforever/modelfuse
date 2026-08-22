@@ -20,7 +20,8 @@ describe('TurnOrchestrator', () => {
       qwen: vi.fn<LlmProvider['generate']>(() => pending['base-2'].promise),
       openai: vi.fn<LlmProvider['generate']>(() => pending['base-3'].promise),
       google: vi.fn<LlmProvider['generate']>(async request =>
-        resultFor(request, 'Consolidated answer')),
+        resultFor(request, 'Consolidated answer')
+      ),
     };
     const providerRegistry = {
       openrouter: provider('openrouter', generate.openrouter),
@@ -82,7 +83,7 @@ describe('TurnOrchestrator', () => {
     expect(turnRepository.persistResponseAttempt).toHaveBeenCalledTimes(4);
     for (const slot of ['base-1', 'base-2', 'base-3', 'consolidator'] as const) {
       expect(turnRepository.persistResponseAttempt).toHaveBeenCalledWith(
-        expect.objectContaining({ slot, attemptNo: 1, status: 'completed' }),
+        expect.objectContaining({ slot, attemptNo: 1, status: 'completed' })
       );
     }
   });
@@ -96,10 +97,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function provider(
-  providerId: ProviderId,
-  generate: LlmProvider['generate'],
-): LlmProvider {
+function provider(providerId: ProviderId, generate: LlmProvider['generate']): LlmProvider {
   return {
     providerId,
     measureInputTokens: vi.fn(async () => 1),
@@ -118,10 +116,7 @@ function resultFor(request: LlmRequest, content: string): LlmResult {
 }
 
 function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {
-  const snapshot = <Slot extends ResponseSlot>(
-    slot: Slot,
-    providerId: ProviderId,
-  ) => ({
+  const snapshot = <Slot extends ResponseSlot>(slot: Slot, providerId: ProviderId) => ({
     slot,
     deploymentId: `${slot}-deployment`,
     providerId,

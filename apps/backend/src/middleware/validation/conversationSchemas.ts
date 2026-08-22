@@ -1,10 +1,7 @@
 import { z } from 'zod';
 
 import { RESPONSE_SLOTS } from '../../types/conversations.js';
-import {
-  countTitleGraphemes,
-  TITLE_MAX_GRAPHEMES,
-} from '../../utils/titleGraphemes.js';
+import { countTitleGraphemes, TITLE_MAX_GRAPHEMES } from '../../utils/titleGraphemes.js';
 
 const uuidSchema = z.uuid({ error: 'Must be a valid UUID.' });
 const cursorSchema = z
@@ -13,7 +10,7 @@ const cursorSchema = z
   .regex(/^[A-Za-z0-9_-]+$/, { error: 'Must be a valid base64url cursor.' });
 const promptSchema = z
   .string()
-  .refine((prompt) => prompt.trim().length > 0, { error: 'Prompt must not be empty.' });
+  .refine(prompt => prompt.trim().length > 0, { error: 'Prompt must not be empty.' });
 
 export const emptyConversationOperationBodySchema = z.strictObject({}).optional();
 
@@ -61,11 +58,11 @@ export const listTurnsQuerySchema = z.strictObject({
 export const renameConversationBodySchema = z.strictObject({
   title: z
     .string()
-    .transform((title) => title.trim())
-    .refine((title) => countTitleGraphemes(title) >= 1, {
+    .transform(title => title.trim())
+    .refine(title => countTitleGraphemes(title) >= 1, {
       error: 'Title must not be empty.',
     })
-    .refine((title) => countTitleGraphemes(title) <= TITLE_MAX_GRAPHEMES, {
+    .refine(title => countTitleGraphemes(title) <= TITLE_MAX_GRAPHEMES, {
       error: `Title must contain at most ${TITLE_MAX_GRAPHEMES} grapheme clusters.`,
     }),
 });

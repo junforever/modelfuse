@@ -12,7 +12,10 @@ type Script =
 
 const FIXED_START = '2026-01-02T03:04:05.000Z';
 const FIXED_END = '2026-01-02T03:04:06.000Z';
-const IDENTITIES: Record<ResponseSlot, { providerId: ProviderId; provider: string; model: string }> = {
+const IDENTITIES: Record<
+  ResponseSlot,
+  { providerId: ProviderId; provider: string; model: string }
+> = {
   'base-1': { providerId: 'openai', provider: 'openai-fake', model: 'openai-test-model' },
   'base-2': { providerId: 'google', provider: 'google-fake', model: 'google-test-model' },
   'base-3': { providerId: 'minimax', provider: 'minimax-fake', model: 'minimax-test-model' },
@@ -38,7 +41,7 @@ export class ControlledLlmProvider implements LlmProvider {
   constructor(
     readonly slot: ResponseSlot,
     private readonly scripts: Script[] = [],
-    identityOverride?: ControlledProviderIdentity,
+    identityOverride?: ControlledProviderIdentity
   ) {
     const identity = identityOverride ?? IDENTITIES[slot];
     this.providerId = identity.providerId;
@@ -48,7 +51,7 @@ export class ControlledLlmProvider implements LlmProvider {
 
   async measureInputTokens(
     _deployment: ConversationDeploymentSnapshot,
-    _messages: LlmRequest['messages'],
+    _messages: LlmRequest['messages']
   ): Promise<number> {
     return 1;
   }

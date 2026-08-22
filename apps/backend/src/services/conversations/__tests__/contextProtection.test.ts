@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { LlmContextCapabilities } from '../../../types/llm.js';
-import {
-  CONTEXT_TRUNCATION_MARKER,
-  protectContext,
-} from '../contextProtection.js';
+import { CONTEXT_TRUNCATION_MARKER, protectContext } from '../contextProtection.js';
 
 const systemMessage = { role: 'system' as const, content: 'System instructions' };
 const currentPrompt = { role: 'user' as const, content: 'Current prompt must survive' };
@@ -54,8 +51,12 @@ describe('protectContext', () => {
     const measuredPayloads: Array<Array<{ role: string; content: string }>> = [];
     const tokenCounts = [95, 85, 70];
     const measureInputTokens = vi.fn((messages: Array<{ role: string; content: string }>) => {
-      measuredPayloads.push(messages.map((message) => ({ ...message })));
-      return { kind: 'upper_bound' as const, tokens: tokenCounts[measuredPayloads.length - 1]!, basis: 'test bound' };
+      measuredPayloads.push(messages.map(message => ({ ...message })));
+      return {
+        kind: 'upper_bound' as const,
+        tokens: tokenCounts[measuredPayloads.length - 1]!,
+        basis: 'test bound',
+      };
     });
 
     const result = protectContext({

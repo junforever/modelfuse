@@ -27,22 +27,22 @@ export function createConversationRoutes(dependencies: {
   router.get(
     '/',
     validateRequest({ query: listConversationsQuerySchema }),
-    controller.listConversations,
+    controller.listConversations
   );
   router.post(
     '/',
     validateRequest({ body: createConversationBodySchema }),
-    controller.createConversation,
+    controller.createConversation
   );
   router.get(
     '/:conversationId',
     validateRequest({ params: conversationIdParamsSchema }),
-    controller.getConversation,
+    controller.getConversation
   );
   router.patch(
     '/:conversationId',
     validateRequest({ params: conversationIdParamsSchema, body: renameConversationBodySchema }),
-    controller.renameConversation,
+    controller.renameConversation
   );
   router.delete(
     '/:conversationId',
@@ -50,27 +50,27 @@ export function createConversationRoutes(dependencies: {
       params: conversationIdParamsSchema,
       body: emptyConversationOperationBodySchema,
     }),
-    controller.deleteConversation,
+    controller.deleteConversation
   );
   router.get(
     '/:conversationId/turns',
     validateRequest({ params: conversationIdParamsSchema, query: listTurnsQuerySchema }),
-    controller.listTurns,
+    controller.listTurns
   );
   router.post(
     '/:conversationId/turns',
     validateRequest({ params: conversationIdParamsSchema, body: createTurnBodySchema }),
-    controller.createTurn,
+    controller.createTurn
   );
   router.get(
     '/:conversationId/turns/:turnId',
     validateRequest({ params: turnIdParamsSchema }),
-    controller.getTurn,
+    controller.getTurn
   );
   router.get(
     '/:conversationId/turns/:turnId/events',
     validateRequest({ params: turnIdParamsSchema }),
-    createTurnEventsController(dependencies.conversationService, dependencies.turnEventPublisher),
+    createTurnEventsController(dependencies.conversationService, dependencies.turnEventPublisher)
   );
   router.post(
     '/:conversationId/turns/:turnId/responses/:slot/retry',
@@ -78,7 +78,7 @@ export function createConversationRoutes(dependencies: {
       params: responseSlotParamsSchema,
       body: emptyConversationOperationBodySchema,
     }),
-    controller.retryResponse,
+    controller.retryResponse
   );
   router.post(
     '/:conversationId/turns/:turnId/responses/:slot/continue-without',
@@ -86,7 +86,7 @@ export function createConversationRoutes(dependencies: {
       params: responseSlotParamsSchema,
       body: emptyConversationOperationBodySchema,
     }),
-    controller.continueWithout,
+    controller.continueWithout
   );
 
   return router;

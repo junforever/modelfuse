@@ -55,13 +55,13 @@ entidad usando `crypto.randomUUID()`; no se requiere extensión PostgreSQL.
 
 ## conversations
 
-| Field | Type | Rules |
-|---|---|---|
-| `id` | `uuid` | PK |
-| `create_client_request_id` | `uuid` | Requerido, único global |
-| `title` | `text` | Trim, 1–80 grapheme clusters Unicode validados por backend; persistencia literal |
-| `created_at` | `timestamptz` | Requerido, default `now()` |
-| `updated_at` | `timestamptz` | Requerido |
+| Field                      | Type          | Rules                                                                            |
+| -------------------------- | ------------- | -------------------------------------------------------------------------------- |
+| `id`                       | `uuid`        | PK                                                                               |
+| `create_client_request_id` | `uuid`        | Requerido, único global                                                          |
+| `title`                    | `text`        | Trim, 1–80 grapheme clusters Unicode validados por backend; persistencia literal |
+| `created_at`               | `timestamptz` | Requerido, default `now()`                                                       |
+| `updated_at`               | `timestamptz` | Requerido                                                                        |
 
 Indexes:
 
@@ -87,16 +87,16 @@ Lifecycle:
 
 ## turns
 
-| Field | Type | Rules |
-|---|---|---|
-| `id` | `uuid` | PK |
-| `conversation_id` | `uuid` | FK → conversations, `ON DELETE CASCADE` |
-| `client_request_id` | `uuid` | Requerido |
-| `ordinal` | `integer` | Mayor que 0 |
-| `user_content` | `text` | Trim, al menos un carácter |
-| `status` | `varchar(16)` | `pending`, `running`, `partial`, `completed`, `failed` |
-| `created_at` | `timestamptz` | Requerido |
-| `updated_at` | `timestamptz` | Requerido |
+| Field               | Type          | Rules                                                  |
+| ------------------- | ------------- | ------------------------------------------------------ |
+| `id`                | `uuid`        | PK                                                     |
+| `conversation_id`   | `uuid`        | FK → conversations, `ON DELETE CASCADE`                |
+| `client_request_id` | `uuid`        | Requerido                                              |
+| `ordinal`           | `integer`     | Mayor que 0                                            |
+| `user_content`      | `text`        | Trim, al menos un carácter                             |
+| `status`            | `varchar(16)` | `pending`, `running`, `partial`, `completed`, `failed` |
+| `created_at`        | `timestamptz` | Requerido                                              |
+| `updated_at`        | `timestamptz` | Requerido                                              |
 
 Constraints/indexes:
 
@@ -148,27 +148,27 @@ representando la política de un turno activo.
 
 ## model_responses
 
-| Field | Type | Rules |
-|---|---|---|
-| `id` | `uuid` | PK |
-| `turn_id` | `uuid` | FK → turns, `ON DELETE CASCADE` |
-| `slot` | `varchar(16)` | `openai`, `google`, `minimax`, `qwen` |
-| `role` | `varchar(16)` | `base` o `consolidator`, consistente con slot |
-| `provider` | `varchar(64)` | Identificador normalizado |
-| `model` | `varchar(128)` | Modelo configurado |
-| `status` | `varchar(16)` | `pending`, `running`, `completed`, `failed` |
-| `content` | `text` | Contenido normalizado; requerido para `completed` |
-| `error_code` | `varchar(64)` | Código seguro |
-| `error_message` | `text` | Mensaje seguro |
-| `error_recoverable` | `boolean` | Derivado de la clasificación canónica; habilita Retry manual |
-| `continued_without_at` | `timestamptz` | Decisión persistida; solo base fallido |
-| `is_stale` | `boolean` | Consolidación Qwen obsoleta durante reemplazo |
-| `attempt_no` | `integer` | Default 0; incrementa al aceptar cada ejecución |
-| `metadata` | `jsonb` | Duración/evidencia contextual segura |
-| `started_at` | `timestamptz` | Nullable |
-| `completed_at` | `timestamptz` | Nullable |
-| `created_at` | `timestamptz` | Requerido |
-| `updated_at` | `timestamptz` | Requerido |
+| Field                  | Type           | Rules                                                        |
+| ---------------------- | -------------- | ------------------------------------------------------------ |
+| `id`                   | `uuid`         | PK                                                           |
+| `turn_id`              | `uuid`         | FK → turns, `ON DELETE CASCADE`                              |
+| `slot`                 | `varchar(16)`  | `openai`, `google`, `minimax`, `qwen`                        |
+| `role`                 | `varchar(16)`  | `base` o `consolidator`, consistente con slot                |
+| `provider`             | `varchar(64)`  | Identificador normalizado                                    |
+| `model`                | `varchar(128)` | Modelo configurado                                           |
+| `status`               | `varchar(16)`  | `pending`, `running`, `completed`, `failed`                  |
+| `content`              | `text`         | Contenido normalizado; requerido para `completed`            |
+| `error_code`           | `varchar(64)`  | Código seguro                                                |
+| `error_message`        | `text`         | Mensaje seguro                                               |
+| `error_recoverable`    | `boolean`      | Derivado de la clasificación canónica; habilita Retry manual |
+| `continued_without_at` | `timestamptz`  | Decisión persistida; solo base fallido                       |
+| `is_stale`             | `boolean`      | Consolidación Qwen obsoleta durante reemplazo                |
+| `attempt_no`           | `integer`      | Default 0; incrementa al aceptar cada ejecución              |
+| `metadata`             | `jsonb`        | Duración/evidencia contextual segura                         |
+| `started_at`           | `timestamptz`  | Nullable                                                     |
+| `completed_at`         | `timestamptz`  | Nullable                                                     |
+| `created_at`           | `timestamptz`  | Requerido                                                    |
+| `updated_at`           | `timestamptz`  | Requerido                                                    |
 
 Constraints/indexes:
 

@@ -167,7 +167,7 @@ Missing: `404 CONVERSATION_NOT_FOUND`.
 Request:
 
 ```json
-{"title": "texto libre de 1 a 80 grapheme clusters Unicode después de trim"}
+{ "title": "texto libre de 1 a 80 grapheme clusters Unicode después de trim" }
 ```
 
 `trim` es la única transformación de negocio; no se aplica normalización Unicode
@@ -399,20 +399,20 @@ turnos/busy y no relanza providers.
 
 ## Error Codes
 
-| HTTP | Code | Meaning |
-|---|---|---|
-| 400 | `INVALID_JSON` | JSON inválido |
-| 400 | `INVALID_CURSOR` | Cursor inválido |
-| 404 | `CONVERSATION_NOT_FOUND` | Conversación inexistente |
-| 404 | `TURN_NOT_FOUND` | Turno inexistente o ajeno |
-| 404 | `RESPONSE_NOT_FOUND` | Slot inexistente |
-| 409 | `CLIENT_REQUEST_ID_CONFLICT` | ID repetido con prompt distinto |
-| 409 | `CONVERSATION_BUSY` | Crear trabajo o eliminar mientras la conversación está busy |
-| 409 | `RESPONSE_NOT_RETRYABLE` | Slot no es fallido recuperable o tiene Continue-without |
-| 409 | `RESPONSE_RETRY_IN_PROGRESS` | Mismo slot ya pending/running |
-| 409 | `CONTINUE_WITHOUT_NOT_ALLOWED` | Slot no es base fallido |
-| 422 | `VALIDATION_ERROR` | Validación Zod fallida |
-| 500 | `INTERNAL_ERROR` | Falla inesperada saneada |
+| HTTP | Code                           | Meaning                                                     |
+| ---- | ------------------------------ | ----------------------------------------------------------- |
+| 400  | `INVALID_JSON`                 | JSON inválido                                               |
+| 400  | `INVALID_CURSOR`               | Cursor inválido                                             |
+| 404  | `CONVERSATION_NOT_FOUND`       | Conversación inexistente                                    |
+| 404  | `TURN_NOT_FOUND`               | Turno inexistente o ajeno                                   |
+| 404  | `RESPONSE_NOT_FOUND`           | Slot inexistente                                            |
+| 409  | `CLIENT_REQUEST_ID_CONFLICT`   | ID repetido con prompt distinto                             |
+| 409  | `CONVERSATION_BUSY`            | Crear trabajo o eliminar mientras la conversación está busy |
+| 409  | `RESPONSE_NOT_RETRYABLE`       | Slot no es fallido recuperable o tiene Continue-without     |
+| 409  | `RESPONSE_RETRY_IN_PROGRESS`   | Mismo slot ya pending/running                               |
+| 409  | `CONTINUE_WITHOUT_NOT_ALLOWED` | Slot no es base fallido                                     |
+| 422  | `VALIDATION_ERROR`             | Validación Zod fallida                                      |
+| 500  | `INTERNAL_ERROR`               | Falla inesperada saneada                                    |
 
 Errores de provider se persisten dentro del slot afectado; no eliminan respuestas
 exitosas ni convierten SSE en error HTTP del comando REST.

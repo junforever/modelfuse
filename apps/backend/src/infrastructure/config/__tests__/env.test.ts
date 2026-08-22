@@ -55,7 +55,7 @@ describe('parseEnv', () => {
 
   it('selects a required HTTP(S) frontend origin for each runtime environment', () => {
     expect(() => parseEnv({ ...validEnv, FRONTEND_URL_LOCALHOST: '' })).toThrow(
-      'FRONTEND_URL_LOCALHOST',
+      'FRONTEND_URL_LOCALHOST'
     );
 
     const production = {
@@ -69,9 +69,9 @@ describe('parseEnv', () => {
       FRONTEND_URL: 'https://app.example.test',
     });
     expect(() => parseEnv({ ...production, FRONTEND_URL: '' })).toThrow('FRONTEND_URL');
-    expect(() =>
-      parseEnv({ ...production, FRONTEND_URL: 'javascript:alert(1)' }),
-    ).toThrow('FRONTEND_URL');
+    expect(() => parseEnv({ ...production, FRONTEND_URL: 'javascript:alert(1)' })).toThrow(
+      'FRONTEND_URL'
+    );
     expect(parseEnv({ ...validEnv, NODE_ENV: 'test' })).toMatchObject({
       NODE_ENV: 'test',
       FRONTEND_URL_LOCALHOST: 'http://localhost:5173',
@@ -107,7 +107,7 @@ describe('parseEnv', () => {
         POSTGRES_IDLE_TIMEOUT: '0',
         POSTGRES_CONNECTION_TIMEOUT: '0',
         POSTGRES_KEEP_ALIVE: 'false',
-      }),
+      })
     ).toMatchObject({
       PORT: 0,
       POSTGRES_IDLE_TIMEOUT: 0,
@@ -168,12 +168,12 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...validEnv, [name]: value })).toThrow(name);
   });
 
-  it.each(['0', '-0.1', '1.01', 'not-a-number']) (
+  it.each(['0', '-0.1', '1.01', 'not-a-number'])(
     'rejects context threshold ratio outside (0, 1]: %s',
-    (value) => {
-      expect(() =>
-        parseEnv({ ...validEnv, LLM_CONTEXT_THRESHOLD_RATIO: value })
-      ).toThrow('LLM_CONTEXT_THRESHOLD_RATIO');
+    value => {
+      expect(() => parseEnv({ ...validEnv, LLM_CONTEXT_THRESHOLD_RATIO: value })).toThrow(
+        'LLM_CONTEXT_THRESHOLD_RATIO'
+      );
     }
   );
 

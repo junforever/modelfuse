@@ -1,8 +1,4 @@
-import type {
-  ResponseSlot,
-  ResponseStatus,
-  TurnStatus,
-} from '../../../../types/conversations.js';
+import type { ResponseSlot, ResponseStatus, TurnStatus } from '../../../../types/conversations.js';
 
 export interface RecoveryResponseCase {
   id: string;
@@ -59,7 +55,7 @@ export const recoveryCases = [
             '92300000-0000-4000-8000-000000000005',
             'base-1',
             'completed',
-            'partial-2-base-1',
+            'partial-2-base-1'
           ),
           response('92300000-0000-4000-8000-000000000006', 'base-2', 'running'),
           response('92300000-0000-4000-8000-000000000007', 'base-3', 'pending'),
@@ -85,7 +81,7 @@ export const recoveryCases = [
             '92300000-0000-4000-8000-000000000009',
             'base-1',
             'completed',
-            'failed-1-base-1',
+            'failed-1-base-1'
           ),
           response(
             '92300000-0000-4000-8000-000000000010',
@@ -93,19 +89,19 @@ export const recoveryCases = [
             'failed',
             null,
             'provider_error',
-            false,
+            false
           ),
           response(
             '92300000-0000-4000-8000-000000000011',
             'base-3',
             'completed',
-            'failed-1-base-3',
+            'failed-1-base-3'
           ),
           response(
             '92300000-0000-4000-8000-000000000012',
             'consolidator',
             'completed',
-            'failed-1-consolidator',
+            'failed-1-consolidator'
           ),
         ],
       },
@@ -129,10 +125,10 @@ export const recoveryCases = [
 
 function completedResponses(
   idPrefix: string,
-  contentPrefix: string,
+  contentPrefix: string
 ): readonly RecoveryResponseCase[] {
   return (['base-1', 'base-2', 'base-3', 'consolidator'] as const).map((slot, index) =>
-    response(`${idPrefix}${index + 1}`, slot, 'completed', `${contentPrefix}-${slot}`),
+    response(`${idPrefix}${index + 1}`, slot, 'completed', `${contentPrefix}-${slot}`)
   );
 }
 
@@ -142,7 +138,7 @@ function response(
   status: ResponseStatus,
   content: string | null = null,
   errorCode?: string,
-  recoverable?: boolean,
+  recoverable?: boolean
 ): RecoveryResponseCase {
   return { id, slot, status, content, errorCode, recoverable };
 }

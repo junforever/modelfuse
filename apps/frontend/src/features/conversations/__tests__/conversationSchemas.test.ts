@@ -52,22 +52,19 @@ const turn = {
   ordinal: 1,
   prompt: 'Compare this',
   status: 'completed',
-  responses: [
-    response('base-1'),
-    response('base-2'),
-    response('base-3'),
-    response('consolidator'),
-  ],
+  responses: [response('base-1'), response('base-2'), response('base-3'), response('consolidator')],
   createdAt: '2026-07-26T20:00:00.000Z',
   updatedAt,
 };
 
-const deployments = ([
-  ['base-1', 'openai', 'GPT'],
-  ['base-2', 'google', 'Gemini'],
-  ['base-3', 'openrouter', 'MiniMax'],
-  ['consolidator', 'openrouter', 'Qwen'],
-] as const).map(([slot, providerId, displayName]) => ({
+const deployments = (
+  [
+    ['base-1', 'openai', 'GPT'],
+    ['base-2', 'google', 'Gemini'],
+    ['base-3', 'openrouter', 'MiniMax'],
+    ['consolidator', 'openrouter', 'Qwen'],
+  ] as const
+).map(([slot, providerId, displayName]) => ({
   slot,
   deploymentId: `${slot}-deployment`,
   providerId,
@@ -104,13 +101,13 @@ describe('frontend conversation contracts', () => {
     expect(
       modelCatalogResponseSchema.safeParse({
         items: [{ ...catalogItem, credentialEnv: 'SECRET_MUST_NOT_BE_PUBLIC' }],
-      }).success,
+      }).success
     ).toBe(false);
     expect(
       conversationTurnResponseSchema.safeParse({
         ...creation,
         conversation: { ...detail, deployments: [...deployments].reverse() },
-      }).success,
+      }).success
     ).toBe(false);
   });
 
@@ -234,30 +231,42 @@ describe('frontend conversation contracts', () => {
     };
     const invalidResponses = [
       ['completed without content', { ...response('base-1'), content: '   ' }],
-      ['completed with an error', {
-        ...response('base-1'),
-        error: { code: 'provider_error', message: 'Safe failure' },
-      }],
-      ['failed without an error', {
-        ...response('base-1'),
-        status: 'failed',
-        content: null,
-        error: null,
-      }],
-      ['running with an error', {
-        ...response('base-1'),
-        status: 'running',
-        content: null,
-        error: { code: 'provider_error', message: 'Safe failure' },
-      }],
+      [
+        'completed with an error',
+        {
+          ...response('base-1'),
+          error: { code: 'provider_error', message: 'Safe failure' },
+        },
+      ],
+      [
+        'failed without an error',
+        {
+          ...response('base-1'),
+          status: 'failed',
+          content: null,
+          error: null,
+        },
+      ],
+      [
+        'running with an error',
+        {
+          ...response('base-1'),
+          status: 'running',
+          content: null,
+          error: { code: 'provider_error', message: 'Safe failure' },
+        },
+      ],
       ['continued completed base', { ...response('base-1'), continuedWithout: true }],
-      ['continued failed consolidator', {
-        ...response('consolidator'),
-        status: 'failed',
-        content: null,
-        error: { code: 'provider_error', message: 'Safe failure' },
-        continuedWithout: true,
-      }],
+      [
+        'continued failed consolidator',
+        {
+          ...response('consolidator'),
+          status: 'failed',
+          content: null,
+          error: { code: 'provider_error', message: 'Safe failure' },
+          continuedWithout: true,
+        },
+      ],
       ['stale base', { ...response('base-1'), isStale: true }],
     ] as const;
 
@@ -283,7 +292,7 @@ describe('frontend conversation contracts', () => {
             { ...response('consolidator'), isStale: true },
           ],
         },
-      }).success,
+      }).success
     ).toBe(true);
   });
 });

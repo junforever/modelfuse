@@ -56,7 +56,7 @@ describe('ConversationRepository history PostgreSQL integration', () => {
       pool,
       INSERTED_AFTER_CURSOR_ID,
       '2026-07-26T20:05:00.000Z',
-      'inserted-after-cursor',
+      'inserted-after-cursor'
     );
     const second = await repository.listConversations(2, first.nextCursor ?? undefined);
 
@@ -64,7 +64,7 @@ describe('ConversationRepository history PostgreSQL integration', () => {
     expect([...first.items, ...second.items].map(({ id }) => id)).toHaveLength(4);
     expect(new Set([...first.items, ...second.items].map(({ id }) => id)).size).toBe(4);
     expect([...first.items, ...second.items].map(({ id }) => id)).not.toContain(
-      INSERTED_AFTER_CURSOR_ID,
+      INSERTED_AFTER_CURSOR_ID
     );
   });
 
@@ -87,7 +87,7 @@ describe('ConversationRepository history PostgreSQL integration', () => {
       expect(turn.prompt).toBe(`prompt-${turn.ordinal}`);
       expect(turn.responses.map(({ slot }) => slot)).toEqual(CANONICAL_SLOTS);
       expect(turn.responses.every(({ content }) => content?.endsWith(`-${turn.ordinal}`))).toBe(
-        true,
+        true
       );
     }
     expect(detail?.deployments).toEqual(TEST_DEPLOYMENT_SUMMARIES);
@@ -113,24 +113,35 @@ async function insertConversation(
   pool: Pool,
   id: string,
   updatedAt: string,
-  title: string,
+  title: string
 ): Promise<void> {
   await pool.query(
     `INSERT INTO conversations
        (id, create_client_request_id, title, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $4)`,
-    [id, requestId(id, 1), title, updatedAt],
+    [id, requestId(id, 1), title, updatedAt]
   );
 }
 
-async function insertCompletedTurn(pool: Pool, conversationId: string, ordinal: number): Promise<void> {
+async function insertCompletedTurn(
+  pool: Pool,
+  conversationId: string,
+  ordinal: number
+): Promise<void> {
   const turnId = requestId(conversationId, 100 + ordinal);
   const timestamp = `2026-07-26T20:00:${String(ordinal).padStart(2, '0')}.000Z`;
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, 'completed', $6, $6)`,
-    [turnId, conversationId, requestId(conversationId, 200 + ordinal), ordinal, `prompt-${ordinal}`, timestamp],
+    [
+      turnId,
+      conversationId,
+      requestId(conversationId, 200 + ordinal),
+      ordinal,
+      `prompt-${ordinal}`,
+      timestamp,
+    ]
   );
   await pool.query(
     `INSERT INTO model_responses
@@ -141,7 +152,7 @@ async function insertCompletedTurn(pool: Pool, conversationId: string, ordinal: 
             slot, slot || '-model', 'completed', slot || '-' || $2, false,
             false, 1, $3, $3, $3
        FROM unnest(ARRAY['base-1', 'base-2', 'base-3', 'consolidator']) AS slot`,
-    [turnId, ordinal, timestamp],
+    [turnId, ordinal, timestamp]
   );
 }
 
