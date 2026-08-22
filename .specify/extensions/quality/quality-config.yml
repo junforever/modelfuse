@@ -1,0 +1,19 @@
+# Configuración para la extensión Quality Gate
+# Copia este archivo a quality-config.yml en tu proyecto para personalizarlo.
+
+format:
+  enabled: true
+  tool: 'prettier'
+
+# Futuras implementaciones:
+# lint:
+#   enabled: false
+#   tool: "eslint"
+#
+# typecheck:
+#   enabled: false
+#   tool: "tsc"
+#
+# test:
+#   enabled: false
+#   tool: "jest"

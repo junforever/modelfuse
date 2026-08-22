@@ -122,6 +122,13 @@ hooks:
     prompt: Commit implementation changes?
     description: Auto-commit after implementation
     condition: null
+  - extension: quality
+    command: speckit.quality.format
+    enabled: true
+    optional: false
+    prompt: Execute speckit.quality.format?
+    description: Formatear código con Prettier tras la implementación.
+    condition: null
   after_checklist:
   - extension: git
     command: speckit.git.commit

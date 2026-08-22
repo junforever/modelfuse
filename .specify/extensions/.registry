@@ -25,6 +25,23 @@
       },
       "registered_skills": [],
       "installed_at": "2026-07-24T18:49:40.238243+00:00"
+    },
+    "quality": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:3a0a896242b010619b01e99578b4c076bb8e3765e0204b4825330785354b8ad2",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "agy": [
+          "speckit.quality.format"
+        ],
+        "codex": [
+          "speckit.quality.format"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-08-22T15:49:50.187449+00:00"
     }
   }
 }
