@@ -8,29 +8,38 @@ export interface ContextTurn {
   response: string | null;
 }
 
+export interface BaseContextQuery {
+  conversationId: string;
+  beforeOrdinal: number;
+  slot: BaseResponseSlot;
+  maxTurns: number;
+}
+
+export interface ConsolidatorContextQuery {
+  conversationId: string;
+  beforeOrdinal: number;
+  maxTurns: number;
+}
+
+export interface ContextRepositoryPort {
+  getBaseContext(input: BaseContextQuery): Promise<ContextTurn[]>;
+  getConsolidatorContext(input: ConsolidatorContextQuery): Promise<ContextTurn[]>;
+}
+
 interface ContextTurnRow {
   ordinal: number;
   prompt: string;
   response: string | null;
 }
 
-export class ContextRepository {
+export class ContextRepository implements ContextRepositoryPort {
   constructor(private readonly pool: Pool) {}
 
-  getBaseContext(input: {
-    conversationId: string;
-    beforeOrdinal: number;
-    slot: BaseResponseSlot;
-    maxTurns: number;
-  }): Promise<ContextTurn[]> {
+  getBaseContext(input: BaseContextQuery): Promise<ContextTurn[]> {
     return this.getContext(input, false);
   }
 
-  getConsolidatorContext(input: {
-    conversationId: string;
-    beforeOrdinal: number;
-    maxTurns: number;
-  }): Promise<ContextTurn[]> {
+  getConsolidatorContext(input: ConsolidatorContextQuery): Promise<ContextTurn[]> {
     return this.getContext({ ...input, slot: 'consolidator' }, true);
   }
 

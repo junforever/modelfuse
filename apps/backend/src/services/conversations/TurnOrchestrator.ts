@@ -11,18 +11,16 @@ import type {
 } from '../../types/conversations.js';
 import type {
   LlmErrorCode,
-  LlmMessage,
   LlmProviderError,
   LlmResult,
   ProviderRegistry,
 } from '../../types/llm.js';
 import { logger } from '../../utils/logger.js';
 import { isRecoverableLlmError } from '../llm/llmErrors.js';
-import { CONTEXT_TRUNCATION_MARKER } from './contextProtection.js';
+import type { ContextBuilder } from './ContextBuilder.js';
 import type { UnsequencedTurnEvent } from './turnEventPublisher.js';
 
 const BASE_SLOTS = ['base-1', 'base-2', 'base-3'] as const;
-const CONTEXT_THRESHOLD_RATIO = 0.8;
 
 interface TurnRepositoryPort {
   startResponseAttempt?: (input: {
@@ -60,21 +58,13 @@ interface SlotExecutionResult {
   result: LlmResult | null;
 }
 
-type ProtectedContext =
-  | { ok: true; messages: LlmMessage[]; contextWindow: ContextWindowMetadata }
-  | {
-      ok: false;
-      error: { code: 'INVALID_PROMPT_SIZE'; message: string; recoverable: false };
-    };
-
 export class TurnOrchestrator {
   constructor(
     private readonly dependencies: {
       providerRegistry: ProviderRegistry;
       turnRepository: TurnRepositoryPort;
       publisher: PublisherPort;
-      contextThresholdRatio?: number;
-      contextBuilder?: unknown;
+      contextBuilder: Pick<ContextBuilder, 'build'>;
     }
   ) {}
 
@@ -248,65 +238,16 @@ export class TurnOrchestrator {
     },
     provider: NonNullable<ProviderRegistry[keyof ProviderRegistry]>,
     deployment: ConversationDeploymentSnapshot
-  ): Promise<ProtectedContext> {
-    // ponytail: US1 needs first-turn composition; T056 adds persisted history/windowing.
-    let auxiliaryMessages: LlmMessage[] =
-      input.slot === 'consolidator'
-        ? (input.currentBaseResponses ?? []).flatMap(response =>
-            response.content
-              ? [{ role: 'user' as const, content: `${response.slot}:\n${response.content}` }]
-              : []
-          )
-        : [];
-    const compose = (): LlmMessage[] => [
-      {
-        role: 'system',
-        content:
-          input.slot === 'consolidator'
-            ? 'Consolidate the available model answers into one final answer.'
-            : 'Provide a complete, accurate answer to the user prompt.',
-      },
-      ...auxiliaryMessages,
-      { role: 'user', content: input.prompt },
-    ];
-    const threshold =
-      deployment.contextLimitTokens *
-      (this.dependencies.contextThresholdRatio ?? CONTEXT_THRESHOLD_RATIO);
-    let messages = compose();
-    let measured = await provider.measureInputTokens(deployment, messages);
-    let truncated = false;
-
-    if (measured > threshold && auxiliaryMessages.length > 0) {
-      auxiliaryMessages = auxiliaryMessages.map(message => ({
-        ...message,
-        content: `${message.content.slice(0, message.content.indexOf('\n') + 1)}${CONTEXT_TRUNCATION_MARKER}`,
-      }));
-      messages = compose();
-      measured = await provider.measureInputTokens(deployment, messages);
-      truncated = true;
-    }
-
-    if (measured > threshold) {
-      return {
-        ok: false,
-        error: {
-          code: 'INVALID_PROMPT_SIZE',
-          message: 'The required prompt does not fit within the model context limit.',
-          recoverable: false,
-        },
-      };
-    }
-
-    return {
-      ok: true,
-      messages,
-      contextWindow: {
-        truncated,
-        firstIncludedOrdinal: input.currentOrdinal ?? 1,
-        lastIncludedOrdinal: input.currentOrdinal ?? 1,
-        protectionApplied: truncated ? 'truncate' : 'none',
-      },
-    };
+  ): ReturnType<ContextBuilder['build']> {
+    return this.dependencies.contextBuilder.build({
+      conversationId: input.conversationId,
+      currentOrdinal: input.currentOrdinal ?? 1,
+      prompt: input.prompt,
+      currentBaseResponses: input.currentBaseResponses,
+      deployment,
+      measureInputTokens: (selectedDeployment, messages) =>
+        provider.measureInputTokens(selectedDeployment, messages),
+    });
   }
 
   private async persistFailure(

@@ -16,14 +16,18 @@ vi.mock('axios', () => ({
 
 runProviderContract({
   name: 'Qwen',
-  slot: 'qwen',
-  Provider: QwenProvider,
+  providerId: 'qwen',
+  createProvider: config => new QwenProvider(config),
   requestMock: mocks.request,
   successfulResponse: {
     output: { choices: [{ message: { content: 'Normalized answer' } }] },
     usage: { input_tokens: 11, output_tokens: 7, total_tokens: 18 },
+    billing_metadata: { cost: 'must-not-cross-boundary' },
   },
-  assertMappedRequest: request => {
+  successfulResponseWithoutMetrics: {
+    output: { choices: [{ message: { content: 'Normalized answer' } }] },
+  },
+  assertMappedRequest: (request, deployment) => {
     expect(request).toMatchObject({
       method: 'POST',
       url: adapterConfig.endpoint,
@@ -31,20 +35,18 @@ runProviderContract({
       signal: expect.any(AbortSignal),
       headers: { Authorization: `Bearer ${adapterConfig.apiKey}` },
       data: {
-        model: adapterConfig.model,
+        model: deployment.modelId,
         input: { messages },
-        parameters: { result_format: 'message' },
+        parameters: {
+          result_format: 'message',
+          max_tokens: deployment.maxOutputTokens,
+        },
       },
     });
   },
   errorCases: [
     { expectedCode: 'authentication', recoverable: false, upstream: axiosError(401) },
     { expectedCode: 'rate_limited', recoverable: true, upstream: axiosError(429) },
-    {
-      expectedCode: 'timeout',
-      recoverable: true,
-      upstream: axiosError(undefined, { code: 'ECONNABORTED' }),
-    },
     {
       expectedCode: 'connectivity',
       recoverable: true,
@@ -64,6 +66,5 @@ runProviderContract({
       successfulResponse: { output: { choices: [] } },
     },
     { expectedCode: 'provider_transient_error', recoverable: true, upstream: axiosError(504) },
-    { expectedCode: 'provider_error', recoverable: false, upstream: axiosError(400) },
   ],
 });

@@ -18,6 +18,15 @@ interface OpenRouterResponse {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function errorMetadata(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  if (!isRecord(value) || !isRecord(value.error) || !isRecord(value.error.metadata)) return;
+  return value.error.metadata;
+}
+
 export class OpenRouterProvider implements LlmProvider {
   readonly providerId = 'openrouter' as const;
 
@@ -80,6 +89,19 @@ export class OpenRouterProvider implements LlmProvider {
     if (status === 401) return 'authentication';
     if (status === 429) return 'rate_limited';
     if (status === 408 || status === 502 || status === 503) return 'provider_transient_error';
+    if (status === 402) return 'provider_error';
+    const metadata = errorMetadata(error.response?.data);
+    if (
+      metadata?.error_type === 'content_policy_violation' ||
+      metadata?.error_type === 'refusal'
+    )
+      return 'content_blocked';
+    if (
+      status === 403 &&
+      ((Array.isArray(metadata?.reasons) && metadata.reasons.length > 0) ||
+        (Array.isArray(metadata?.patterns) && metadata.patterns.length > 0))
+    )
+      return 'content_blocked';
     return 'provider_error';
   }
 

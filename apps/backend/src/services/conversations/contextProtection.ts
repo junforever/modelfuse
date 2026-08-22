@@ -1,5 +1,8 @@
-import type { ContextWindowMetadata } from '../../types/conversations.js';
-import type { LlmContextCapabilities, LlmMessage } from '../../types/llm.js';
+import type {
+  ContextWindowMetadata,
+  ConversationDeploymentSnapshot,
+} from '../../types/conversations.js';
+import type { LlmMessage, LlmProvider } from '../../types/llm.js';
 
 export const CONTEXT_TRUNCATION_MARKER = '[context truncated]';
 
@@ -14,7 +17,8 @@ interface ProtectContextInput {
   auxiliaryMessages: LlmMessage[];
   currentPrompt: LlmMessage;
   currentOrdinal: number;
-  context: LlmContextCapabilities;
+  deployment: ConversationDeploymentSnapshot;
+  measureInputTokens: LlmProvider['measureInputTokens'];
   thresholdRatio: number;
 }
 
@@ -33,38 +37,41 @@ type ProtectedContext =
       };
     };
 
-export function protectContext({
+export async function protectContext({
   systemMessage,
   historicalTurns,
   auxiliaryMessages,
   currentPrompt,
   currentOrdinal,
-  context,
+  deployment,
+  measureInputTokens,
   thresholdRatio,
-}: ProtectContextInput): ProtectedContext {
+}: ProtectContextInput): Promise<ProtectedContext> {
   const remainingTurns = [...historicalTurns];
   let auxiliary = [...auxiliaryMessages];
   let removedTurns = false;
   let truncatedAuxiliary = false;
-  const threshold = context.limitTokens * thresholdRatio;
+  const threshold = deployment.contextLimitTokens * thresholdRatio;
   const compose = (): LlmMessage[] => [
     systemMessage,
     ...remainingTurns.flatMap(({ messages }) => messages),
     ...auxiliary,
     currentPrompt,
   ];
+  const fits = async (messages: readonly LlmMessage[]): Promise<boolean> =>
+    (await measureInputTokens(deployment, messages)) <= threshold;
 
   let messages = compose();
-  let fits = context.measureInputTokens(messages).tokens <= threshold;
+  let payloadFits = await fits(messages);
 
-  while (!fits && remainingTurns.length > 0) {
+  while (!payloadFits && remainingTurns.length > 0) {
     remainingTurns.shift();
     removedTurns = true;
     messages = compose();
-    fits = context.measureInputTokens(messages).tokens <= threshold;
+    payloadFits = await fits(messages);
   }
 
-  if (!fits && auxiliary.length > 0) {
+  if (!payloadFits && auxiliary.length > 0) {
     auxiliary = auxiliary.map(message => {
       const labelEnd = message.content.indexOf('\n');
       const label = labelEnd >= 0 ? message.content.slice(0, labelEnd + 1) : '';
@@ -72,10 +79,10 @@ export function protectContext({
     });
     truncatedAuxiliary = true;
     messages = compose();
-    fits = context.measureInputTokens(messages).tokens <= threshold;
+    payloadFits = await fits(messages);
   }
 
-  if (!fits) {
+  if (!payloadFits) {
     return {
       ok: false,
       error: {

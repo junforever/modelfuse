@@ -1,26 +1,18 @@
-import type { ContextTurn } from '../../infrastructure/postgres/repositories/contextRepository.js';
-import type { BaseResponseSlot, ResponseSlot } from '../../types/conversations.js';
-import type { LlmContextCapabilities, LlmMessage } from '../../types/llm.js';
+import type {
+  ContextRepositoryPort,
+  ContextTurn,
+} from '../../infrastructure/postgres/repositories/contextRepository.js';
+import type {
+  ConversationDeploymentSnapshot,
+  ResponseSlot,
+} from '../../types/conversations.js';
+import type { LlmMessage, LlmProvider } from '../../types/llm.js';
 import { protectContext } from './contextProtection.js';
 
 const BASE_SLOTS = ['base-1', 'base-2', 'base-3'] as const;
 
-interface ContextRepositoryPort {
-  getBaseContext(input: {
-    conversationId: string;
-    beforeOrdinal: number;
-    slot: BaseResponseSlot;
-    maxTurns: number;
-  }): Promise<ContextTurn[]>;
-  getConsolidatorContext(input: {
-    conversationId: string;
-    beforeOrdinal: number;
-    maxTurns: number;
-  }): Promise<ContextTurn[]>;
-}
-
 interface CurrentBaseResponse {
-  slot: BaseResponseSlot;
+  slot: ResponseSlot;
   content: string | null;
 }
 
@@ -35,14 +27,15 @@ export class ContextBuilder {
 
   async build(input: {
     conversationId: string;
-    slot: ResponseSlot;
     currentOrdinal: number;
     prompt: string;
     currentBaseResponses?: readonly CurrentBaseResponse[];
-    context: LlmContextCapabilities;
+    deployment: ConversationDeploymentSnapshot;
+    measureInputTokens: LlmProvider['measureInputTokens'];
   }) {
+    const slot = input.deployment.slot;
     const history =
-      input.slot === 'consolidator'
+      slot === 'consolidator'
         ? await this.dependencies.contextRepository.getConsolidatorContext({
             conversationId: input.conversationId,
             beforeOrdinal: input.currentOrdinal,
@@ -51,26 +44,27 @@ export class ContextBuilder {
         : await this.dependencies.contextRepository.getBaseContext({
             conversationId: input.conversationId,
             beforeOrdinal: input.currentOrdinal,
-            slot: input.slot,
+            slot,
             maxTurns: this.dependencies.maxTurns,
           });
 
-    const protectedContext = protectContext({
+    const protectedContext = await protectContext({
       systemMessage: {
         role: 'system',
         content:
-          input.slot === 'consolidator'
+          slot === 'consolidator'
             ? 'Consolidate the available model answers into one final answer.'
             : 'Provide a complete, accurate answer to the user prompt.',
       },
       historicalTurns: history.map(this.toHistoricalTurn),
       auxiliaryMessages:
-        input.slot === 'consolidator'
+        slot === 'consolidator'
           ? this.baseResponseMessages(input.currentBaseResponses ?? [])
           : [],
       currentPrompt: { role: 'user', content: input.prompt },
       currentOrdinal: input.currentOrdinal,
-      context: input.context,
+      deployment: input.deployment,
+      measureInputTokens: input.measureInputTokens,
       thresholdRatio: this.dependencies.thresholdRatio,
     });
     if (!protectedContext.ok || (history[0]?.ordinal ?? 1) === 1) return protectedContext;

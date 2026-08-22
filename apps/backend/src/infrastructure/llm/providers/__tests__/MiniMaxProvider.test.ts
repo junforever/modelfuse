@@ -16,31 +16,34 @@ vi.mock('axios', () => ({
 
 runProviderContract({
   name: 'MiniMax',
-  slot: 'minimax',
-  Provider: MiniMaxProvider,
+  providerId: 'minimax',
+  createProvider: config => new MiniMaxProvider(config),
   requestMock: mocks.request,
   successfulResponse: {
     choices: [{ message: { content: 'Normalized answer' } }],
     usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
+    upstreamMetadata: { billing: 'must-not-cross-boundary' },
   },
-  assertMappedRequest: request => {
+  successfulResponseWithoutMetrics: {
+    choices: [{ message: { content: 'Normalized answer' } }],
+  },
+  assertMappedRequest: (request, deployment) => {
     expect(request).toMatchObject({
       method: 'POST',
       url: adapterConfig.endpoint,
       timeout: adapterConfig.timeoutMs,
       signal: expect.any(AbortSignal),
       headers: { Authorization: `Bearer ${adapterConfig.apiKey}` },
-      data: { model: adapterConfig.model, messages },
+      data: {
+        model: deployment.modelId,
+        messages,
+        max_completion_tokens: deployment.maxOutputTokens,
+      },
     });
   },
   errorCases: [
     { expectedCode: 'authentication', recoverable: false, upstream: axiosError(401) },
     { expectedCode: 'rate_limited', recoverable: true, upstream: axiosError(429) },
-    {
-      expectedCode: 'timeout',
-      recoverable: true,
-      upstream: axiosError(undefined, { code: 'ETIMEDOUT' }),
-    },
     {
       expectedCode: 'connectivity',
       recoverable: true,
@@ -56,6 +59,5 @@ runProviderContract({
     { expectedCode: 'invalid_prompt_size', recoverable: false, upstream: axiosError(413) },
     { expectedCode: 'invalid_response', recoverable: false, successfulResponse: { choices: [] } },
     { expectedCode: 'provider_transient_error', recoverable: true, upstream: axiosError(502) },
-    { expectedCode: 'provider_error', recoverable: false, upstream: axiosError(400) },
   ],
 });

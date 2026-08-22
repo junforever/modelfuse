@@ -24,6 +24,7 @@ const CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000030';
 const DEFAULT_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000035';
 const UNAVAILABLE_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000039';
 const DUPLICATE_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000040';
+const OVERSIZED_CLIENT_REQUEST_ID = '10000000-0000-4000-8000-000000000041';
 const PROMPT = 'Compare the four explicit deployments.';
 const DEPLOYMENT_IDS = {
   'base-1': 'openai-5.6-terra',
@@ -66,6 +67,7 @@ const OWNED_CLIENT_REQUEST_IDS = [
   DEFAULT_CLIENT_REQUEST_ID,
   UNAVAILABLE_CLIENT_REQUEST_ID,
   DUPLICATE_CLIENT_REQUEST_ID,
+  OVERSIZED_CLIENT_REQUEST_ID,
   ...MISSING_PROVIDER_CASES.map(testCase => testCase.clientRequestId),
 ] as const;
 
@@ -190,8 +192,77 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       expect(callOrder.slice(0, 3).sort()).toEqual(['base-1', 'base-2', 'base-3']);
       expect(callOrder[3]).toBe('consolidator');
       expect(openrouter.calls.map(call => call.slot)).toEqual(['base-3', 'consolidator']);
+      expect(openrouter.calls[1]?.messages).toEqual(
+        expect.arrayContaining([
+          { role: 'user', content: 'base-1:\nOpenAI base response' },
+          { role: 'user', content: 'base-2:\nGoogle base response' },
+          { role: 'user', content: 'base-3:\nOpenRouter base response' },
+        ])
+      );
     } finally {
       baseGates.forEach(gate => gate.resolve());
+      await backend.conversationService.stop();
+    }
+  });
+
+  it('rejects an oversized minimum context before any deterministic provider call', async () => {
+    const openai = new ControlledLlmProvider('base-1');
+    const google = new ControlledLlmProvider('base-2');
+    const openrouter = new ControlledLlmProvider('base-3', [], {
+      providerId: 'openrouter',
+      provider: 'openrouter-fake',
+      model: 'openrouter-test-model',
+    });
+    const providers = { openai, google, openrouter } satisfies ProviderRegistry;
+    Object.values(providers).forEach(provider => {
+      vi.spyOn(provider, 'measureInputTokens').mockResolvedValue(2);
+    });
+    const minimumLimitDefinitions = SELECTED_DEFINITIONS.map(item => ({
+      ...item,
+      contextLimitTokens: 1,
+    }));
+    const backend = createIntegrationBackend(pool, providers, minimumLimitDefinitions);
+
+    try {
+      const created = await request(backend.app).post('/api/v1/conversations').send({
+        clientRequestId: OVERSIZED_CLIENT_REQUEST_ID,
+        prompt: 'Minimum payload that cannot fit.',
+        deploymentIds: DEPLOYMENT_IDS,
+      });
+      expect(created.status).toBe(201);
+
+      await backend.conversationService.stop();
+
+      expect([...openai.calls, ...google.calls, ...openrouter.calls]).toEqual([]);
+      const attempts = await pool.query<{
+        status: string;
+        errorCode: string | null;
+        content: string | null;
+        metadata: Record<string, unknown> | null;
+      }>(
+        `SELECT mr.status, mr.error_code AS "errorCode", mr.content, mr.metadata
+           FROM model_responses mr
+           JOIN turns t ON t.id = mr.turn_id
+           JOIN conversations c ON c.id = t.conversation_id
+          WHERE c.create_client_request_id = $1
+          ORDER BY mr.slot`,
+        [OVERSIZED_CLIENT_REQUEST_ID]
+      );
+      expect(attempts.rows).toHaveLength(4);
+      expect(attempts.rows).toEqual(
+        attempts.rows.map(() => ({
+          status: 'failed',
+          errorCode: 'INVALID_PROMPT_SIZE',
+          content: null,
+          metadata: {},
+        }))
+      );
+      const persistedAttemptData = JSON.stringify(attempts.rows).toLowerCase();
+      expect(persistedAttemptData).not.toContain('minimum payload that cannot fit');
+      expect(persistedAttemptData).not.toMatch(
+        /inputtokens|outputtokens|totaltokens|prompt_tokens|billing|cost|credit|budget|currency|price|economic/
+      );
+    } finally {
       await backend.conversationService.stop();
     }
   });

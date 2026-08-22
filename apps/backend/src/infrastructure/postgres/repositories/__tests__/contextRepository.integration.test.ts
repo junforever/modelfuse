@@ -41,27 +41,27 @@ describe('ContextRepository PostgreSQL integration', () => {
       repository.getBaseContext({
         conversationId: CONVERSATION_ID,
         beforeOrdinal: 5,
-        slot: 'openai',
+        slot: 'base-1',
         maxTurns: 3,
       })
     ).resolves.toEqual([
-      { ordinal: 2, prompt: 'prompt-2', response: 'openai-2' },
+      { ordinal: 2, prompt: 'prompt-2', response: 'base-1-2' },
       { ordinal: 3, prompt: 'prompt-3', response: null },
-      { ordinal: 4, prompt: 'prompt-4', response: 'openai-4' },
+      { ordinal: 4, prompt: 'prompt-4', response: 'base-1-4' },
     ]);
   });
 
-  it('returns only prior current Qwen consolidations and excludes stale or failed assistant content', async () => {
+  it('returns only prior current consolidations and excludes stale or failed assistant content', async () => {
     const repository = new ContextRepository(pool);
 
     await expect(
-      repository.getQwenContext({
+      repository.getConsolidatorContext({
         conversationId: CONVERSATION_ID,
         beforeOrdinal: 5,
         maxTurns: 3,
       })
     ).resolves.toEqual([
-      { ordinal: 2, prompt: 'prompt-2', response: 'qwen-2' },
+      { ordinal: 2, prompt: 'prompt-2', response: 'consolidator-2' },
       { ordinal: 3, prompt: 'prompt-3', response: null },
       { ordinal: 4, prompt: 'prompt-4', response: null },
     ]);
@@ -82,25 +82,25 @@ async function seedContextHistory(pool: Pool): Promise<void> {
   }
   await insertTurn(pool, OTHER_CONVERSATION_ID, 4, 'other-conversation-prompt');
 
-  await insertResponse(pool, CONVERSATION_ID, 1, 'openai', 'completed', 'outside-window');
-  await insertResponse(pool, CONVERSATION_ID, 2, 'openai', 'completed', 'openai-2');
-  await insertResponse(pool, CONVERSATION_ID, 2, 'google', 'completed', 'google-must-not-leak');
-  await insertResponse(pool, CONVERSATION_ID, 2, 'qwen', 'completed', 'qwen-2');
-  await insertResponse(pool, CONVERSATION_ID, 3, 'openai', 'failed', 'failed-openai-must-not-leak');
+  await insertResponse(pool, CONVERSATION_ID, 1, 'base-1', 'completed', 'outside-window');
+  await insertResponse(pool, CONVERSATION_ID, 2, 'base-1', 'completed', 'base-1-2');
+  await insertResponse(pool, CONVERSATION_ID, 2, 'base-2', 'completed', 'base-2-must-not-leak');
+  await insertResponse(pool, CONVERSATION_ID, 2, 'consolidator', 'completed', 'consolidator-2');
+  await insertResponse(pool, CONVERSATION_ID, 3, 'base-1', 'failed', 'failed-base-must-not-leak');
   await insertResponse(
     pool,
     CONVERSATION_ID,
     3,
-    'qwen',
+    'consolidator',
     'completed',
-    'stale-qwen-must-not-leak',
+    'stale-consolidator-must-not-leak',
     true
   );
-  await insertResponse(pool, CONVERSATION_ID, 4, 'openai', 'completed', 'openai-4');
-  await insertResponse(pool, CONVERSATION_ID, 4, 'minimax', 'completed', 'minimax-must-not-leak');
-  await insertResponse(pool, CONVERSATION_ID, 4, 'qwen', 'failed', 'failed-qwen-must-not-leak');
-  await insertResponse(pool, OTHER_CONVERSATION_ID, 4, 'openai', 'completed', 'other-openai');
-  await insertResponse(pool, OTHER_CONVERSATION_ID, 4, 'qwen', 'completed', 'other-qwen');
+  await insertResponse(pool, CONVERSATION_ID, 4, 'base-1', 'completed', 'base-1-4');
+  await insertResponse(pool, CONVERSATION_ID, 4, 'base-3', 'completed', 'base-3-must-not-leak');
+  await insertResponse(pool, CONVERSATION_ID, 4, 'consolidator', 'failed', 'failed-consolidator-must-not-leak');
+  await insertResponse(pool, OTHER_CONVERSATION_ID, 4, 'base-1', 'completed', 'other-base');
+  await insertResponse(pool, OTHER_CONVERSATION_ID, 4, 'consolidator', 'completed', 'other-consolidator');
 }
 
 async function insertTurn(
@@ -130,7 +130,7 @@ async function insertResponse(
   pool: Pool,
   conversationId: string,
   ordinal: number,
-  slot: 'openai' | 'google' | 'minimax' | 'qwen',
+  slot: 'base-1' | 'base-2' | 'base-3' | 'consolidator',
   status: 'completed' | 'failed',
   content: string,
   isStale = false
@@ -147,7 +147,7 @@ async function insertResponse(
     [
       `${namespace}100000-0000-4000-8000-${turnSuffix}`,
       slot,
-      slot === 'qwen' ? 'consolidator' : 'base',
+      slot === 'consolidator' ? 'consolidator' : 'base',
       status,
       content,
       status === 'failed' ? 'provider_error' : null,

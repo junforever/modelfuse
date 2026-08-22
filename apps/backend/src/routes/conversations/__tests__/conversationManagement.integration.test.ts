@@ -46,6 +46,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
   });
 
   it('lists summaries and returns detail without loading turns', async () => {
+    const snapshotsBefore = await deploymentRows(pool, IDLE_ID);
     const list = await request(app).get('/api/v1/conversations');
     expect(list.status).toBe(200);
     expect(list.body.items).toEqual([
@@ -62,6 +63,11 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
       deployments: TEST_DEPLOYMENT_SUMMARIES,
     });
     expect(detail.body).not.toHaveProperty('turns');
+    expect(JSON.stringify(detail.body)).not.toContain(BUSY_ID);
+    expect(await deploymentRows(pool, IDLE_ID)).toEqual(snapshotsBefore);
+    expect(snapshotsBefore.every(row => row.createdAt.getTime() === row.updatedAt.getTime())).toBe(
+      true
+    );
   });
 
   it.each([
@@ -107,6 +113,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
   });
 
   it('allows rename during busy but rejects delete without losing any rows', async () => {
+    const snapshotsBefore = await deploymentRows(pool, BUSY_ID);
     const renamed = await request(app)
       .patch(`/api/v1/conversations/${BUSY_ID}`)
       .send({ title: 'Busy renombrada' });
@@ -122,6 +129,7 @@ describe('conversation management HTTP/PostgreSQL integration', () => {
       turns: 1,
       responses: 4,
     });
+    expect(await deploymentRows(pool, BUSY_ID)).toEqual(snapshotsBefore);
   });
 
   it('deletes an idle conversation and cascades its turn and responses', async () => {
@@ -242,6 +250,32 @@ async function rowCounts(pool: Pool, conversationId: string) {
     [conversationId]
   );
   return result.rows[0];
+}
+
+async function deploymentRows(pool: Pool, conversationId: string) {
+  return (
+    await pool.query<{
+      slot: string;
+      deploymentId: string;
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      contextLimitTokens: number;
+      maxOutputTokens: number;
+      createdAt: Date;
+      updatedAt: Date;
+    }>(
+      `SELECT slot, deployment_id AS "deploymentId", provider_id AS "providerId",
+              model_id AS "modelId", display_name AS "displayName",
+              context_limit_tokens AS "contextLimitTokens",
+              max_output_tokens AS "maxOutputTokens",
+              created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM conversation_deployments
+        WHERE conversation_id = $1
+        ORDER BY slot`,
+      [conversationId]
+    )
+  ).rows;
 }
 
 function countGraphemes(value: string): number {

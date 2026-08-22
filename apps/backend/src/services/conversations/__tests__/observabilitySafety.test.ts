@@ -10,8 +10,14 @@ import type {
 import { createTurnEventsController } from '../../../controllers/conversations/turnEventsController.js';
 import { requestContextMiddleware } from '../../../middleware/logger/requestContext.js';
 import { createConversationFixture } from '../../../test/fixtures/conversationFixtures.js';
+import type {
+  ConversationDeploymentSnapshot,
+  ConversationDeploymentSnapshotTuple,
+  ResponseSlot,
+} from '../../../types/conversations.js';
 import type { LlmProvider } from '../../../types/llm.js';
 import { ConversationService } from '../ConversationService.js';
+import type { ContextBuilder } from '../ContextBuilder.js';
 import { recoverInterruptedTurns } from '../recoverInterruptedTurns.js';
 import { TurnOrchestrator } from '../TurnOrchestrator.js';
 import type { TurnEventPublisher } from '../turnEventPublisher.js';
@@ -54,6 +60,30 @@ const AUTHORIZATION = 'Bearer credential-canary-do-not-log';
 const USER_AGENT = 'user-agent-header-canary-do-not-log';
 const MEASUREMENT = 314_159;
 const LIMIT = 87_654_321;
+const ECONOMIC_FIELDS = ['billing', 'cost', 'credit', 'budget', 'currency', 'economic', 'price'];
+const ECONOMIC_CANARY = 'economic-canary-do-not-log-or-persist';
+const COMPOSED_PROMPT = 'composed-system-and-history-canary-do-not-persist';
+
+function deployment<Slot extends ResponseSlot>(slot: Slot): ConversationDeploymentSnapshot<Slot> {
+  return {
+    slot,
+    deploymentId: `openrouter-${slot}`,
+    providerId: 'openrouter',
+    modelId: `openrouter-model-${slot}`,
+    displayName: `OpenRouter ${slot}`,
+    contextLimitTokens: LIMIT,
+    maxOutputTokens: 16_384,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+  };
+}
+
+const DEPLOYMENTS = [
+  deployment('base-1'),
+  deployment('base-2'),
+  deployment('base-3'),
+  deployment('consolidator'),
+] satisfies ConversationDeploymentSnapshotTuple;
 
 function logEntries(): Record<string, unknown>[] {
   return [logSink.info, logSink.warn, logSink.error].flatMap(sink =>
@@ -121,7 +151,10 @@ describe('conversation observability safety', () => {
   });
 
   it('logs replay and busy decisions using only their technical identifiers', async () => {
-    const snapshot = createConversationFixture() as StoredTurnSnapshot;
+    const snapshot = {
+      ...createConversationFixture(),
+      deployments: DEPLOYMENTS,
+    } as StoredTurnSnapshot;
     snapshot.turn.prompt = PROMPT;
     snapshot.turn.responses[0].content = RESPONSE_CONTENT;
     const createTurn = vi
@@ -175,46 +208,70 @@ describe('conversation observability safety', () => {
     expectLogsToExclude(PROMPT, RESPONSE_CONTENT);
   });
 
-  it('logs slot completion and duration without prompts, responses, measurements, or limits', async () => {
-    const generate = vi.fn<LlmProvider['generate']>(async () => ({
+  it('logs a completed OpenRouter attempt without content or measurements and persists no economic fields', async () => {
+    const upstreamResult = {
       content: RESPONSE_CONTENT,
-      provider: 'qwen-provider',
-      model: 'qwen-model',
+      provider: 'openrouter',
+      model: 'openrouter-model-consolidator',
       startedAt: '2026-08-11T10:00:00.000Z',
       completedAt: '2026-08-11T10:00:01.250Z',
-      metrics: { inputTokens: 271_828 },
-      metadata: { authorization: AUTHORIZATION },
-    }));
-    const provider = (slot: LlmProvider['slot']): LlmProvider => ({
-      slot,
-      provider: `${slot}-provider`,
-      model: `${slot}-model`,
-      context: {
-        limitTokens: LIMIT,
-        measureInputTokens: () => ({ kind: 'exact', tokens: MEASUREMENT }),
+      metrics: {
+        inputTokens: 271_828,
+        cost: ECONOMIC_CANARY,
       },
-      generate: slot === 'qwen' ? generate : vi.fn(),
-    });
+      metadata: {
+        authorization: AUTHORIZATION,
+        billing: ECONOMIC_CANARY,
+        credit: ECONOMIC_CANARY,
+        budget: ECONOMIC_CANARY,
+        currency: ECONOMIC_CANARY,
+        economic: ECONOMIC_CANARY,
+        price: ECONOMIC_CANARY,
+      },
+    };
+    const generate = vi.fn<LlmProvider['generate']>().mockResolvedValue(upstreamResult);
+    const persistResponseAttempt = vi.fn(async () => undefined);
+    const provider: LlmProvider = {
+      providerId: 'openrouter',
+      measureInputTokens: vi.fn(async () => MEASUREMENT),
+      generate,
+    };
+    const contextBuilder: Pick<ContextBuilder, 'build'> = {
+      build: vi.fn(async input => {
+        await input.measureInputTokens(input.deployment, [
+          { role: 'user', content: input.prompt },
+        ]);
+        return {
+          ok: true as const,
+          messages: [{ role: 'user' as const, content: input.prompt }],
+          contextWindow: {
+            truncated: false,
+            firstIncludedOrdinal: input.currentOrdinal,
+            lastIncludedOrdinal: input.currentOrdinal,
+            protectionApplied: 'none',
+          },
+        };
+      }),
+    };
     const orchestrator = new TurnOrchestrator({
       providerRegistry: {
-        openai: provider('openai'),
-        google: provider('google'),
-        minimax: provider('minimax'),
-        qwen: provider('qwen'),
+        openrouter: provider,
       },
       turnRepository: {
         getAvailableBaseResponses: vi.fn(async () => []),
-        persistResponseAttempt: vi.fn(async () => undefined),
+        persistResponseAttempt,
       },
       publisher: { publish: vi.fn() },
+      contextBuilder,
     });
 
     await orchestrator.executeRetry({
       conversationId: 'conversation-1',
       turnId: 'turn-1',
       prompt: PROMPT,
+      deployments: DEPLOYMENTS,
       signal: new AbortController().signal,
-      slot: 'qwen',
+      slot: 'consolidator',
     });
 
     expect(logEntries()).toEqual(
@@ -223,14 +280,103 @@ describe('conversation observability safety', () => {
           operation: 'llm_attempt_completed',
           conversationId: 'conversation-1',
           turnId: 'turn-1',
-          slot: 'qwen',
-          provider: 'qwen-provider',
-          model: 'qwen-model',
+          slot: 'consolidator',
+          provider: 'openrouter',
+          model: 'openrouter-model-consolidator',
           durationMs: 1_250,
         }),
       ])
     );
-    expectLogsToExclude(PROMPT, RESPONSE_CONTENT, AUTHORIZATION, MEASUREMENT, LIMIT, 271_828);
+    expect(persistResponseAttempt).toHaveBeenCalledOnce();
+    const persisted = JSON.stringify(persistResponseAttempt.mock.calls).toLowerCase();
+    for (const field of ECONOMIC_FIELDS) expect(persisted).not.toContain(field);
+    expect(persisted).not.toContain(ECONOMIC_CANARY);
+    expect(persisted).not.toContain(PROMPT);
+    expect(persisted).not.toContain(String(MEASUREMENT));
+    expect(persisted).not.toContain('inputtokens');
+    expect(persisted).not.toContain('outputtokens');
+    expect(persisted).not.toContain('totaltokens');
+    expectLogsToExclude(
+      PROMPT,
+      RESPONSE_CONTENT,
+      AUTHORIZATION,
+      MEASUREMENT,
+      LIMIT,
+      271_828,
+      ECONOMIC_CANARY,
+      ...ECONOMIC_FIELDS
+    );
+  });
+
+  it('persists only a safe failure and skips the provider when the required payload is oversized', async () => {
+    const generate = vi.fn<LlmProvider['generate']>();
+    const measureInputTokens = vi.fn<LlmProvider['measureInputTokens']>(async () => MEASUREMENT);
+    const persistResponseAttempt = vi.fn(async () => undefined);
+    const contextBuilder: Pick<ContextBuilder, 'build'> = {
+      build: vi.fn(async input => {
+        await input.measureInputTokens(input.deployment, [
+          { role: 'system', content: COMPOSED_PROMPT },
+          { role: 'user', content: input.prompt },
+        ]);
+        return {
+          ok: false as const,
+          error: {
+            code: 'INVALID_PROMPT_SIZE' as const,
+            message: 'The required prompt does not fit within the model context limit.',
+            recoverable: false as const,
+          },
+        };
+      }),
+    };
+    const orchestrator = new TurnOrchestrator({
+      providerRegistry: {
+        openrouter: {
+          providerId: 'openrouter',
+          measureInputTokens,
+          generate,
+        },
+      },
+      turnRepository: {
+        getAvailableBaseResponses: vi.fn(async () => []),
+        persistResponseAttempt,
+      },
+      publisher: { publish: vi.fn() },
+      contextBuilder,
+    });
+
+    await orchestrator.executeRetry({
+      conversationId: 'conversation-oversized',
+      turnId: 'turn-oversized',
+      prompt: PROMPT,
+      deployments: DEPLOYMENTS,
+      signal: new AbortController().signal,
+      slot: 'consolidator',
+    });
+
+    expect(measureInputTokens).toHaveBeenCalledWith(
+      DEPLOYMENTS[3],
+      expect.arrayContaining([
+        { role: 'system', content: COMPOSED_PROMPT },
+        { role: 'user', content: PROMPT },
+      ])
+    );
+    expect(generate).not.toHaveBeenCalled();
+    expect(persistResponseAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turnId: 'turn-oversized',
+        slot: 'consolidator',
+        status: 'failed',
+        errorCode: 'INVALID_PROMPT_SIZE',
+        metadata: {},
+      })
+    );
+    const persisted = JSON.stringify(persistResponseAttempt.mock.calls).toLowerCase();
+    expect(persisted).not.toContain(PROMPT);
+    expect(persisted).not.toContain(COMPOSED_PROMPT);
+    expect(persisted).not.toContain(String(MEASUREMENT));
+    expect(persisted).not.toContain('tokens');
+    for (const field of ECONOMIC_FIELDS) expect(persisted).not.toContain(field);
+    expectLogsToExclude(PROMPT, COMPOSED_PROMPT, MEASUREMENT, ...ECONOMIC_FIELDS);
   });
 
   it('logs SSE connection and closure without logging normalized event payloads', async () => {

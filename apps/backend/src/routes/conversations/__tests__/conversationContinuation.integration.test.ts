@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createControlledProviders,
@@ -9,6 +9,7 @@ import {
 import { createIntegrationBackend } from '../../../test/integration/createIntegrationBackend.js';
 import {
   insertConversationDeployments,
+  TEST_DEPLOYMENT_SNAPSHOTS,
   TEST_DEPLOYMENT_SUMMARIES,
 } from '../../../test/integration/conversationDeploymentFixtures.js';
 import {
@@ -16,6 +17,7 @@ import {
   createIntegrationPool,
   deleteOwnedConversations,
 } from '../../../test/integration/testDatabase.js';
+import type { ConversationDeploymentSnapshotTuple } from '../../../types/conversations.js';
 
 const CONVERSATION_ID = '73000000-0000-4000-8000-000000000077';
 const FIRST_TURN_ID = '73100000-0000-4000-8000-000000000077';
@@ -133,6 +135,19 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
       expect(providers['base-2'].calls).toHaveLength(2);
       expect(providers['base-3'].calls).toHaveLength(2);
       expect(providers.consolidator.calls).toHaveLength(2);
+      for (const slot of ['base-1', 'base-2', 'base-3'] as const) {
+        const firstPayload = JSON.stringify(providers[slot].calls[0]?.messages);
+        expect(firstPayload).toContain(`${slot}-turn-1`);
+        for (const other of ['base-1', 'base-2', 'base-3', 'consolidator'] as const) {
+          if (other !== slot) expect(firstPayload).not.toContain(`${other}-turn-1`);
+        }
+      }
+      const firstConsolidatorPayload = JSON.stringify(providers.consolidator.calls[0]?.messages);
+      expect(firstConsolidatorPayload).toContain('consolidator-turn-1');
+      expect(firstConsolidatorPayload).not.toContain('base-1-turn-1');
+      for (const slot of ['base-1', 'base-2', 'base-3'] as const) {
+        expect(firstConsolidatorPayload).toContain(`Deterministic ${slot} response`);
+      }
       Object.values(providers).forEach(provider => {
         expect(provider.calls.map(call => call.deployment)).toEqual(
           provider.calls.map(() =>
@@ -147,6 +162,66 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
       gates.forEach(gate => gate.resolve());
       await Promise.all(idleObservations.map(({ promise }) => promise));
       idleObservations.forEach(({ unsubscribe }) => unsubscribe());
+    }
+  });
+
+  it('uses the immutable snapshot limit and rejects oversized continuation before provider calls', async () => {
+    await deleteOwnedConversations(pool, [CONVERSATION_ID]);
+    await seedCompletedConversation(pool, 1);
+    const providers = createControlledProviders();
+    Object.values(providers).forEach(provider => {
+      vi.spyOn(provider, 'measureInputTokens').mockResolvedValue(2);
+    });
+    const backend = createIntegrationBackend(pool, providers, []);
+
+    try {
+      const created = await request(backend.app)
+        .post(`/api/v1/conversations/${CONVERSATION_ID}/turns`)
+        .send({ clientRequestId: SECOND_REQUEST_ID, prompt: 'Oversized continuation.' });
+      expect(created.status).toBe(202);
+      expect(created.body.conversation.deployments).toEqual(TEST_DEPLOYMENT_SUMMARIES);
+
+      await backend.conversationService.stop();
+
+      expect(Object.values(providers).flatMap(provider => provider.calls)).toEqual([]);
+      const persisted = await pool.query<{
+        slot: string;
+        status: string;
+        errorCode: string | null;
+        metadata: Record<string, unknown> | null;
+      }>(
+        `SELECT mr.slot, mr.status, mr.error_code AS "errorCode", mr.metadata
+           FROM model_responses mr
+           JOIN turns t ON t.id = mr.turn_id
+          WHERE t.conversation_id = $1 AND t.ordinal = 2
+          ORDER BY mr.slot`,
+        [CONVERSATION_ID]
+      );
+      expect(persisted.rows).toHaveLength(4);
+      expect(persisted.rows.every(row => row.status === 'failed')).toBe(true);
+      expect(persisted.rows.every(row => row.errorCode === 'INVALID_PROMPT_SIZE')).toBe(true);
+      expect(persisted.rows.every(row => JSON.stringify(row.metadata) === '{}')).toBe(true);
+      const persistedAttemptData = JSON.stringify(persisted.rows).toLowerCase();
+      expect(persistedAttemptData).not.toContain('oversized continuation');
+      expect(persistedAttemptData).not.toMatch(
+        /inputtokens|outputtokens|totaltokens|prompt_tokens|billing|cost|credit|budget|currency|price|economic/
+      );
+
+      const snapshots = await pool.query<{
+        contextLimitTokens: number;
+        unchanged: boolean;
+      }>(
+        `SELECT context_limit_tokens AS "contextLimitTokens",
+                created_at = updated_at AS unchanged
+           FROM conversation_deployments
+          WHERE conversation_id = $1`,
+        [CONVERSATION_ID]
+      );
+      expect(snapshots.rows).toEqual(
+        snapshots.rows.map(() => ({ contextLimitTokens: 1, unchanged: true }))
+      );
+    } finally {
+      await backend.conversationService.stop();
     }
   });
 
@@ -290,13 +365,17 @@ function postgresCode(body: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
-async function seedCompletedConversation(pool: Pool): Promise<void> {
+async function seedCompletedConversation(pool: Pool, contextLimitTokens = 10_000): Promise<void> {
   await pool.query(
     `INSERT INTO conversations (id, create_client_request_id, title, created_at, updated_at)
      VALUES ($1, '73000000-0000-4000-8000-000000000177', 'Conversación existente', $2, $2)`,
     [CONVERSATION_ID, NOW]
   );
-  await insertConversationDeployments(pool, CONVERSATION_ID);
+  const deployments = TEST_DEPLOYMENT_SNAPSHOTS.map(snapshot => ({
+    ...snapshot,
+    contextLimitTokens,
+  })) as unknown as ConversationDeploymentSnapshotTuple;
+  await insertConversationDeployments(pool, CONVERSATION_ID, deployments);
   await pool.query(
     `INSERT INTO turns
        (id, conversation_id, client_request_id, ordinal, user_content, status, created_at, updated_at)

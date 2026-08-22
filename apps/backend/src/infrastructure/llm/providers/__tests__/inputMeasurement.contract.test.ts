@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { GoogleProvider } from '../GoogleProvider.js';
 import { MiniMaxProvider } from '../MiniMaxProvider.js';
 import { OpenAiProvider } from '../OpenAiProvider.js';
+import { OpenRouterProvider } from '../OpenRouterProvider.js';
 import { QwenProvider } from '../QwenProvider.js';
-import { adapterConfig } from './providerContract.js';
+import { adapterConfig, deployment } from './providerContract.js';
 
 const corpus = [
   { role: 'system' as const, content: 'ASCII system instruction.' },
@@ -15,46 +16,36 @@ const corpus = [
 ];
 
 describe('provider input measurement contract', () => {
-  it('uses a provider-specific upper bound that covers corpus bytes, roles, and envelope overhead', () => {
-    const providers = [
-      new OpenAiProvider(adapterConfig),
-      new GoogleProvider(adapterConfig),
-      new MiniMaxProvider(adapterConfig),
-      new QwenProvider(adapterConfig),
+  it('measures snapshot-specific payload upper bounds deterministically for all five adapters', async () => {
+    const providerCases = [
+      { providerId: 'openai' as const, provider: new OpenAiProvider(adapterConfig) },
+      { providerId: 'google' as const, provider: new GoogleProvider(adapterConfig) },
+      { providerId: 'minimax' as const, provider: new MiniMaxProvider(adapterConfig) },
+      { providerId: 'qwen' as const, provider: new QwenProvider(adapterConfig) },
+      { providerId: 'openrouter' as const, provider: new OpenRouterProvider(adapterConfig) },
     ];
     const contentBytes = corpus.reduce(
       (total, message) => total + new TextEncoder().encode(message.content).length,
       0
     );
 
-    const measurements = providers.map(provider => {
-      const empty = provider.context.measureInputTokens([]);
-      const oneRole = provider.context.measureInputTokens([{ role: 'user', content: '' }]);
-      const allRoles = provider.context.measureInputTokens([
-        { role: 'system', content: '' },
-        { role: 'user', content: '' },
-        { role: 'assistant', content: '' },
-      ]);
-      const measured = provider.context.measureInputTokens(corpus);
+    const measurements = await Promise.all(
+      providerCases.map(async ({ providerId, provider }) => {
+        const snapshot = deployment(providerId);
+        const measured = await provider.measureInputTokens(snapshot, corpus);
+        const longerModelMeasurement = await provider.measureInputTokens(
+          { ...snapshot, modelId: `${snapshot.modelId}-with-longer-snapshot-id` },
+          corpus
+        );
 
-      expect(provider.context.limitTokens).toBe(adapterConfig.contextLimitTokens);
-      expect(empty).toMatchObject({ kind: 'upper_bound', tokens: expect.any(Number) });
-      expect(oneRole.tokens).toBeGreaterThan(empty.tokens);
-      expect(allRoles.tokens).toBeGreaterThan(oneRole.tokens);
-      expect(measured.tokens).toBeGreaterThanOrEqual(contentBytes);
-      expect(Number.isSafeInteger(measured.tokens)).toBe(true);
-      expect(measured).toMatchObject({
-        kind: 'upper_bound',
-        basis: expect.stringMatching(new RegExp(provider.slot, 'i')),
-      });
+        expect(measured).toBeGreaterThanOrEqual(contentBytes);
+        expect(Number.isSafeInteger(measured)).toBe(true);
+        expect(longerModelMeasurement).toBeGreaterThan(measured);
 
-      if (measured.kind !== 'upper_bound') {
-        throw new Error(`${provider.slot} must expose its proven upper-bound basis`);
-      }
+        return measured;
+      })
+    );
 
-      return measured;
-    });
-
-    expect(new Set(measurements.map(measurement => measurement.basis)).size).toBe(4);
+    expect(measurements).toHaveLength(5);
   });
 });

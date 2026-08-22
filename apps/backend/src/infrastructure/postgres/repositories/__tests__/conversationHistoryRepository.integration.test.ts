@@ -14,6 +14,7 @@ import {
 } from '../../../../test/integration/testDatabase.js';
 
 const HISTORY_ID = '90000000-0000-4000-8000-000000000090';
+const OTHER_HISTORY_ID = '90000000-0000-4000-8000-000000000096';
 const SIDEBAR_IDS = [
   '90000000-0000-4000-8000-000000000091',
   '90000000-0000-4000-8000-000000000092',
@@ -21,7 +22,7 @@ const SIDEBAR_IDS = [
   '90000000-0000-4000-8000-000000000094',
 ] as const;
 const INSERTED_AFTER_CURSOR_ID = '90000000-0000-4000-8000-000000000095';
-const OWNED_IDS = [HISTORY_ID, ...SIDEBAR_IDS, INSERTED_AFTER_CURSOR_ID] as const;
+const OWNED_IDS = [HISTORY_ID, OTHER_HISTORY_ID, ...SIDEBAR_IDS, INSERTED_AFTER_CURSOR_ID] as const;
 
 describe('ConversationRepository history PostgreSQL integration', () => {
   let pool: Pool;
@@ -70,6 +71,7 @@ describe('ConversationRepository history PostgreSQL integration', () => {
 
   it('returns seven complete turns in chronological 3/3/1 blocks without gaps', async () => {
     await seedHistory(pool);
+    const snapshotsBefore = await deploymentRows(pool, HISTORY_ID);
     const detail = await repository.getConversation(HISTORY_ID);
     const recent = await repository.listTurns(HISTORY_ID);
     const middle = await repository.listTurns(HISTORY_ID, recent.olderCursor ?? undefined);
@@ -91,6 +93,11 @@ describe('ConversationRepository history PostgreSQL integration', () => {
       );
     }
     expect(detail?.deployments).toEqual(TEST_DEPLOYMENT_SUMMARIES);
+    expect(JSON.stringify(all)).not.toContain('other-conversation-canary');
+    expect(await deploymentRows(pool, HISTORY_ID)).toEqual(snapshotsBefore);
+    expect(snapshotsBefore.every(row => row.createdAt.getTime() === row.updatedAt.getTime())).toBe(
+      true
+    );
   });
 });
 
@@ -107,6 +114,14 @@ async function seedHistory(pool: Pool): Promise<void> {
   for (let ordinal = 1; ordinal <= 7; ordinal += 1) {
     await insertCompletedTurn(pool, HISTORY_ID, ordinal);
   }
+  await insertConversation(
+    pool,
+    OTHER_HISTORY_ID,
+    '2026-07-26T20:00:08.000Z',
+    'other-history'
+  );
+  await insertConversationDeployments(pool, OTHER_HISTORY_ID);
+  await insertCompletedTurn(pool, OTHER_HISTORY_ID, 7, 'other-conversation-canary');
 }
 
 async function insertConversation(
@@ -126,7 +141,8 @@ async function insertConversation(
 async function insertCompletedTurn(
   pool: Pool,
   conversationId: string,
-  ordinal: number
+  ordinal: number,
+  contentSuffix = String(ordinal)
 ): Promise<void> {
   const turnId = requestId(conversationId, 100 + ordinal);
   const timestamp = `2026-07-26T20:00:${String(ordinal).padStart(2, '0')}.000Z`;
@@ -152,8 +168,34 @@ async function insertCompletedTurn(
             slot, slot || '-model', 'completed', slot || '-' || $2, false,
             false, 1, $3, $3, $3
        FROM unnest(ARRAY['base-1', 'base-2', 'base-3', 'consolidator']) AS slot`,
-    [turnId, ordinal, timestamp]
+    [turnId, contentSuffix, timestamp]
   );
+}
+
+async function deploymentRows(pool: Pool, conversationId: string) {
+  return (
+    await pool.query<{
+      slot: string;
+      deploymentId: string;
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      contextLimitTokens: number;
+      maxOutputTokens: number;
+      createdAt: Date;
+      updatedAt: Date;
+    }>(
+      `SELECT slot, deployment_id AS "deploymentId", provider_id AS "providerId",
+              model_id AS "modelId", display_name AS "displayName",
+              context_limit_tokens AS "contextLimitTokens",
+              max_output_tokens AS "maxOutputTokens",
+              created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM conversation_deployments
+        WHERE conversation_id = $1
+        ORDER BY slot`,
+      [conversationId]
+    )
+  ).rows;
 }
 
 function requestId(id: string, value: number): string {
