@@ -40,3 +40,6 @@ db/dumps/
 test-results/
 playwright-report/
 blob-report/
+
+# Local agent runtime discovery
+agent-scripts/runtime.local.json

@@ -11,6 +11,13 @@ información relevante, usa como fuentes autoritativas:
 
 <!-- SPECKIT END -->
 
+## Preflight universal de runtime y comandos
+
+- Antes de la primera delegación de implementación o validación de cada sesión, el agente principal debe ejecutar `.\agent-scripts\initialize-runtime.ps1` desde la raíz del repositorio.
+- La inicialización es idempotente: si `agent-scripts\runtime.local.json` contiene rutas y versiones válidas, termina sin reconfigurar el runtime. Si el runtime cambió, usar `-Force`.
+- Todo subagente debe ejecutar comandos Node/pnpm mediante `.\agent-scripts\run-pnpm.ps1`; no debe invocar `node`, `pnpm`, `pnpm exec` ni binarios bajo `node_modules` directamente.
+- El archivo `agent-scripts\runtime.local.json` es local, no contiene secretos y está excluido de Git. No se debe agregar a documentación de la feature.
+
 ## Delegación obligatoria de tareas de Spec Kit
 
 Para toda ejecución de implementación basada en un archivo `tasks.md`:
@@ -51,8 +58,8 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
 
 ### Validación y comandos
 
-- Antes de la primera validación JavaScript/TypeScript de un bloque de implementación, el coordinador debe resolver una vez el runtime Node y `pnpm` disponibles y comunicar al owner el comando completo que debe usar. Ese runtime se reutiliza en todas las validaciones del bloque.
-- Toda prueba Vitest focalizada debe ejecutarse desde la raíz mediante el script declarado por el workspace: `pnpm --filter <workspace> run test --run <ruta-relativa-del-test>`. No se usa `pnpm exec vitest` ni se invoca `vitest` directamente.
+- Antes de la primera validación JavaScript/TypeScript de un bloque de implementación, el coordinador debe haber ejecutado `.\agent-scripts\initialize-runtime.ps1` y comunicar al owner el comando completo usando `.\agent-scripts\run-pnpm.ps1`. Ese runtime se reutiliza en todas las validaciones del bloque.
+- Toda prueba Vitest focalizada debe ejecutarse desde la raíz mediante el script declarado por el workspace y el wrapper: `.\agent-scripts\run-pnpm.ps1 --filter <workspace> run test --run <ruta-relativa-del-test>`. No se usa `pnpm exec vitest` ni se invoca `vitest` directamente.
 - Antes de añadir una aserción sobre el DOM emitido por una dependencia externa, el owner de test debe comprobar ese DOM en la versión instalada. Si el atributo no está garantizado, la prueba debe usar un resultado observable estable del componente; no debe asumir atributos internos de la dependencia.
 - El owner de una tarea debe ejecutar la validación mínima y suficiente para demostrar sus acceptance criteria.
 - Prefiere tests/typecheck/lint/build focalizados al área modificada antes de ejecutar suites globales.
