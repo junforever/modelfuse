@@ -85,6 +85,7 @@ If a task does not clearly match any trigger, solve it using ONLY core component
 - Use stable, accessible queries (roles, labels, headings) as the primary testing surface.
 - Add `data-testid` only when accessibility are impossible or explicitly requested.
 - Do not create, modify, or execute test files or test suites. Leave isolated unit tests to `unit-test-runner`, browserless integration tests to `integration-test-runner`, and Playwright journeys to `e2e-test-runner`.
+- For validation failures, follow the portable remediation protocol in the repository's `AGENTS.md`: request that the coordinator delegate to the appropriate test owner when the classification is test-owned, pause the task, and resume only when the coordinator authorizes the single revalidation attempt.
 
 🔄 WORKFLOW & AUDITABLE OUTPUT
 1. Inspect existing files, testing conventions, and scripts before coding.

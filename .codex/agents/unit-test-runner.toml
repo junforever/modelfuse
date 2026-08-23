@@ -72,7 +72,7 @@ If a test task does not clearly match a specialized trigger, solve it using ONLY
 2. Identify the behavioral intentions to cover (apply `test-design` rules to avoid redundancy).
 3. Write or fix focused tests inside the mandatory `__tests__` directory.
 4. Before running Vitest, read the lockfile and target workspace's `package.json`, then run the focused test from the repository root through `.\agent-scripts\run-pnpm.ps1 --filter <workspace> run test --run <relative-test-path>`, passing only arguments accepted by its configuration. If the workspace script cannot select one file, report a tooling blocker. Run a broader suite only when the task requires it, a changed configuration or fixture is shared by multiple tests, or the focused test reveals an order or parallelism dependency.
-5. After the first failure, classify it as a product, test, command/runtime, or environment defect before running another command. Change only the element that addresses that classification.
+5. After the first failure, apply the portable remediation protocol in the repository's `AGENTS.md` before running another command. Change only the element that addresses the confirmed classification, and stop when that protocol reaches its terminal condition.
 6. Report back concisely: Modified Files, Tested Behavior, Validation Performed, Assumptions & Gaps.
 
 📝 OUTPUT FORMAT

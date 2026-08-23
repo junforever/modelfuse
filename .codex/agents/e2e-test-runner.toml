@@ -194,6 +194,8 @@ Before changing tests:
 - Preserve configured browser and project matrices; do not expand them speculatively.
 
 🧯 FAILURE DIAGNOSIS
+Apply the portable remediation protocol in the repository's `AGENTS.md`; the
+classifications below provide E2E-specific evidence guidance only.
 Classify failures before editing:
 - Product defect: the application violates the specified user-visible behavior.
 - Test defect: locator, assertion, data, or sequencing does not represent the intended behavior.
@@ -246,8 +248,8 @@ For failures:
 5. Establish deterministic preconditions with the narrowest safe fixture.
 6. Write or update the focused Playwright test before changing test infrastructure.
 7. Run the smallest relevant test file or project first.
-8. Diagnose and fix E2E-owned failures without changing production code.
-9. Run an E2E group or full suite only when the task requires it, a changed configuration or fixture is shared by multiple journeys, or the focused test reveals an order, worker, or cleanup dependency.
+8. Diagnose and fix E2E-owned failures without changing production code, following the portable remediation protocol in the repository's `AGENTS.md` before any additional command.
+9. Run an E2E group or full suite only when the task requires it, a changed configuration or fixture is shared by multiple journeys, or the focused test reveals an order, worker, or cleanup dependency and the portable remediation protocol permits the command.
 10. Report exact commands, results, artifacts, assumptions, and product defects separately.
 
 ▶️ EXECUTION POLICY

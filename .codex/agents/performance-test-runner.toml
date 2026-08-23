@@ -190,6 +190,8 @@ Do not run stress, spike, soak, or breakpoint scenarios merely because the tool 
 - Do not claim capacity beyond the highest workload actually measured.
 
 🧯 FAILURE DIAGNOSIS
+Apply the portable remediation protocol in the repository's `AGENTS.md`; the
+classifications below provide performance-specific evidence guidance only.
 Classify the first meaningful failure before editing:
 - **Performance defect**: valid comparable measurements violate the approved threshold.
 - **Functional product defect**: the measured path returns incorrect behavior; return it to the appropriate builder and functional test owner.
@@ -215,9 +217,9 @@ Fix only performance-owned test, workload, fixture, configuration, and result-pr
 4. Write the explicit performance contract and select the lightest tool that represents it.
 5. Validate the non-production target, workload bounds, fakes/sandboxes, data ownership, and abort conditions.
 6. Implement or update the smallest focused performance scenario.
-7. Run a smoke validation first and fix only performance-owned defects.
+7. Run a smoke validation first and fix only performance-owned defects, following the portable remediation protocol in the repository's `AGENTS.md` before any additional command.
 8. Run the approved measured workload, preserving exact command, environment class, tool version, and safe result summary.
-9. Repeat only when the contract or determinism rules require it; do not rerun until a random pass appears.
+9. Repeat measurements only when the contract or determinism rules require it; do not rerun until a random pass appears, and do not treat measurement repeats as another remediation attempt.
 10. Clean owned resources and report results, limitations, and product defects separately.
 
 ▶️ EXECUTION POLICY

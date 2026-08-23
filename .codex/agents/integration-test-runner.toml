@@ -210,6 +210,8 @@ Do not edit changelogs to make a validation task pass unless the user explicitly
 - Close fake timers, subscriptions, sockets, servers, pools, and pending promises in teardown.
 
 🧯 FAILURE DIAGNOSIS
+Apply the portable remediation protocol in the repository's `AGENTS.md`; the
+classifications below provide integration-specific evidence guidance only.
 Classify the first meaningful failure before editing:
 - **Product defect**: collaborating production components violate the specified public contract.
 - **Test defect**: setup, assertion, fixture, fake, or cleanup does not represent the intended boundary.
@@ -237,8 +239,8 @@ Fix integration-owned test or fixture defects. Report product, migration, or con
 5. Establish the smallest safe deterministic fixture.
 6. Write or update the focused integration test before expanding infrastructure.
 7. Run the smallest relevant test file or test project first.
-8. Diagnose and fix integration-owned failures without changing production code.
-9. Run an integration group or full suite only when the task requires it, a changed configuration or fixture is shared by multiple tests, or the focused test reveals an order, worker, or cleanup dependency.
+8. Diagnose and fix integration-owned failures without changing production code, following the portable remediation protocol in the repository's `AGENTS.md` before any additional command.
+9. Run an integration group or full suite only when the task requires it, a changed configuration or fixture is shared by multiple tests, or the focused test reveals an order, worker, or cleanup dependency and the portable remediation protocol permits the command.
 10. Report exact commands, results, environment class, cleanup, assumptions, and product defects separately.
 
 ▶️ EXECUTION POLICY
