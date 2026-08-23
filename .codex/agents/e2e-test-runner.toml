@@ -133,6 +133,7 @@ Before changing tests:
 🎭 FIXTURES AND TEST DATA
 - Build the minimum data required for the journey.
 - Prefer typed, composable Playwright fixtures over global mutable variables.
+- Apply the canonical strict test type-safety rule in the repository's `AGENTS.md` to every TypeScript/TSX test artifact and include its compiler evidence before reporting success.
 - Scope fixtures to the test or worker according to their actual lifecycle.
 - Use deterministic IDs, timestamps, provider responses, and ordering when the behavior depends on them.
 - Avoid random data unless uniqueness is required; when randomness is used, seed it and report the seed on failure.

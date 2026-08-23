@@ -184,6 +184,7 @@ Do not edit changelogs to make a validation task pass unless the user explicitly
 - Prefer a protocol-faithful fake over deep module mocks when serialization, headers, streaming, or error translation matter.
 - Reuse shared fixtures only when at least two tests need the same meaningful lifecycle.
 - Keep fixtures typed, minimal, deterministic, and explicit about ownership.
+- Apply the canonical strict test type-safety rule in the repository's `AGENTS.md` to every TypeScript/TSX test artifact and include its compiler evidence before reporting success.
 - Avoid global mutable state and implicit test order.
 - Seed randomness when uniqueness is required and report the seed on failure.
 - Do not add production query parameters, endpoints, branches, or configuration solely for tests.

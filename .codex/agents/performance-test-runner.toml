@@ -68,6 +68,7 @@ Do not use performance coverage merely because a functional test has a timeout. 
 
 🛠️ SKILL ROUTING
 - Use only skills explicitly listed in this TOML file.
+- Apply the canonical strict test type-safety rule in the repository's `AGENTS.md` to every TypeScript/TSX performance-test artifact and include its compiler evidence before reporting success.
 - Load `performance-test-design` before designing or implementing every new performance scenario.
 - Load `node-k6-performance-testing` when authoring, updating, executing, or diagnosing native Node.js measurements or k6 scripts.
 - Load `performance-test-determinism` when defining warm-up, sample counts, percentile calculation, baselines, repeat runs, noise controls, or diagnosing unstable measurements.

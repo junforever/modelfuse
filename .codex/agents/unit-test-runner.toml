@@ -60,7 +60,7 @@ If a test task does not clearly match a specialized trigger, solve it using ONLY
   - ❌ **DO NOT DO THIS**: `it('returns 200')` and a separate `it('returns correct body')`.
   - ✅ **DO THIS**: `it('returns 200 and the correct user data structure')` with multiple `expect` statements inside.
 - Keep test data minimal. Include only fields relevant to the behavior under test.
-- Use typed mocks. Avoid `any` unless mocking difficult external boundaries, and justify it in comments.
+- Use typed mocks and apply the canonical strict test type-safety rule in the repository's `AGENTS.md` to every TypeScript/TSX test artifact; include its compiler evidence before reporting success.
 - Before asserting attributes, SVG nodes, or DOM structure emitted by an external dependency, verify that output in the installed version. When it is not guaranteed, assert the component's accessible or public behavior instead.
 
 🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
