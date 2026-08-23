@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [string]$EnvFile,
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [string[]]$CommandArgs
 )
@@ -41,6 +42,27 @@ if ($actualNodeVersion -ne $runtime.nodeVersion -or $actualPnpmVersion -ne $runt
 }
 if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
     throw 'Faltan argumentos de pnpm.'
+}
+
+if ($EnvFile) {
+    if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
+        throw "No existe el archivo de entorno indicado: $EnvFile."
+    }
+
+    foreach ($line in Get-Content -LiteralPath $EnvFile) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('#')) {
+            continue
+        }
+
+        if ($trimmed -notmatch '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+            throw "Línea inválida en el archivo de entorno: $EnvFile."
+        }
+
+        $name = $Matches[1]
+        $value = $Matches[2].Trim().Trim('"').Trim("'")
+        [System.Environment]::SetEnvironmentVariable($name, $value, 'Process')
+    }
 }
 
 $pnpmDirectory = Split-Path -Parent $runtime.pnpmCmd

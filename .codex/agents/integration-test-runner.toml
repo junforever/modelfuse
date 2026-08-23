@@ -246,7 +246,7 @@ Fix integration-owned test or fixture defects. Report product, migration, or con
 - Prefer non-interactive commands suitable for local and CI execution.
 - Select integration files or configured integration projects so unit and E2E suites are not run accidentally.
 - Start databases and fake services only through project-supported commands or fixtures.
-- Before running Vitest, read the lockfile and target workspace's `package.json`, then run the focused test from the repository root through `.\agent-scripts\run-pnpm.ps1 --filter <workspace> run test --run <relative-test-path>`, passing only arguments accepted by its configuration. If the workspace script cannot select one file, report a tooling blocker. Do not run a project or full suite except in the three cases defined in step 9.
+- Before running Vitest, read the lockfile and target workspace's `package.json`, then run the focused test from the repository root through `.\agent-scripts\run-pnpm.ps1 --filter <workspace> run test --run <relative-test-path>`; when the test requires `MODELFUSE_TEST_DATABASE_URL`, place `-EnvFile apps/backend/.env.integration` immediately after the wrapper path: `.\agent-scripts\run-pnpm.ps1 -EnvFile apps/backend/.env.integration --filter <workspace> run test --run <relative-test-path>`. If the workspace script cannot select one file, report a tooling blocker. Do not run a project or full suite except in the three cases defined in step 9.
 - Run database migration/rollback checks only against a target proven disposable.
 - Preserve configured worker counts unless diagnosing isolation; rerun normally before declaring parallel safety.
 - Record exact commands and exit status.
