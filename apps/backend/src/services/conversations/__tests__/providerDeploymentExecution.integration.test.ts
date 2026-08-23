@@ -14,6 +14,7 @@ import type {
   TurnResponses,
 } from '../../../types/conversations.js';
 import type { LlmResult } from '../../../types/llm.js';
+import type { ContextBuilder } from '../ContextBuilder.js';
 import { TurnOrchestrator } from '../TurnOrchestrator.js';
 import type { UnsequencedTurnEvent } from '../turnEventPublisher.js';
 
@@ -115,11 +116,30 @@ describe('mixed provider deployment execution integration', () => {
       storedSnapshot('conversation-first', 'turn-first', firstDeployments),
       storedSnapshot('conversation-second', 'turn-second', secondDeployments),
     ]);
+    const contextBuilder: Pick<ContextBuilder, 'build'> = {
+      build: vi.fn(async input => ({
+        ok: true as const,
+        messages: [
+          { role: 'user' as const, content: input.prompt },
+          ...(input.currentBaseResponses ?? []).map(({ slot, content }) => ({
+            role: 'user' as const,
+            content: `${slot}:\n${content ?? '[unavailable]'}`,
+          })),
+        ],
+        contextWindow: {
+          truncated: false,
+          firstIncludedOrdinal: input.currentOrdinal,
+          lastIncludedOrdinal: input.currentOrdinal,
+          protectionApplied: 'none' as const,
+        },
+      })),
+    };
     const published: UnsequencedTurnEvent[] = [];
     const orchestrator = new TurnOrchestrator({
       providerRegistry,
       turnRepository: repository,
       publisher: { publish: event => published.push(event) },
+      contextBuilder,
     });
 
     const firstExecution = orchestrator.executeTurn({

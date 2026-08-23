@@ -514,7 +514,7 @@ function deferred<T>() {
 }
 
 function repositoryFailingWith(error: unknown) {
-  const query = vi.fn(async (sql: string) => {
+  const query = vi.fn(async (sql: string, _values?: readonly unknown[]) => {
     if (sql === 'BEGIN' || sql === 'ROLLBACK') return {};
     if (sql.includes('INSERT INTO conversations')) {
       return { rowCount: 1, rows: [{ id: '423e4567-e89b-42d3-a456-426614174006' }] };

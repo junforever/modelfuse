@@ -10,7 +10,7 @@ const currentPrompt = { role: 'user' as const, content: 'Current prompt must sur
 
 function snapshot(
   definition: (typeof DEPLOYMENT_CATALOG)[number],
-  maxOutputTokens = definition.maxOutputTokens
+  maxOutputTokens: number = definition.maxOutputTokens
 ): ConversationDeploymentSnapshot<'base-1'> {
   const { credentialEnv: _credentialEnv, ...catalogItem } = definition;
   return { ...catalogItem, maxOutputTokens, slot: 'base-1' };

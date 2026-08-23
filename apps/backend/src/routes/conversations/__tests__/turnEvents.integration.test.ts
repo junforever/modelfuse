@@ -2,7 +2,11 @@ import type { Pool } from 'pg';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ModelResponse, ResponseSlot } from '../../../types/conversations.js';
+import type {
+  ConversationDeploymentSnapshotTuple,
+  ModelResponse,
+  ResponseSlot,
+} from '../../../types/conversations.js';
 import type { TurnEvent } from '../../../types/sse.js';
 import {
   createControlledProviders,
@@ -120,7 +124,7 @@ describe('turn SSE protocol/PostgreSQL', () => {
         conversationId: CONVERSATION_ID,
         turnId: TURN_ID,
         prompt: 'Stream committed responses.',
-        deployments: TEST_DEPLOYMENT_SNAPSHOTS,
+        deployments: TEST_DEPLOYMENT_SNAPSHOTS as unknown as ConversationDeploymentSnapshotTuple,
         signal: new AbortController().signal,
       });
       const live = await readUntilClosed(stream.nextEvent);

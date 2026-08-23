@@ -530,7 +530,7 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
     ? await pool.query<{ id: string }>('SELECT id FROM turns WHERE conversation_id = $1', [
         conversationId,
       ])
-    : { rows: [] };
+    : { rowCount: 0, rows: [] };
   const responses = turns.rows[0]
     ? await pool.query<{
         slot: ResponseSlot;

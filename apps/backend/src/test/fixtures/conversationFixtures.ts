@@ -52,6 +52,36 @@ export function createConversationFixture(): ConversationTurnResponse {
       hasWorkInProgress: false,
       createdAt: FIXED_AT,
       updatedAt: FIXED_AT,
+      deployments: [
+        {
+          slot: 'base-1',
+          deploymentId: 'openai-test-deployment',
+          providerId: 'openai',
+          modelId: 'openai-test-model',
+          displayName: 'OpenAI test deployment',
+        },
+        {
+          slot: 'base-2',
+          deploymentId: 'google-test-deployment',
+          providerId: 'google',
+          modelId: 'google-test-model',
+          displayName: 'Google test deployment',
+        },
+        {
+          slot: 'base-3',
+          deploymentId: 'minimax-test-deployment',
+          providerId: 'minimax',
+          modelId: 'minimax-test-model',
+          displayName: 'MiniMax test deployment',
+        },
+        {
+          slot: 'consolidator',
+          deploymentId: 'qwen-test-deployment',
+          providerId: 'qwen',
+          modelId: 'qwen-test-model',
+          displayName: 'Qwen test deployment',
+        },
+      ],
     },
     turn: {
       id: '00000000-0000-4000-8000-000000000002',

@@ -12,24 +12,24 @@ describe('comparison workspace components', () => {
     const user = userEvent.setup();
     const turn = turnFixture({
       responses: [
-        modelResponse('openai', {
+        modelResponse('base-1', {
           status: 'completed',
           content: 'Respuesta exclusiva de OpenAI',
           completedAt: eventTime,
         }),
-        modelResponse('google', {
+        modelResponse('base-2', {
           status: 'failed',
           error: { code: 'timeout', message: 'Google no respondió' },
           recoverable: true,
           completedAt: eventTime,
         }),
-        modelResponse('minimax', {
+        modelResponse('base-3', {
           status: 'failed',
           error: { code: 'authentication', message: 'MiniMax no disponible' },
           recoverable: false,
           completedAt: eventTime,
         }),
-        modelResponse('qwen', { status: 'running' }),
+        modelResponse('consolidator', { status: 'running' }),
       ],
     });
 
@@ -37,7 +37,7 @@ describe('comparison workspace components', () => {
       <TurnCard
         turn={turn}
         hasWorkInProgress={false}
-        runtimeStages={{ qwen: 'Consolidando…' }}
+        runtimeStages={{ consolidator: 'Consolidando…' }}
         onRetry={vi.fn()}
         onContinueWithout={vi.fn()}
       />
@@ -82,15 +82,15 @@ describe('comparison workspace components', () => {
     const submit = vi.fn();
     const turn = turnFixture({
       responses: [
-        modelResponse('openai', {
+        modelResponse('base-1', {
           status: 'failed',
           error: { code: 'timeout', message: 'OpenAI no respondió' },
           recoverable: true,
           completedAt: eventTime,
         }),
-        modelResponse('google'),
-        modelResponse('minimax'),
-        modelResponse('qwen'),
+        modelResponse('base-2'),
+        modelResponse('base-3'),
+        modelResponse('consolidator'),
       ],
     });
 

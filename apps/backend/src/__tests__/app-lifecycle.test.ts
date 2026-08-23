@@ -123,10 +123,10 @@ describe('backend application lifecycle', () => {
     const providers = createControlledProviders();
     const baseReleases = [deferred(), deferred(), deferred()];
     const qwenRelease = deferred();
-    providers.openai.enqueueBlocked(baseReleases[0].promise);
-    providers.google.enqueueBlocked(baseReleases[1].promise);
-    providers.minimax.enqueueBlocked(baseReleases[2].promise);
-    providers.qwen.enqueueBlocked(qwenRelease.promise);
+    providers['base-1'].enqueueBlocked(baseReleases[0].promise);
+    providers['base-2'].enqueueBlocked(baseReleases[1].promise);
+    providers['base-3'].enqueueBlocked(baseReleases[2].promise);
+    providers.consolidator.enqueueBlocked(qwenRelease.promise);
     const terminal = deferred();
 
     vi.doMock('../infrastructure/postgres/postgresPool.js', () => ({
@@ -165,9 +165,9 @@ describe('backend application lifecycle', () => {
       });
       expect(accepted.status).toBe(202);
       await Promise.all([
-        providers.openai.waitUntilCalled(),
-        providers.google.waitUntilCalled(),
-        providers.minimax.waitUntilCalled(),
+        providers['base-1'].waitUntilCalled(),
+        providers['base-2'].waitUntilCalled(),
+        providers['base-3'].waitUntilCalled(),
       ]);
 
       let stopped = false;
@@ -182,7 +182,7 @@ describe('backend application lifecycle', () => {
       expect(stopped).toBe(false);
 
       baseReleases.forEach(({ resolve }) => resolve());
-      await providers.qwen.waitUntilCalled();
+      await providers.consolidator.waitUntilCalled();
       qwenRelease.resolve();
       await terminal.promise;
       await stopping;

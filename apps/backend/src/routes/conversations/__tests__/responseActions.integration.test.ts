@@ -4,7 +4,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import type { TurnEvent } from '../../../types/sse.js';
 import type { LlmErrorCode } from '../../../types/llm.js';
-import type { ResponseSlot } from '../../../types/conversations.js';
+import type {
+  ConversationDeploymentSnapshotTuple,
+  ResponseSlot,
+} from '../../../types/conversations.js';
 import {
   createControlledProviders,
   deferred,
@@ -371,7 +374,7 @@ describe('retry and Continue-without REST/PostgreSQL', () => {
         conversationId: CONVERSATION_ID,
         turnId: TURN_ID,
         prompt: 'Classify provider failures',
-        deployments: TEST_DEPLOYMENT_SNAPSHOTS,
+        deployments: TEST_DEPLOYMENT_SNAPSHOTS as unknown as ConversationDeploymentSnapshotTuple,
         signal: new AbortController().signal,
       });
 

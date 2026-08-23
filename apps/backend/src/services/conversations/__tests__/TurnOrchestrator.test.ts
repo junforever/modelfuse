@@ -38,6 +38,31 @@ describe('TurnOrchestrator', () => {
       providerRegistry,
       turnRepository,
       publisher: { publish: vi.fn() },
+      contextBuilder: {
+        build: vi.fn(async input => ({
+          ok: true as const,
+          messages: [
+            {
+              role: 'system' as const,
+              content:
+                input.deployment.slot === 'consolidator'
+                  ? 'Consolidate the available model answers into one final answer.'
+                  : 'Provide a complete, accurate answer to the user prompt.',
+            },
+            ...(input.currentBaseResponses ?? []).map(({ slot, content }) => ({
+              role: 'user' as const,
+              content: `${slot}:\n${content ?? '[unavailable]'}`,
+            })),
+            { role: 'user' as const, content: input.prompt },
+          ],
+          contextWindow: {
+            truncated: false,
+            firstIncludedOrdinal: input.currentOrdinal,
+            lastIncludedOrdinal: input.currentOrdinal,
+            protectionApplied: 'none',
+          },
+        })),
+      },
     });
 
     const execution = orchestrator.executeTurn({

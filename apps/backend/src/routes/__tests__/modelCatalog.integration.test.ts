@@ -22,15 +22,15 @@ const PROVIDER_ENVIRONMENT = {
   LLM_PROVIDER_TIMEOUT_MS: 1_000,
 } as const;
 
-const CREDENTIAL_CASES = [
+const CREDENTIAL_CASES: readonly {
+  name: string;
+  providers: readonly ProviderId[];
+}[] = [
   { name: 'all catalog providers', providers: ['openai', 'google', 'openrouter'] },
   { name: 'OpenAI and Google only', providers: ['openai', 'google'] },
   { name: 'OpenRouter only', providers: ['openrouter'] },
   { name: 'no provider', providers: [] },
-] as const satisfies readonly {
-  name: string;
-  providers: readonly ProviderId[];
-}[];
+];
 
 describe('GET /api/v1/model-catalog', () => {
   it.each(CREDENTIAL_CASES)(

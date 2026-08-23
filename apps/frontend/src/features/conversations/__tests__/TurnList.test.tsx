@@ -12,10 +12,10 @@ describe('TurnList', () => {
         ordinal: 1,
         prompt: 'First prompt',
         responses: [
-          modelResponse('openai', { status: 'completed', content: 'First OpenAI answer' }),
-          modelResponse('google'),
-          modelResponse('minimax'),
-          modelResponse('qwen'),
+          modelResponse('base-1', { status: 'completed', content: 'First OpenAI answer' }),
+          modelResponse('base-2'),
+          modelResponse('base-3'),
+          modelResponse('consolidator'),
         ],
       }),
       turnFixture({
@@ -23,10 +23,10 @@ describe('TurnList', () => {
         ordinal: 2,
         prompt: 'Second prompt',
         responses: [
-          modelResponse('openai', { status: 'completed', content: 'Second OpenAI answer' }),
-          modelResponse('google'),
-          modelResponse('minimax'),
-          modelResponse('qwen'),
+          modelResponse('base-1', { status: 'completed', content: 'Second OpenAI answer' }),
+          modelResponse('base-2'),
+          modelResponse('base-3'),
+          modelResponse('consolidator'),
         ],
       }),
     ];
