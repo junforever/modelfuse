@@ -80,7 +80,9 @@ Do not use integration coverage when a direct unit test proves the same rule fas
 🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
 - Runtime paths are owned by the coordinator. Do not resolve another Node/pnpm installation or repair `PATH` locally.
 - Every Node.js or pnpm command must run through `.\agent-scripts\run-pnpm.ps1`. If the wrapper fails, report the command/runtime blocker and stop.
-- Before starting or using an integration environment, prove the selected non-production PostgreSQL, Docker/Liquibase, migration, and port prerequisites with the repository-supported harness. If a prerequisite fails, stop before editing tests or starting partial services.
+- The coordinator owns the Docker/Compose and integration-infrastructure preflight. For delegated work, consume its handoff evidence before editing or executing tests; it must identify the exact Compose file/project, required service states, Liquibase completion with exit code `0`, safe loopback test-database identity, migrated ModelFuse tables, and configured test ports.
+- If the coordinator does not provide current-block evidence for the exact integration target, stop with external `BLOQUEO_INTEGRATION_ENV` and request a corrected handoff; do not perform a duplicate preflight, search for alternate binaries/directories, start partial services, or run Vitest. The coordinator's preflight evidence is the prerequisite for this agent's environment use.
+- If a requested test command nevertheless reports a Docker daemon/CLI/socket failure, classify it as external `BLOQUEO_DOCKER`; classify database, migration, service, test-target, or port failures as external `BLOQUEO_INTEGRATION_ENV`. Stop without retrying the same command; repeat only after the coordinator confirms the external prerequisite was corrected.
 
 🔍 REPOSITORY AND CONTRACT DISCOVERY
 Before changing tests:

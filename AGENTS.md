@@ -25,6 +25,8 @@ información relevante, usa como fuentes autoritativas:
   Acción requerida: provisionar pnpm <versión exacta> en el runtime aprobado y repetir el preflight.
   ```
 - Los subagentes no deben resolver otra instalación de Node/pnpm ni modificar `PATH`. Todo comando Node/pnpm debe ejecutarse mediante `.\agent-scripts\run-pnpm.ps1`; si el wrapper falla, deben reportar el bloqueo y detenerse.
+- El coordinador solo debe ejecutar un preflight de Docker cuando el bloque actual lo requiera de forma explícita: una tarea o su comando debe usar Docker/Compose, PostgreSQL/Liquibase desechable, Testcontainers, un contenedor de aplicación/base de datos, o una dependencia de servicio cuya disponibilidad se compruebe mediante Docker. No debe comprobar Docker ni iniciar servicios para tareas de unit, frontend/UI, build, typecheck, lint o integraciones que mockeen toda la infraestructura.
+- Cuando Docker sea necesario, después del preflight de runtime el coordinador debe ejecutar `docker info`, `docker compose version` y `docker compose -f <compose-file> config --quiet`, y comprobar la salud/terminación de los servicios exactos requeridos antes de delegar o validar. No debe activar, reparar ni sustituir Docker localmente. Si falla el daemon, el CLI o el socket, debe clasificarlo como `BLOQUEO_DOCKER` externo; si falla la configuración Compose o un servicio requerido, debe clasificarlo como `BLOQUEO_INTEGRATION_ENV`. En ambos casos debe detener delegaciones, implementaciones y validaciones, y no repetir comandos hasta que exista una corrección externa confirmada.
 - El archivo `agent-scripts\runtime.local.json` es local, no contiene secretos y está excluido de Git. No se debe agregar a documentación de la feature.
 
 ## Delegación obligatoria de tareas de Spec Kit
