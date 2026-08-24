@@ -6,7 +6,6 @@ import {
   RESPONSE_SLOTS,
   type ApiError,
   type BaseResponseSlot,
-  type ConversationDeploymentSummary,
   type ConversationDetail,
   type ConversationPage,
   type ConversationSummary,
@@ -35,7 +34,7 @@ export const modalitySchema = z.enum(MODALITIES);
 const modalityListSchema: z.ZodType<readonly [Modality, ...Modality[]]> = z
   .array(modalitySchema)
   .nonempty()
-  .refine(modalities => new Set(modalities).size === modalities.length) as z.ZodType<
+  .refine(modalities => new Set(modalities).size === modalities.length) as unknown as z.ZodType<
   readonly [Modality, ...Modality[]]
 >;
 
@@ -71,27 +70,17 @@ function deploymentSummarySchema<Slot extends ResponseSlot>(slot: Slot) {
   });
 }
 
-const base1DeploymentSummarySchema: z.ZodType<ConversationDeploymentSummary<'base-1'>> =
-  deploymentSummarySchema('base-1');
-const base2DeploymentSummarySchema: z.ZodType<ConversationDeploymentSummary<'base-2'>> =
-  deploymentSummarySchema('base-2');
-const base3DeploymentSummarySchema: z.ZodType<ConversationDeploymentSummary<'base-3'>> =
-  deploymentSummarySchema('base-3');
-const consolidatorDeploymentSummarySchema: z.ZodType<
-  ConversationDeploymentSummary<'consolidator'>
-> = deploymentSummarySchema('consolidator');
+const base1DeploymentSummarySchema = deploymentSummarySchema('base-1');
+const base2DeploymentSummarySchema = deploymentSummarySchema('base-2');
+const base3DeploymentSummarySchema = deploymentSummarySchema('base-3');
+const consolidatorDeploymentSummarySchema = deploymentSummarySchema('consolidator');
 
-const conversationDeploymentSummaryOptions: [
-  typeof base1DeploymentSummarySchema,
-  typeof base2DeploymentSummarySchema,
-  typeof base3DeploymentSummarySchema,
-  typeof consolidatorDeploymentSummarySchema,
-] = [
+const conversationDeploymentSummaryOptions = [
   base1DeploymentSummarySchema,
   base2DeploymentSummarySchema,
   base3DeploymentSummarySchema,
   consolidatorDeploymentSummarySchema,
-];
+] as const;
 
 export const conversationDeploymentSummarySchema = z.discriminatedUnion(
   'slot',

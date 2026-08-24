@@ -57,20 +57,36 @@ const turn: Turn = {
   updatedAt,
 };
 
-const deployments: DeploymentSummaryTuple = (
-  [
-    ['base-1', 'openai', 'GPT'],
-    ['base-2', 'google', 'Gemini'],
-    ['base-3', 'openrouter', 'MiniMax'],
-    ['consolidator', 'openrouter', 'Qwen'],
-  ] as const
-).map(([slot, providerId, displayName]) => ({
-  slot,
-  deploymentId: `${slot}-deployment`,
-  providerId,
-  modelId: `${slot}-model`,
-  displayName,
-}));
+const deployments: DeploymentSummaryTuple = [
+  {
+    slot: 'base-1',
+    deploymentId: 'base-1-deployment',
+    providerId: 'openai',
+    modelId: 'base-1-model',
+    displayName: 'GPT',
+  },
+  {
+    slot: 'base-2',
+    deploymentId: 'base-2-deployment',
+    providerId: 'google',
+    modelId: 'base-2-model',
+    displayName: 'Gemini',
+  },
+  {
+    slot: 'base-3',
+    deploymentId: 'base-3-deployment',
+    providerId: 'openrouter',
+    modelId: 'base-3-model',
+    displayName: 'MiniMax',
+  },
+  {
+    slot: 'consolidator',
+    deploymentId: 'consolidator-deployment',
+    providerId: 'openrouter',
+    modelId: 'consolidator-model',
+    displayName: 'Qwen',
+  },
+];
 
 describe('frontend conversation contracts', () => {
   it('strictly validates catalog, detail, and creation response contracts', () => {
@@ -209,6 +225,7 @@ describe('frontend conversation contracts', () => {
     const snapshot = {
       conversationId,
       turnId,
+      deployments,
       turn,
       hasWorkInProgress: false,
       updatedAt,
