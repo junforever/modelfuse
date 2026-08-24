@@ -73,7 +73,11 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
 - Prefiere tests/typecheck/lint/build focalizados al área modificada antes de ejecutar suites globales.
 - No repitas exactamente la misma validación si no hubo cambios de código, configuración o estado que puedan alterar el resultado.
 - El coordinador no debe volver a ejecutar una validación que el owner ya reportó como exitosa, salvo que exista una integración cross-task que requiera una comprobación adicional.
-- Las validaciones globales/cross-task deben ejecutarse una sola vez en el boundary apropiado y delegarse al owner de testing correspondiente cuando `tasks.md` lo requiera.
+- Las validaciones globales/cross-task y las tareas cuyo acceptance criterion indique
+  ejecución única deben ejecutarse una sola vez en el boundary apropiado y delegarse
+  al owner de testing correspondiente cuando `tasks.md` lo requiera. Un bloque
+  preventivo de remediación explícitamente autorizado se rige por los ciclos acotados
+  definidos abajo y no sustituye esa ejecución final.
 - Tras una validación fallida, el owner debe aplicar el protocolo portable de remediación definido abajo. No se permiten reintentos por variaciones de sintaxis, binario o directorio sin un diagnóstico que los justifique.
 - Evita outputs masivos: usa comandos focalizados, filtros y extractos relevantes. No devuelvas logs completos cuando basten el error, resumen y evidencia necesaria.
 - Antes de solicitar una validación, el coordinador debe consultar la evidencia ya reportada por el owner y el estado de los archivos desde esa ejecución. Una validación exitosa del owner, incluido `git diff --check`, es evidencia suficiente para el coordinador salvo que haya cambios posteriores en los archivos validados, falte evidencia verificable o una integración cross-task exija una comprobación distinta. Revisar un diff para entenderlo no autoriza a repetir su validación.
@@ -92,14 +96,24 @@ Esta regla es portable y aplica a todo owner de tests y a todo artefacto de test
 
 Este protocolo es una regla del repositorio y aplica independientemente de la herramienta de planificación, ejecución u orquestación utilizada.
 
-- Ante el primer fallo, el owner de la validación detiene sus propios comandos, conserva la evidencia mínima y propone una clasificación: defecto de producto, defecto de test, defecto de contrato, defecto de comando/runtime, bloqueo de entorno o flake.
+- Fuera del barrido diagnóstico de un bloque preventivo explícitamente autorizado,
+  ante el primer fallo el owner de la validación detiene sus propios comandos,
+  conserva la evidencia mínima y propone una clasificación: defecto de producto,
+  defecto de test, defecto de contrato, defecto de comando/runtime, bloqueo de
+  entorno o flake.
 - El owner puede corregir directamente solo los archivos y responsabilidades que su tarea le autoriza. Un builder no modifica tests; un test owner no modifica producción, contratos ni infraestructura de producto.
-- Si la clasificación pertenece al owner inicial y la tarea autoriza esa corrección, el owner corrige la causa raíz una sola vez, ejecuta la verificación focalizada necesaria y luego reejecuta una sola vez el comando original. Esto sustituye la delegación a otro owner y no abre otro ciclo.
-- Si la clasificación requiere otro owner que no sea un test owner, o la corrección queda fuera del scope de la tarea original, el coordinador bloquea el trabajo afectado y solicita una tarea o autorización explícita; no hace reasignaciones implícitas ni crea otro ciclo automático.
-- Si la evidencia demuestra que el defecto pertenece exclusivamente al ámbito de un test owner y no requiere cambiar producción ni el entorno, el coordinador pausa la tarea original y delega una única remediación al owner correctivo. El handoff debe incluir task, comando, exit code, primer error, archivo/línea, clasificación propuesta, scope permitido y validación focalizada esperada.
-- Cuando la remediación usa un handoff, el intento consta exactamente de: (1) una delegación al owner correctivo, (2) una validación focalizada del tester y (3) una reejecución del comando original por el owner inicial. La tarea original permanece pausada hasta que el tester entregue evidencia suficiente.
+- Si la clasificación pertenece al owner inicial y la tarea autoriza esa corrección, el owner corrige la causa raíz una vez dentro del ciclo actual, ejecuta la verificación focalizada necesaria y permite la reejecución definida por ese ciclo. Esto no autoriza una segunda edición dentro del mismo ciclo.
+- Si la clasificación requiere otro owner que no sea un test owner, o la corrección queda fuera del scope de la tarea original, el coordinador bloquea el trabajo afectado y solicita una tarea o autorización explícita; no hace reasignaciones implícitas.
+- Si la evidencia demuestra que el defecto pertenece exclusivamente al ámbito de un test owner y no requiere cambiar producción ni el entorno, el coordinador pausa la tarea original y delega una remediación al owner correctivo dentro del ciclo autorizado. El handoff debe incluir task, comando, exit code, primer error, archivo/línea, clasificación propuesta, scope permitido y validación focalizada esperada.
+- Cuando la remediación usa un handoff, cada ciclo consta exactamente de: (1) una delegación al owner correctivo, (2) una validación focalizada del tester y (3) una reejecución del comando original por el owner inicial. La tarea original permanece pausada hasta que el tester entregue evidencia suficiente.
 - El owner correctivo debe preservar el contrato y la calidad: no puede debilitar aserciones, omitir tests, ocultar errores, añadir reintentos para forzar un resultado verde ni cambiar archivos fuera de su scope. Si el test válido expone un defecto de producción o de contrato, debe devolverlo con evidencia al owner correspondiente.
-- El owner inicial reanuda solo después de la confirmación del owner correctivo y ejecuta una sola vez el comando original. Si la reejecución falla, cambia la clasificación, aparece un error no relacionado o el owner correctivo no puede resolverlo dentro de su scope, el bloque queda bloqueado. No se inicia otra remediación automática ni se encadenan handoffs.
+- Para este protocolo, el fingerprint de un diagnóstico es la combinación normalizada
+  de comando, clasificación, owner, ruta, código y mensaje del error. Hay progreso
+  verificable únicamente cuando el fingerprint desaparece o disminuye el número total
+  de diagnósticos del scope autorizado.
+- El owner inicial reanuda solo después de la confirmación del owner correctivo y ejecuta una sola vez el comando original del ciclo. Un bloque preventivo de remediación explícitamente autorizado puede tener como máximo tres ciclos numerados; el primer barrido diagnóstico no cuenta como ciclo. Durante ese barrido, los errores ordinarios de código, typecheck o lint se recopilan y clasifican sin detener los comandos independientes; solo un bloqueo externo detiene el barrido. Si todos los comandos pasan, el bloque termina inmediatamente y no se inicia el ciclo restante.
+- Si no existe una autorización explícita para un bloque preventivo acotado, solo se permite el ciclo 1; cualquier fallo de su reejecución bloquea el trabajo.
+- Solo se permite iniciar el ciclo siguiente cuando la reejecución del ciclo anterior produjo progreso verificable y cada nuevo diagnóstico pertenece a un comando ya incluido y a un owner, clasificación y scope ya autorizados en el bloque. Si reaparece el mismo fingerprint sin cambios efectivos, no disminuye el conjunto de diagnósticos, cambia la clasificación, aparece un error no relacionado, se requiere un owner o scope nuevo, el owner no puede resolverlo o se alcanza el tercer ciclo, el bloque queda bloqueado. No se encadenan ciclos adicionales ni se reintenta el mismo ciclo.
 - Los fallos de runtime, servicios, bases de datos, migraciones, puertos, credenciales o herramientas inactivas son bloqueos de entorno. Si una herramienta necesaria no está disponible o habilitada, la ejecución se detiene por completo: no se delegan nuevas tareas, no se ejecutan validaciones posteriores, no se editan archivos y no se repite el comando hasta que exista una corrección externa confirmada. El reporte debe indicar la categoría, la causa observada, la evidencia segura y la acción externa requerida.
 - Ninguna tarea dependiente avanza durante la pausa o el bloqueo. La tarea solo se completa cuando el comando original pasa y el owner entrega evidencia de la validación; el resultado de la remediación por sí solo no la completa.
 

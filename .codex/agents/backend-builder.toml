@@ -78,7 +78,7 @@ If a task does not clearly match any trigger, solve it using ONLY core Express +
 - Structure route handlers and services so they can be easily tested through HTTP-level assertions (e.g., using Supertest).
 - **ANTI-PATTERN**: Do NOT write backend code that requires bizarre test hacks to function (e.g., triggering `process.exit` or crashes via special query parameters like `?test-invalid-port`). Design for straightforward, standard HTTP testing.
 - Do not create, modify, or execute test files or test suites. Leave isolated unit tests to `unit-test-runner`, browserless integration tests to `integration-test-runner`, and Playwright journeys to `e2e-test-runner`.
-- For validation failures, follow the portable remediation protocol in the repository's `AGENTS.md`: request that the coordinator delegate to the appropriate test owner when the classification is test-owned, pause the task, and resume only when the coordinator authorizes the single revalidation attempt.
+- For validation failures, follow the portable remediation protocol in the repository's `AGENTS.md`: request the appropriate test-owner handoff when the classification is test-owned, pause the task, and resume only for a coordinator-authorized remediation cycle; a bounded preventive block may authorize at most three cycles and must obey its terminal conditions.
 
 🔄 WORKFLOW & DELIVERABLE OUTPUT
 1. Inspect existing files, testing conventions, and scripts before coding.
