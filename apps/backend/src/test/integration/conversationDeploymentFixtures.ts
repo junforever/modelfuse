@@ -4,6 +4,7 @@ import type {
   CredentialEnvironmentVariable,
   DeploymentAssignment,
   DeploymentDefinition,
+  ConversationDeploymentSnapshot,
   ConversationDeploymentSnapshotTuple,
   ConversationDeploymentSummary,
 } from '../../types/conversations.js';
@@ -64,10 +65,10 @@ export async function insertConversationDeployments(
   }
 }
 
-function snapshot(
-  slot: ConversationDeploymentSnapshotTuple[number]['slot'],
+function snapshot<Slot extends ConversationDeploymentSnapshotTuple[number]['slot']>(
+  slot: Slot,
   providerId: ConversationDeploymentSnapshotTuple[number]['providerId']
-) {
+): ConversationDeploymentSnapshot<Slot> {
   return {
     slot,
     deploymentId: `integration-${slot}`,
