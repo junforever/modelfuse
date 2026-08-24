@@ -99,6 +99,7 @@ export function turnSnapshotFixture(overrides: Partial<TurnEventSnapshot> = {}):
   return {
     conversationId,
     turnId,
+    deployments: deploymentSummaries,
     turn: turnFixture(),
     hasWorkInProgress: true,
     updatedAt: eventTime,

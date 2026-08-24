@@ -9,7 +9,7 @@ import {
   turnEventSnapshotSchema,
   turnSnapshotResponseSchema,
 } from '../schemas/conversationSchemas';
-import type { ResponseSlot } from '../types/conversation';
+import type { DeploymentSummaryTuple, ModelResponse, ResponseSlot, Turn } from '../types/conversation';
 
 const conversationId = '123e4567-e89b-42d3-a456-426614174000';
 const turnId = '223e4567-e89b-42d3-a456-426614174000';
@@ -23,7 +23,7 @@ const providers: Record<ResponseSlot, string> = {
   consolidator: 'qwen',
 };
 
-function response(slot: ResponseSlot) {
+function response<Slot extends ResponseSlot>(slot: Slot): ModelResponse<Slot> {
   const provider = providers[slot];
 
   return {
@@ -43,10 +43,10 @@ function response(slot: ResponseSlot) {
     completedAt: updatedAt,
     createdAt: '2026-07-26T20:00:00.000Z',
     updatedAt,
-  };
+  } as ModelResponse<Slot>;
 }
 
-const turn = {
+const turn: Turn = {
   id: turnId,
   clientRequestId,
   ordinal: 1,
@@ -57,7 +57,7 @@ const turn = {
   updatedAt,
 };
 
-const deployments = (
+const deployments: DeploymentSummaryTuple = (
   [
     ['base-1', 'openai', 'GPT'],
     ['base-2', 'google', 'Gemini'],

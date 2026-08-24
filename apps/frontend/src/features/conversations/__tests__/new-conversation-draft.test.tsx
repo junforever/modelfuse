@@ -216,7 +216,7 @@ describe('new conversation draft', () => {
     const { result, rerender, unmount } = renderHook(
       ({ conversationId }: { conversationId: string | null }) =>
         useConversationExecution({ apiClient: client, conversationId, onSuccess }),
-      { initialProps: { conversationId: null }, wrapper }
+      { initialProps: { conversationId: null as string | null }, wrapper }
     );
     const creationResult = { conversation: detail(FIRST_ID, 'Nueva'), turn: turnFixture() };
     api.createConversation.mockResolvedValue(creationResult);
