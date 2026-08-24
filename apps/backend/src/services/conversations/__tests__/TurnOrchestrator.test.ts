@@ -9,6 +9,10 @@ import type { LlmProvider, LlmResult, LlmRequest } from '../../../types/llm.js';
 import type { ContextBuilder } from '../ContextBuilder.js';
 import { TurnOrchestrator } from '../TurnOrchestrator.js';
 
+type CurrentBaseResponse = NonNullable<
+  Parameters<ContextBuilder['build']>[0]['currentBaseResponses']
+>[number];
+
 describe('TurnOrchestrator', () => {
   it('runs the three canonical bases concurrently, dispatches by providerId once, then consolidates', async () => {
     const pending = {
@@ -50,10 +54,12 @@ describe('TurnOrchestrator', () => {
                   ? 'Consolidate the available model answers into one final answer.'
                   : 'Provide a complete, accurate answer to the user prompt.',
             },
-            ...(input.currentBaseResponses ?? []).map(({ slot, content }) => ({
-              role: 'user' as const,
-              content: `${slot}:\n${content ?? '[unavailable]'}`,
-            })),
+            ...(input.currentBaseResponses ?? []).map(
+              ({ slot, content }: CurrentBaseResponse) => ({
+                role: 'user' as const,
+                content: `${slot}:\n${content ?? '[unavailable]'}`,
+              })
+            ),
             { role: 'user' as const, content: input.prompt },
           ],
           contextWindow: {

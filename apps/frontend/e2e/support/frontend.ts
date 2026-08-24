@@ -12,7 +12,6 @@ if (!runId || !RUN_ID_PATTERN.test(runId)) {
 }
 
 const origin = new URL(E2E_FRONTEND_ORIGIN);
-let viteServer: ViteDevServer | undefined;
 let closing = false;
 
 function exitAfterShutdown(): void {
@@ -54,7 +53,7 @@ const shutdownPlugin: Plugin = {
   },
 };
 
-viteServer = await createServer({
+const viteServer: ViteDevServer = await createServer({
   root: path.resolve(import.meta.dirname, '../..'),
   plugins: [shutdownPlugin],
   server: {

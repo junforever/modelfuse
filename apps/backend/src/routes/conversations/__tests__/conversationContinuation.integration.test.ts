@@ -18,6 +18,7 @@ import {
   deleteOwnedConversations,
 } from '../../../test/integration/testDatabase.js';
 import type { ConversationDeploymentSnapshotTuple } from '../../../types/conversations.js';
+import type { TurnEvent } from '../../../types/sse.js';
 
 const CONVERSATION_ID = '73000000-0000-4000-8000-000000000077';
 const FIRST_TURN_ID = '73100000-0000-4000-8000-000000000077';
@@ -330,7 +331,7 @@ interface IdleObservation {
 }
 
 function observeIdle(
-  publisher: { subscribe: (turnId: string, listener: (event: any) => void) => () => void },
+  publisher: { subscribe: (turnId: string, listener: (event: TurnEvent) => void) => () => void },
   turnId: string
 ): IdleObservation {
   let unsubscribe: () => void = () => undefined;
