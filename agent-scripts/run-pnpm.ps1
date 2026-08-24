@@ -44,6 +44,16 @@ if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
     throw 'Faltan argumentos de pnpm.'
 }
 
+# The first `--` is the PowerShell end-of-parameters marker for this wrapper.
+# Everything after it is a literal pnpm argument list; later `--` tokens are
+# retained because they belong to pnpm or to the invoked command.
+if ($CommandArgs[0] -eq '--') {
+    $CommandArgs = @($CommandArgs | Select-Object -Skip 1)
+    if ($CommandArgs.Count -eq 0) {
+        throw 'El separador `--` debe ir seguido de argumentos de pnpm.'
+    }
+}
+
 if ($EnvFile) {
     if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
         throw "No existe el archivo de entorno indicado: $EnvFile."
