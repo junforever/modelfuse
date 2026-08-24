@@ -21,8 +21,6 @@ import {
   getDuplicateDeploymentIds,
 } from './deploymentSelectorUtils';
 
-export { getDefaultDeploymentSelection, getDuplicateDeploymentIds } from './deploymentSelectorUtils';
-
 const SLOT_LABELS: Readonly<Record<ResponseSlot, string>> = {
   'base-1': 'Base 1',
   'base-2': 'Base 2',

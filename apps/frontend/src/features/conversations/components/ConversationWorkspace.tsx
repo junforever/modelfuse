@@ -22,11 +22,11 @@ import type { TurnEventSnapshot } from '../types/sse';
 import { ConversationProcessingNotice } from './ConversationProcessingNotice';
 import { ConversationDeploymentSummary } from './ConversationDeploymentSummary';
 import { ConversationSidebar } from './ConversationSidebar';
+import { DeploymentSelectors } from './DeploymentSelectors';
 import {
-  DeploymentSelectors,
   getDefaultDeploymentSelection,
   getDuplicateDeploymentIds,
-} from './DeploymentSelectors';
+} from './deploymentSelectorUtils';
 import { HistoryTopSentinel } from './HistoryTopSentinel';
 import { PromptComposer } from './PromptComposer';
 import { TurnList } from './TurnList';

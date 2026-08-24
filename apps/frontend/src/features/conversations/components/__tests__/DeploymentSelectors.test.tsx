@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DeploymentCatalogItem, DeploymentIds } from '../../types/conversation';
-import { DeploymentSelectors, getDefaultDeploymentSelection } from '../DeploymentSelectors';
+import { DeploymentSelectors } from '../DeploymentSelectors';
+import { getDefaultDeploymentSelection } from '../deploymentSelectorUtils';
 
 const emptySelection: DeploymentIds = {
   'base-1': '',
