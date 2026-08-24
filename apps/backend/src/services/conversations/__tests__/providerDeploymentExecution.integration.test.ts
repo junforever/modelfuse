@@ -121,10 +121,12 @@ describe('mixed provider deployment execution integration', () => {
         ok: true as const,
         messages: [
           { role: 'user' as const, content: input.prompt },
-          ...(input.currentBaseResponses ?? []).map(({ slot, content }) => ({
-            role: 'user' as const,
-            content: `${slot}:\n${content ?? '[unavailable]'}`,
-          })),
+          ...(input.currentBaseResponses ?? []).map(
+            ({ slot, content }: Pick<ModelResponse, 'slot' | 'content'>) => ({
+              role: 'user' as const,
+              content: `${slot}:\n${content ?? '[unavailable]'}`,
+            })
+          ),
         ],
         contextWindow: {
           truncated: false,

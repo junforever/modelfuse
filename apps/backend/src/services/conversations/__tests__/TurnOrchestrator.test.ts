@@ -6,6 +6,7 @@ import type {
   ResponseSlot,
 } from '../../../types/conversations.js';
 import type { LlmProvider, LlmResult, LlmRequest } from '../../../types/llm.js';
+import type { ContextBuilder } from '../ContextBuilder.js';
 import { TurnOrchestrator } from '../TurnOrchestrator.js';
 
 describe('TurnOrchestrator', () => {
@@ -39,7 +40,7 @@ describe('TurnOrchestrator', () => {
       turnRepository,
       publisher: { publish: vi.fn() },
       contextBuilder: {
-        build: vi.fn(async input => ({
+        build: vi.fn<ContextBuilder['build']>(async input => ({
           ok: true as const,
           messages: [
             {
