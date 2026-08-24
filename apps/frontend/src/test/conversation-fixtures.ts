@@ -1,4 +1,5 @@
 import type {
+  DeploymentSummaryTuple,
   ModelResponse,
   ResponseSlot,
   Turn,
@@ -9,6 +10,37 @@ export const conversationId = '123e4567-e89b-42d3-a456-426614174000';
 export const turnId = '223e4567-e89b-42d3-a456-426614174000';
 export const clientRequestId = '323e4567-e89b-42d3-a456-426614174000';
 export const eventTime = '2026-07-26T20:00:01.000Z';
+
+export const deploymentSummaries: DeploymentSummaryTuple = [
+  {
+    slot: 'base-1',
+    deploymentId: 'deployment-1',
+    providerId: 'openai',
+    modelId: 'model-1',
+    displayName: 'Model 1',
+  },
+  {
+    slot: 'base-2',
+    deploymentId: 'deployment-2',
+    providerId: 'google',
+    modelId: 'model-2',
+    displayName: 'Model 2',
+  },
+  {
+    slot: 'base-3',
+    deploymentId: 'deployment-3',
+    providerId: 'openrouter',
+    modelId: 'model-3',
+    displayName: 'Model 3',
+  },
+  {
+    slot: 'consolidator',
+    deploymentId: 'deployment-4',
+    providerId: 'openrouter',
+    modelId: 'model-4',
+    displayName: 'Model 4',
+  },
+];
 
 const IDENTITIES: Record<ResponseSlot, { provider: string; model: string }> = {
   'base-1': { provider: 'openai', model: 'openai-model' },

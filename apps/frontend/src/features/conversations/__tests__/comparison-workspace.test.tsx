@@ -5,7 +5,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConversationProcessingNotice } from '../components/ConversationProcessingNotice';
 import { PromptComposer } from '../components/PromptComposer';
 import { TurnCard } from '../components/TurnCard';
-import { eventTime, modelResponse, turnFixture } from '../../../test/conversation-fixtures';
+import {
+  deploymentSummaries,
+  eventTime,
+  modelResponse,
+  turnFixture,
+} from '../../../test/conversation-fixtures';
 
 describe('comparison workspace components', () => {
   it('keeps four labelled tabs and each response state isolated', async () => {
@@ -36,6 +41,7 @@ describe('comparison workspace components', () => {
     render(
       <TurnCard
         turn={turn}
+        deployments={deploymentSummaries}
         hasWorkInProgress={false}
         runtimeStages={{ consolidator: 'Consolidando…' }}
         onRetry={vi.fn()}
@@ -99,6 +105,7 @@ describe('comparison workspace components', () => {
         <ConversationProcessingNotice isBusy sseError={null} />
         <TurnCard
           turn={turn}
+          deployments={deploymentSummaries}
           hasWorkInProgress
           runtimeStages={{}}
           onRetry={retry}

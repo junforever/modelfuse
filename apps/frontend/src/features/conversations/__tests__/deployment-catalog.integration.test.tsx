@@ -8,10 +8,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConversationWorkspace } from '../components/ConversationWorkspace';
 import { conversationKeys } from '../queries/conversation-keys';
 import type {
+  ConversationDeploymentSummary,
   ConversationTurnResponse,
   DeploymentCatalogItem,
   DeploymentIds,
+  DeploymentSummaryTuple,
+  ModelResponse,
   ResponseSlot,
+  ResponseRole,
+  TurnResponses,
 } from '../types/conversation';
 import { createTestQueryClient } from '../../../test/query-test-utils';
 
@@ -431,19 +436,69 @@ function creationResponse(
   },
   catalogItems: readonly DeploymentCatalogItem[] = CATALOG_ITEMS
 ): ConversationTurnResponse {
-  const summaries = catalogItems.map((item, index) => ({
-    slot: (['base-1', 'base-2', 'base-3', 'consolidator'] as const)[index]!,
+  const [base1, base2, base3, consolidator] = catalogItems;
+  if (!base1 || !base2 || !base3 || !consolidator) {
+    throw new Error('Expected a complete four-slot deployment catalog');
+  }
+
+  const summaries: DeploymentSummaryTuple = [
+    deploymentSummary('base-1', base1),
+    deploymentSummary('base-2', base2),
+    deploymentSummary('base-3', base3),
+    deploymentSummary('consolidator', consolidator),
+  ];
+  const responses: TurnResponses = [
+    modelResponse(summaries[0], 'base'),
+    modelResponse(summaries[1], 'base'),
+    modelResponse(summaries[2], 'base'),
+    modelResponse(summaries[3], 'consolidator'),
+  ];
+
+  return {
+    conversation: {
+      id: CONVERSATION_ID,
+      title: PROMPT,
+      hasWorkInProgress: false,
+      createdAt: EVENT_TIME,
+      updatedAt: EVENT_TIME,
+      deployments: summaries,
+    },
+    turn: {
+      id: TURN_ID,
+      clientRequestId: payload.clientRequestId,
+      ordinal: 1,
+      prompt: payload.prompt,
+      status: 'completed',
+      responses,
+      createdAt: EVENT_TIME,
+      updatedAt: EVENT_TIME,
+    },
+  };
+}
+
+function deploymentSummary<Slot extends ResponseSlot>(
+  slot: Slot,
+  item: DeploymentCatalogItem
+): ConversationDeploymentSummary<Slot> {
+  return {
+    slot,
     deploymentId: item.deploymentId,
     providerId: item.providerId,
     modelId: item.modelId,
     displayName: item.displayName,
-  }));
-  const responses = summaries.map(summary => ({
+  };
+}
+
+function modelResponse<Slot extends ResponseSlot>(
+  summary: ConversationDeploymentSummary<Slot>,
+  role: ResponseRole<Slot>
+): ModelResponse<Slot> {
+  return {
     slot: summary.slot,
-    role: summary.slot === 'consolidator' ? ('consolidator' as const) : ('base' as const),
+    role,
     provider: summary.providerId,
     model: summary.modelId,
-    status: 'completed' as const,
+    status: 'completed',
     content: `${summary.slot} deterministic response`,
     error: null,
     recoverable: false,
@@ -455,27 +510,6 @@ function creationResponse(
     completedAt: EVENT_TIME,
     createdAt: EVENT_TIME,
     updatedAt: EVENT_TIME,
-  }));
-
-  return {
-    conversation: {
-      id: CONVERSATION_ID,
-      title: PROMPT,
-      hasWorkInProgress: false,
-      createdAt: EVENT_TIME,
-      updatedAt: EVENT_TIME,
-      deployments: summaries as ConversationTurnResponse['conversation']['deployments'],
-    },
-    turn: {
-      id: TURN_ID,
-      clientRequestId: payload.clientRequestId,
-      ordinal: 1,
-      prompt: payload.prompt,
-      status: 'completed',
-      responses: responses as ConversationTurnResponse['turn']['responses'],
-      createdAt: EVENT_TIME,
-      updatedAt: EVENT_TIME,
-    },
   };
 }
 

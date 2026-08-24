@@ -17,8 +17,13 @@ import {
   turnFixture,
   turnId,
 } from '../../../../test/conversation-fixtures';
+import type {
+  ConversationDetail,
+  DeploymentIds,
+  ModelCatalogResponse,
+} from '../../types/conversation';
 
-const conversation = {
+const conversation: ConversationDetail = {
   id: conversationId,
   title: 'Comparación inicial',
   hasWorkInProgress: true,
@@ -56,16 +61,19 @@ const conversation = {
   updatedAt: eventTime,
 };
 const conversationTurn = { conversation, turn: turnFixture() };
-const deploymentIds = Object.fromEntries(
-  conversation.deployments.map(({ slot, deploymentId }) => [slot, deploymentId])
-);
-const catalog = {
+const deploymentIds: DeploymentIds = {
+  'base-1': 'deployment-1',
+  'base-2': 'deployment-2',
+  'base-3': 'deployment-3',
+  consolidator: 'deployment-4',
+};
+const catalog: ModelCatalogResponse = {
   items: conversation.deployments.map(({ slot: _slot, ...deployment }, index) => ({
     ...deployment,
     contextLimitTokens: 100_000 + index,
     maxOutputTokens: 8_000 + index,
-    inputModalities: ['text'],
-    outputModalities: ['text'],
+    inputModalities: ['text'] as const,
+    outputModalities: ['text'] as const,
   })),
 };
 const snapshot = {

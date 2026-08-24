@@ -2,8 +2,6 @@
 
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
-import type * as React from 'react';
-
 import { cn } from '@workspace/ui/lib/utils';
 
 function Select<Value, Multiple extends boolean | undefined = false>(

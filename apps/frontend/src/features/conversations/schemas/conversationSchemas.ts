@@ -14,6 +14,7 @@ import {
   type DeploymentCatalogItem,
   type DeploymentIds,
   type DeploymentSummaryTuple,
+  type Modality,
   type ModelCatalogResponse,
   type ResponseSlot,
   type TurnPage,
@@ -31,10 +32,12 @@ export const responseSlotSchema = z.enum(RESPONSE_SLOTS);
 export const providerIdSchema = z.enum(PROVIDER_IDS);
 export const modalitySchema = z.enum(MODALITIES);
 
-const modalityListSchema = z
+const modalityListSchema: z.ZodType<readonly [Modality, ...Modality[]]> = z
   .array(modalitySchema)
   .nonempty()
-  .refine(modalities => new Set(modalities).size === modalities.length);
+  .refine(modalities => new Set(modalities).size === modalities.length) as z.ZodType<
+  readonly [Modality, ...Modality[]]
+>;
 
 export const deploymentCatalogItemSchema: z.ZodType<DeploymentCatalogItem> = z.strictObject({
   deploymentId: nonBlankStringSchema,
@@ -78,12 +81,22 @@ const consolidatorDeploymentSummarySchema: z.ZodType<
   ConversationDeploymentSummary<'consolidator'>
 > = deploymentSummarySchema('consolidator');
 
-export const conversationDeploymentSummarySchema = z.discriminatedUnion('slot', [
+const conversationDeploymentSummaryOptions: [
+  typeof base1DeploymentSummarySchema,
+  typeof base2DeploymentSummarySchema,
+  typeof base3DeploymentSummarySchema,
+  typeof consolidatorDeploymentSummarySchema,
+] = [
   base1DeploymentSummarySchema,
   base2DeploymentSummarySchema,
   base3DeploymentSummarySchema,
   consolidatorDeploymentSummarySchema,
-]);
+];
+
+export const conversationDeploymentSummarySchema = z.discriminatedUnion(
+  'slot',
+  conversationDeploymentSummaryOptions
+);
 
 export const deploymentSummaryTupleSchema: z.ZodType<DeploymentSummaryTuple> = z.tuple([
   base1DeploymentSummarySchema,
