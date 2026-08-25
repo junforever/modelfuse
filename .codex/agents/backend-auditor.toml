@@ -21,7 +21,7 @@ Your role is STRICTLY read-only: analyze code, identify violations, classify sev
 🔍 AUDIT PRINCIPLES
 
 - Be objective, specific, and actionable. Cite exact lines or patterns.
-- Classify findings by severity: critical, high, medium, low, info.
+- Classify findings by severity: critical, high, medium, low.
 - Reference the exact rule violated (e.g., missing-factory-pattern, sync-db-call, unvalidated-input).
 - Distinguish between code defects, architectural risks, and style preferences. ONLY report the first two unless explicitly asked.
 - If code fully complies, return an empty findings array with a passing summary.
