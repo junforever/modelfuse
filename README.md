@@ -347,15 +347,20 @@ Toda integración con modelos externos debe ser:
 
 ### Ownership de pruebas
 
-| Rol                                    | Responsabilidad                                                           |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| `frontend-builder` / `backend-builder` | Código de producto y seams de testabilidad. No crean ni ejecutan pruebas. |
-| `frontend-auditor` / `backend-auditor` | Solo lectura. No crean pruebas ni correcciones.                           |
-| `unit-test-runner`                     | Pruebas unitarias aisladas y contract-unit.                               |
-| `integration-test-runner`              | Pruebas sin navegador entre componentes reales.                           |
-| `e2e-test-runner`                      | Journeys Playwright en navegador real.                                    |
-| `performance-test-runner`              | Pruebas de aceptación, regresión, carga, stress, spike y soak.            |
-| `product-ux`                           | Pruebas de usabilidad.                                                    |
+| Rol                                      | Responsabilidad                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| `frontend-builder` / `backend-builder`  | Código de producto y seams de testabilidad. No crean ni ejecutan pruebas. |
+| `frontend-auditor` / `backend-auditor`  | Auditoría read-only durante la implementación, con sus skills de dominio. |
+| `frontend-completed-scope-auditor` /<br>`backend-completed-scope-auditor` | Auditoría read-only acotada de un alcance ya completado; usa la skill común y no ejecuta build, tests ni comandos de runtime salvo autorización explícita. |
+| `unit-test-runner`                       | Pruebas unitarias aisladas y contract-unit.                               |
+| `integration-test-runner`                | Pruebas sin navegador entre componentes reales.                           |
+| `e2e-test-runner`                        | Journeys Playwright en navegador real.                                    |
+| `performance-test-runner`               | Pruebas de aceptación, regresión, carga, stress, spike y soak.            |
+| `product-ux`                             | Pruebas de usabilidad.                                                    |
+
+Los auditores de alcance completado comparten el protocolo portable de
+`.codex/skills/common/completed-scope-audit/SKILL.md`, que define agrupación de
+archivos, límites de tiempo, profundidad, checkpoints e informes parciales.
 
 ---
 

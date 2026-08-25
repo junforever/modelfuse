@@ -19,8 +19,8 @@
   - `UNIT` → `unit-test-runner`
   - `INTEGRATION` → `integration-test-runner`
   - `E2E` → `e2e-test-runner`
-  - `BE-AUDIT` → `backend-auditor`
-  - `FE-AUDIT` → `frontend-auditor`
+  - `BE-AUDIT` → `backend-completed-scope-auditor`
+  - `FE-AUDIT` → `frontend-completed-scope-auditor`
 - No `UX`, `PERF`, SDK-installation, ORM, remote-discovery, alias, backfill, fallback, provider-retry, economic-metric, multimedia-composer, or speculative-abstraction task belongs to this feature.
 
 Before the first JavaScript/TypeScript validation block, the coordinator resolves the exact Node and pnpm executables once and supplies those absolute paths to every owner. Focused Vitest commands must run from the repository root as `pnpm --filter <workspace> run test --run <relative-test-path>`.
@@ -363,8 +363,8 @@ frontend-builder: T062 and T063 after T060 and T017
 unit-test-runner: T064 after T061-T063
 integration-test-runner: T065 after T064
 e2e-test-runner: T066, then T067 and T068 in parallel
-backend-auditor: T069 after T067 and T068
-frontend-auditor: T070 after T067 and T068
+backend-completed-scope-auditor: T069 after T067 and T068
+frontend-completed-scope-auditor: T070 after T067 and T068
 coordinator: G1, G2, and final shutdown gate after T069/T070
 ```
 

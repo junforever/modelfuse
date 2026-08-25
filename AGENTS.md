@@ -42,7 +42,10 @@ Para toda ejecución de implementación basada en un archivo `tasks.md`:
   - `E2E` -> `e2e-test-runner`
   - `PERF` -> `performance-test-runner`
   - `UX` -> `product-designer`
+  - `BE-AUDIT` -> `backend-completed-scope-auditor`
+  - `FE-AUDIT` -> `frontend-completed-scope-auditor`
 - Delega toda tarea de product code y tests a su owner declarado, respetando dependencias y orden de ejecución de `tasks.md`.
+- Las auditorías estándar durante la implementación continúan usando `backend-auditor` y `frontend-auditor`. Las auditorías read-only de un alcance ya completado usan exclusivamente los owners `backend-completed-scope-auditor` y `frontend-completed-scope-auditor`, junto con la skill común declarada en sus perfiles.
 - El agente principal actúa sólo como coordinador: puede inspeccionar contexto, delegar, seguir progreso, revisar evidencia y reportar resultados, pero no debe implementar ni modificar directamente product code o tests.
 - Si el agente owner requerido no existe o no está disponible, detén el trabajo afectado y reporta el bloqueo. No implementes la tarea directamente ni la reasignes a otro owner. El reporte no puede usar un mensaje genérico: debe conservar el identificador del perfil, la ruta de configuración resuelta, la etapa de activación que falló, el error original del loader, el exit code o código de error si existe, y las skills/rutas que no pudieron cargarse. Si el orquestador no expone alguno de esos datos, debe indicarlo explícitamente como `evidencia_no_disponible` y conservar el mensaje bruto recibido.
 
