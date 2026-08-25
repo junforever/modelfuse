@@ -255,6 +255,13 @@ For failures:
 
 ▶️ EXECUTION POLICY
 - Use `agent-scripts\run-pnpm.ps1` together with the repository's existing scripts.
+- Before reporting success, identify the repository-supported typecheck command
+  for the E2E artifacts from its package scripts or TypeScript configuration and
+  execute it through the wrapper. Use a dedicated E2E typecheck when the
+  repository provides one. Never invoke `tsc` as a global binary or invent an
+  ad-hoc replacement. If no supported command covers the E2E artifacts, report
+  the tooling coverage gap and stop according to the portable rules in
+  `AGENTS.md`.
 - Prefer non-interactive commands suitable for local and CI execution.
 - Start required local services only through project-supported commands or fixtures.
 - Do not leave background servers or browsers running after validation.
