@@ -402,6 +402,97 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       queryClient.clear();
     }
   });
+
+  it('preserves detail deployments when the real rename mutation returns only a summary', async () => {
+    const initial = creationResponse({ clientRequestId: 'rename-seed', prompt: PROMPT });
+    const { deployments } = initial.conversation;
+    const originalSummary = {
+      id: initial.conversation.id,
+      title: 'Título original',
+      hasWorkInProgress: initial.conversation.hasWorkInProgress,
+      createdAt: initial.conversation.createdAt,
+      updatedAt: initial.conversation.updatedAt,
+    };
+    const renamedSummary = { ...originalSummary, title: 'Título actualizado' };
+    const adapter: AxiosAdapter = async config => {
+      const method = (config.method ?? 'get').toLowerCase();
+      const path = config.url ?? '';
+      if (method === 'get' && path === '/model-catalog') return response(config, { items: CATALOG_ITEMS });
+      if (method === 'get' && path === '/conversations') {
+        return response(config, { items: [originalSummary], nextCursor: null });
+      }
+      if (method === 'get' && path === `/conversations/${CONVERSATION_ID}`) {
+        return response(config, { ...originalSummary, deployments });
+      }
+      if (method === 'get' && path === `/conversations/${CONVERSATION_ID}/turns`) {
+        return response(config, { items: [], olderCursor: null, hasOlder: false });
+      }
+      if (method === 'patch' && path === `/conversations/${CONVERSATION_ID}`) {
+        return response(config, renamedSummary);
+      }
+      throw new Error(`Unexpected rename transport request: ${method.toUpperCase()} ${path}`);
+    };
+    const { queryClient, user, unmount } = renderHistoryWorkspace(adapter);
+
+    try {
+      await user.click(await screen.findByRole('button', { name: originalSummary.title }));
+      expect(await screen.findByText('GPT-5.6 Terra')).toBeVisible();
+
+      await user.click(screen.getByRole('button', { name: `Acciones de ${originalSummary.title}` }));
+      await user.click(await screen.findByRole('menuitem', { name: 'Renombrar' }));
+      const titleInput = screen.getByRole('textbox', { name: 'Nombre de la conversación' });
+      await user.clear(titleInput);
+      await user.type(titleInput, renamedSummary.title);
+      await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: renamedSummary.title })).toBeVisible());
+      expect(queryClient.getQueryData(conversationKeys.detail(CONVERSATION_ID))).toEqual({
+        ...originalSummary,
+        title: renamedSummary.title,
+        deployments,
+      });
+      expect(screen.getByText('GPT-5.6 Terra')).toBeVisible();
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
+
+  it('does not seed an incomplete detail cache when renaming an unselected conversation', async () => {
+    const initial = creationResponse({ clientRequestId: 'rename-empty', prompt: PROMPT });
+    const originalSummary = {
+      id: initial.conversation.id,
+      title: 'Sin detalle',
+      hasWorkInProgress: initial.conversation.hasWorkInProgress,
+      createdAt: initial.conversation.createdAt,
+      updatedAt: initial.conversation.updatedAt,
+    };
+    const renamedSummary = { ...originalSummary, title: 'Renombrada sin detalle' };
+    const adapter: AxiosAdapter = async config => {
+      const method = (config.method ?? 'get').toLowerCase();
+      const path = config.url ?? '';
+      if (method === 'get' && path === '/model-catalog') return response(config, { items: CATALOG_ITEMS });
+      if (method === 'get' && path === '/conversations') return response(config, { items: [originalSummary], nextCursor: null });
+      if (method === 'patch' && path === `/conversations/${CONVERSATION_ID}`) return response(config, renamedSummary);
+      throw new Error(`Unexpected no-detail rename request: ${method.toUpperCase()} ${path}`);
+    };
+    const { queryClient, user, unmount } = renderHistoryWorkspace(adapter);
+
+    try {
+      await user.click(await screen.findByRole('button', { name: `Acciones de ${originalSummary.title}` }));
+      await user.click(await screen.findByRole('menuitem', { name: 'Renombrar' }));
+      const titleInput = screen.getByRole('textbox', { name: 'Nombre de la conversación' });
+      await user.clear(titleInput);
+      await user.type(titleInput, renamedSummary.title);
+      await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: renamedSummary.title })).toBeVisible());
+      expect(queryClient.getQueryData(conversationKeys.detail(CONVERSATION_ID))).toBeUndefined();
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
 });
 
 function response(config: Parameters<AxiosAdapter>[0], data: unknown) {
@@ -419,6 +510,23 @@ function renderWorkspace(adapter: AxiosAdapter, queryClient = createTestQueryCli
   );
 
   return { user, queryClient, ...render(<ConversationWorkspace />, { wrapper: Wrapper }) };
+}
+
+function renderHistoryWorkspace(adapter: AxiosAdapter, queryClient = createTestQueryClient()) {
+  injectedClient.current = axios.create({
+    baseURL: 'https://t070.invalid/api/v1',
+    adapter,
+  });
+  const user = userEvent.setup();
+  const Wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+
+  return {
+    user,
+    queryClient,
+    ...render(<ConversationWorkspace withHistory />, { wrapper: Wrapper }),
+  };
 }
 
 function deferred<T>() {

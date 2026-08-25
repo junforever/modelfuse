@@ -17,7 +17,13 @@ import {
   renameConversation,
 } from '../api/conversationsApi';
 import { conversationKeys } from '../queries/conversation-keys';
-import type { ConversationPage, ConversationSummary, Turn, TurnPage } from '../types/conversation';
+import type {
+  ConversationDetail,
+  ConversationPage,
+  ConversationSummary,
+  Turn,
+  TurnPage,
+} from '../types/conversation';
 
 function uniqueConversations(pages: readonly ConversationPage[]): readonly ConversationSummary[] {
   return [...new Map(pages.flatMap(page => page.items).map(item => [item.id, item])).values()];
@@ -106,7 +112,10 @@ export function useConversationQueries(
     mutationFn: ({ id, title }: { readonly id: string; readonly title: string }) =>
       renameConversation(client, id, { title }),
     onSuccess: conversation => {
-      queryClient.setQueryData(conversationKeys.detail(conversation.id), conversation);
+      queryClient.setQueryData<ConversationDetail | undefined>(
+        conversationKeys.detail(conversation.id),
+        detail => (detail ? { ...detail, ...conversation } : detail)
+      );
       queryClient.setQueriesData<InfiniteData<ConversationPage>>(
         { queryKey: conversationKeys.lists },
         data => updateConversationPages(data, conversation)
