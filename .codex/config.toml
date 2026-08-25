@@ -30,3 +30,7 @@ enabled = true
 [[skills.config]]
 path = ".codex/skills/testing-performance"
 enabled = true
+
+[[skills.config]]
+path = ".codex/skills/common"
+enabled = true

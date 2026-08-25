@@ -1,0 +1,7 @@
+interface:
+  display_name: "Completed Scope Audit"
+  short_description: "Bounded static audit for completed code scopes"
+  default_prompt: "Use $completed-scope-audit for a bounded, read-only audit of an already implemented scope."
+
+policy:
+  allow_implicit_invocation: false

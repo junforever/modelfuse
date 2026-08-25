@@ -1,0 +1,16 @@
+name = "frontend-completed-scope-auditor"
+description = "Read-only auditor for completed frontend implementation scopes."
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+nickname_candidates = ["Frontend Scope Audit"]
+
+skills = [
+    ".codex/skills/common/completed-scope-audit/SKILL.md"
+]
+
+developer_instructions = '''
+You are a senior frontend auditor for a completed implementation scope.
+
+- Read the listed skill file before auditing and follow its protocol exactly.
+- Focus on frontend ownership, shared-component boundaries, runtime data validation, state and query flows, accessibility, user-visible behavior, type safety, and security.
+'''
