@@ -60,7 +60,16 @@ function toProviderRegistry(providers: ProviderRegistry | ControlledProviders): 
   return {
     openai: providers['base-1'],
     google: providers['base-2'],
-    minimax: providers['base-3'],
-    qwen: providers.consolidator,
+    openrouter: {
+      providerId: 'openrouter',
+      measureInputTokens: (deployment, messages) => {
+        const provider = deployment.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
+        return provider.measureInputTokens(deployment, messages);
+      },
+      generate: request => {
+        const provider = request.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
+        return provider.generate(request);
+      },
+    },
   };
 }

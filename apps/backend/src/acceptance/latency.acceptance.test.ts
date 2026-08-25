@@ -53,7 +53,7 @@ describe.sequential('SC-010 controlled endpoint latency acceptance', () => {
     await pool?.end();
   });
 
-  it('keeps create-202 and first-history-page p95 below one second', async () => {
+  it('keeps create-201 and first-history-page p95 below one second', async () => {
     for (let index = 0; index < WARM_UP_SAMPLES; index += 1) {
       const warmUp = await collectEndpointPair(
         ownedRequestIds[index]!,
@@ -107,7 +107,7 @@ describe.sequential('SC-010 controlled endpoint latency acceptance', () => {
     });
     const createDurationMs = performance.now() - createStartedAt;
     const conversationId = accepted.body?.conversation?.id;
-    const createStatusOk = accepted.status === 202 && isIdentifier(conversationId);
+    const createStatusOk = accepted.status === 201 && isIdentifier(conversationId);
 
     if (!createStatusOk) {
       return {

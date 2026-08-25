@@ -374,12 +374,13 @@ export class ConversationService {
       deployments: snapshot.deployments,
       signal: new AbortController().signal,
     };
-    const execution =
-      retry && slot
-        ? this.dependencies.orchestrator.executeRetry({ ...input, slot })
-        : this.dependencies.orchestrator.executeTurn(input);
     let tracked!: Promise<void>;
-    tracked = execution
+    tracked = Promise.resolve()
+      .then(() =>
+        retry && slot
+          ? this.dependencies.orchestrator.executeRetry({ ...input, slot })
+          : this.dependencies.orchestrator.executeTurn(input)
+      )
       .catch(() => this.reconcileRejectedExecution(snapshot.response))
       .finally(() => this.activeExecutions.delete(tracked));
     this.activeExecutions.add(tracked);

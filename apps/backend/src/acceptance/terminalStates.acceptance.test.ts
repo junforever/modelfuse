@@ -96,7 +96,7 @@ describe.sequential('SC-001 controlled terminal-state acceptance', () => {
     });
 
     if (
-      accepted.status !== 202 ||
+      accepted.status !== 201 ||
       !isIdentifier(accepted.body?.conversation?.id) ||
       !isIdentifier(accepted.body?.turn?.id)
     ) {
