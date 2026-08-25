@@ -139,10 +139,17 @@ try {
     }
 
     try {
-        $serviceRows = @($rowsJson | ConvertFrom-Json)
+        $serviceRows = @(
+            foreach ($row in $rowsOutput) {
+                $rowText = ([string]$row).Trim()
+                if ($rowText) {
+                    $rowText | ConvertFrom-Json
+                }
+            }
+        )
     }
     catch {
-        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message 'No se pudo interpretar el estado seguro de los servicios Compose.'
+        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "No se pudo interpretar el estado seguro de los servicios Compose. Detalle: $($_.Exception.Message)"
     }
 
     $postgres = Get-ServiceRow -Rows $serviceRows -Service $PostgresService
