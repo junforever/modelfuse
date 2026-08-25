@@ -4,7 +4,19 @@ import type {
   ApiError,
   ConversationTurnResponse,
 } from '../src/features/conversations/types/conversation';
-import { expect, fakeModelScenarios, test } from './fixtures/modelFuse';
+import {
+  defaultDeploymentIds,
+  deploymentSummaries,
+  expect,
+  fakeModelScenarios,
+  test,
+} from './fixtures/modelFuse';
+import { expectDeploymentSummaries } from './support/journeys';
+
+const [base1Deployment, , , consolidatorDeployment] =
+  deploymentSummaries(defaultDeploymentIds);
+const BASE_1_LABEL = `Base 1 · ${base1Deployment.displayName}`;
+const CONSOLIDATOR_LABEL = `Consolidador · ${consolidatorDeployment.displayName}`;
 
 async function createConversation(page: Page, prompt: string): Promise<ConversationTurnResponse> {
   const responsePromise = page.waitForResponse(
@@ -17,7 +29,7 @@ async function createConversation(page: Page, prompt: string): Promise<Conversat
   await page.getByRole('button', { name: 'Enviar' }).click();
 
   const response = await responsePromise;
-  expect(response.status()).toBe(202);
+  expect(response.status()).toBe(201);
   return response.json() as Promise<ConversationTurnResponse>;
 }
 
@@ -40,73 +52,97 @@ test('retries one failed slot and replaces the stale consolidation', async ({
   scenarioPrompts,
 }) => {
   const initialStreamPromise = waitForTurnStream(page);
-  await createConversation(page, scenarioPrompts.retry);
+  const initial = await createConversation(page, scenarioPrompts.retry);
+  expectDeploymentSummaries(initial, defaultDeploymentIds);
   const initialStream = await initialStreamPromise;
 
-  await page.getByRole('tab', { name: 'OpenAI', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Reintentar OpenAI' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Continuar sin OpenAI' })).toBeVisible();
+  await page.getByRole('tab', { name: BASE_1_LABEL, exact: true }).click();
+  await expect(page.getByRole('button', { name: `Reintentar ${BASE_1_LABEL}` })).toBeEnabled();
+  await expect(
+    page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })
+  ).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Qwen', exact: true }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Qwen' })).toContainText(
-    fakeModelScenarios.retry.initialQwenContent
+  await page.getByRole('tab', { name: CONSOLIDATOR_LABEL, exact: true }).click();
+  await expect(page.getByRole('tabpanel', { name: CONSOLIDATOR_LABEL })).toContainText(
+    fakeModelScenarios.retry.initialConsolidatorContent
   );
   await initialStream.finished();
+  await expect(page.getByRole('status').filter({ hasText: 'Procesando respuestas' })).toBeHidden();
 
-  await page.getByRole('tab', { name: 'OpenAI', exact: true }).click();
+  await page.getByRole('tab', { name: BASE_1_LABEL, exact: true }).click();
   const retryResponsePromise = page.waitForResponse(
     response =>
       response.request().method() === 'POST' &&
-      /\/responses\/openai\/retry$/.test(new URL(response.url()).pathname)
+      /\/responses\/base-1\/retry$/.test(new URL(response.url()).pathname)
   );
   const retryStreamPromise = waitForTurnStream(page);
-  await page.getByRole('button', { name: 'Reintentar OpenAI' }).click();
+  await page.getByRole('button', { name: `Reintentar ${BASE_1_LABEL}` }).click();
 
-  expect((await retryResponsePromise).status()).toBe(202);
+  const retryResponse = await retryResponsePromise;
+  expect(retryResponse.status()).toBe(202);
+  expectDeploymentSummaries(
+    (await retryResponse.json()) as ConversationTurnResponse,
+    defaultDeploymentIds
+  );
   const retryStream = await retryStreamPromise;
-  await expect(page.getByRole('tabpanel', { name: 'OpenAI' })).toContainText(
-    fakeModelScenarios.retry.recoveredOpenAiContent
+  await expect(page.getByRole('tabpanel', { name: BASE_1_LABEL })).toContainText(
+    fakeModelScenarios.retry.recoveredBase1Content
   );
 
-  await page.getByRole('tab', { name: 'Qwen', exact: true }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Qwen' })).toContainText(
-    fakeModelScenarios.retry.reconsolidatedQwenContent
+  await page.getByRole('tab', { name: CONSOLIDATOR_LABEL, exact: true }).click();
+  await expect(page.getByRole('tabpanel', { name: CONSOLIDATOR_LABEL })).toContainText(
+    fakeModelScenarios.retry.reconsolidatedContent
   );
   await expect(page.getByRole('status').filter({ hasText: 'Procesando respuestas' })).toBeHidden();
   await retryStream.finished();
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 });
 
 test('persists Continue-without and rejects a later retry with 409', async ({
   page,
   scenarioPrompts,
 }) => {
-  await createConversation(page, scenarioPrompts.continueWithout);
+  const initialStreamPromise = waitForTurnStream(page);
+  const initial = await createConversation(page, scenarioPrompts.continueWithout);
+  expectDeploymentSummaries(initial, defaultDeploymentIds);
+  const initialStream = await initialStreamPromise;
 
-  await page.getByRole('tab', { name: 'OpenAI', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Continuar sin OpenAI' })).toBeVisible();
-  await page.getByRole('button', { name: 'Continuar sin OpenAI' }).click();
+  await page.getByRole('tab', { name: BASE_1_LABEL, exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })
+  ).toBeVisible();
+  await initialStream.finished();
+  await expect(page.getByRole('status').filter({ hasText: 'Procesando respuestas' })).toBeHidden();
+  await page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Continuar sin OpenAI' });
+  const dialog = page.getByRole('dialog', { name: `Continuar sin ${BASE_1_LABEL}` });
   await expect(dialog).toContainText('permanente');
   await expect(dialog).toContainText('no podrás reintentar');
 
   const continueResponsePromise = page.waitForResponse(
     response =>
       response.request().method() === 'POST' &&
-      /\/responses\/openai\/continue-without$/.test(new URL(response.url()).pathname)
+      /\/responses\/base-1\/continue-without$/.test(new URL(response.url()).pathname)
   );
-  await dialog.getByRole('button', { name: 'Confirmar continuar sin OpenAI' }).click();
+  await dialog
+    .getByRole('button', { name: `Confirmar continuar sin ${BASE_1_LABEL}` })
+    .click();
   const continueResponse = await continueResponsePromise;
   expect(continueResponse.status()).toBe(200);
 
   const { conversation, turn } = (await continueResponse.json()) as ConversationTurnResponse;
+  expectDeploymentSummaries({ conversation, turn }, defaultDeploymentIds);
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Reintentar OpenAI' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Continuar sin OpenAI' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: `Reintentar ${BASE_1_LABEL}` })).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })
+  ).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'Procesando respuestas' })).toBeHidden();
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 
   const retryResponse = await page.request.post(
     new URL(
-      `/api/v1/conversations/${conversation.id}/turns/${turn.id}/responses/openai/retry`,
+      `/api/v1/conversations/${conversation.id}/turns/${turn.id}/responses/base-1/retry`,
       continueResponse.url()
     ).toString()
   );

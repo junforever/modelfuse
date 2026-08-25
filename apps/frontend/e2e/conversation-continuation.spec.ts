@@ -2,16 +2,18 @@ import { randomUUID } from 'node:crypto';
 
 import type { Page, Response } from '@playwright/test';
 
-import type { ConversationTurnResponse } from '../src/features/conversations/types/conversation';
-import { expect, fakeModelResponses, test } from './fixtures/modelFuse';
+import {
+  RESPONSE_SLOT_LABELS,
+  type ConversationTurnResponse,
+} from '../src/features/conversations/types/conversation';
+import {
+  defaultDeploymentIds,
+  expect,
+  fakeModelResponses,
+  test,
+} from './fixtures/modelFuse';
+import { expectDeploymentSummaries } from './support/journeys';
 import { E2E_BACKEND_ORIGIN } from './support/scenarios';
-
-const TAB_NAMES = {
-  openai: 'OpenAI',
-  google: 'Google',
-  minimax: 'MiniMax',
-  qwen: 'Qwen',
-} as const;
 
 function waitForTurnStream(page: Page): Promise<Response> {
   return page.waitForResponse(response =>
@@ -62,7 +64,7 @@ async function waitForTerminalTurn(
   );
 }
 
-async function submitPrompt(page: Page, prompt: string, path: RegExp) {
+async function submitPrompt(page: Page, prompt: string, path: RegExp, expectedStatus: 201 | 202) {
   const responsePromise = page.waitForResponse(
     response =>
       response.request().method() === 'POST' && path.test(new URL(response.url()).pathname)
@@ -77,7 +79,7 @@ async function submitPrompt(page: Page, prompt: string, path: RegExp) {
   await submit.click();
 
   const response = await responsePromise;
-  expect(response.status()).toBe(202);
+  expect(response.status()).toBe(expectedStatus);
   return {
     result: (await response.json()) as ConversationTurnResponse,
     stream: await streamPromise,
@@ -91,17 +93,32 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
 }) => {
   await page.goto('/');
 
-  const initial = await submitPrompt(page, scenarioPrompts.comparison, /\/api\/v1\/conversations$/);
+  const initial = await submitPrompt(
+    page,
+    scenarioPrompts.comparison,
+    /\/api\/v1\/conversations$/,
+    201
+  );
+  expectDeploymentSummaries(initial.result, defaultDeploymentIds);
   await initial.stream.finished();
   await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 
+  const continuationRequestPromise = page.waitForRequest(
+    request =>
+      request.method() === 'POST' &&
+      /\/api\/v1\/conversations\/[^/]+\/turns$/.test(new URL(request.url()).pathname)
+  );
   const continuation = await submitPrompt(
     page,
     scenarioPrompts.continuationBusy,
-    /\/api\/v1\/conversations\/[^/]+\/turns$/
+    /\/api\/v1\/conversations\/[^/]+\/turns$/,
+    202
   );
+  const continuationRequest = await continuationRequestPromise;
+  expect(continuationRequest.postDataJSON()).not.toHaveProperty('deploymentIds');
   expect(continuation.result.conversation.id).toBe(initial.result.conversation.id);
   expect(continuation.result.turn.ordinal).toBe(2);
+  expectDeploymentSummaries(continuation.result, defaultDeploymentIds);
 
   let otherConversationId: string | undefined;
   let otherTurnId: string | undefined;
@@ -131,7 +148,7 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
         prompt: scenarioPrompts.comparison,
       },
     });
-    expect(otherConversation.status()).toBe(202);
+    expect(otherConversation.status()).toBe(201);
     const otherResult = (await otherConversation.json()) as ConversationTurnResponse;
     otherConversationId = otherResult.conversation.id;
     otherTurnId = otherResult.turn.id;
@@ -157,7 +174,7 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
   await expect(page.getByRole('article', { name: 'Turno 1' })).toBeVisible();
   await expect(secondTurn).toContainText(scenarioPrompts.continuationBusy);
   for (const response of fakeModelResponses) {
-    const tabName = TAB_NAMES[response.slot];
+    const tabName = `${RESPONSE_SLOT_LABELS[response.slot]} · ${response.displayName}`;
     await secondTurn.getByRole('tab', { name: tabName, exact: true }).click();
     const panel = secondTurn.getByRole('tabpanel', { name: tabName });
     await expect(panel).toContainText(response.content);
@@ -169,10 +186,13 @@ test('continues one conversation with isolated slots, scoped busy state, and bou
   const protectedTurn = await submitPrompt(
     page,
     scenarioPrompts.contextProtection,
-    /\/api\/v1\/conversations\/[^/]+\/turns$/
+    /\/api\/v1\/conversations\/[^/]+\/turns$/,
+    202
   );
   expect(protectedTurn.result.turn.ordinal).toBe(3);
+  expectDeploymentSummaries(protectedTurn.result, defaultDeploymentIds);
   await protectedTurn.stream.finished();
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 
   const thirdTurn = page.getByRole('article', { name: 'Turno 3' });
   await expect(thirdTurn).toContainText(scenarioPrompts.contextProtection);

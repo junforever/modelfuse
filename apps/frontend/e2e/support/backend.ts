@@ -19,7 +19,6 @@ import type {
   CredentialEnvironmentVariable,
   DeploymentDefinition,
   ProviderId,
-  ResponseSlot,
 } from '../../../backend/src/types/conversations.js';
 import type {
   LlmProvider,

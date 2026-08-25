@@ -32,7 +32,7 @@ export async function submitPrompt(page: Page, prompt: string, endpoint: RegExp)
   await submit.click();
 
   const response = await responsePromise;
-  expect(response.status()).toBe(202);
+  expect(response.status()).toBe(201);
   return {
     result: (await response.json()) as ConversationTurnResponse,
     stream: await streamPromise,

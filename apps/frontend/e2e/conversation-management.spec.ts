@@ -1,12 +1,80 @@
-import { expect, fakeModelScenarios, test } from './fixtures/modelFuse';
+import type { Page } from '@playwright/test';
+
+import { RESPONSE_SLOT_LABELS } from '../src/features/conversations/types/conversation';
+import {
+  defaultDeploymentIds,
+  deploymentSummaries,
+  expect,
+  fakeModelScenarios,
+  test,
+} from './fixtures/modelFuse';
 import { E2E_BACKEND_ORIGIN } from './support/scenarios';
-import { submitPrompt, waitForTurnStream } from './support/journeys';
+import {
+  expectDeploymentSummaries,
+  submitPrompt,
+  waitForTurnStream,
+} from './support/journeys';
 
 const EVENTS_PATH = /\/api\/v1\/conversations\/[^/]+\/turns\/[^/]+\/events$/;
+const EXPECTED_DEPLOYMENTS = deploymentSummaries(defaultDeploymentIds);
 
 function ownedBusyPrompt(scenarioPrompt: string) {
   const owner = scenarioPrompt.slice(scenarioPrompt.indexOf('[run:'));
   return `G ${owner} ${fakeModelScenarios.continuationBusy.marker}`;
+}
+
+async function waitForTerminalTurn(
+  page: Page,
+  conversationId: string,
+  turnId: string
+): Promise<void> {
+  await page.evaluate(
+    ({ backendOrigin, conversationId: id, turnId: currentTurnId }) =>
+      new Promise<void>((resolve, reject) => {
+        const source = new EventSource(
+          `${backendOrigin}/api/v1/conversations/${id}/turns/${currentTurnId}/events`
+        );
+        let terminal = false;
+        let idle = false;
+
+        const finish = (): void => {
+          if (!terminal || !idle) return;
+          source.close();
+          resolve();
+        };
+
+        source.addEventListener('turn_update', event => {
+          const data = JSON.parse((event as MessageEvent<string>).data) as {
+            turn?: { status?: string };
+          };
+          terminal = ['completed', 'partial', 'failed'].includes(data.turn?.status ?? '');
+          finish();
+        });
+        source.addEventListener('busy_update', event => {
+          const data = JSON.parse((event as MessageEvent<string>).data) as {
+            hasWorkInProgress?: boolean;
+          };
+          idle = data.hasWorkInProgress === false;
+          finish();
+        });
+        source.addEventListener('error', () => {
+          source.close();
+          reject(new Error('Conversation SSE failed before terminal state'));
+        });
+      }),
+    { backendOrigin: E2E_BACKEND_ORIGIN, conversationId, turnId }
+  );
+}
+
+async function expectReadOnlyAssignment(page: Page): Promise<void> {
+  const assignment = page.getByRole('region', { name: 'Deployments de la conversación' });
+  for (const deployment of EXPECTED_DEPLOYMENTS) {
+    await expect(
+      assignment.getByText(RESPONSE_SLOT_LABELS[deployment.slot], { exact: true })
+    ).toBeVisible();
+    await expect(assignment.getByText(deployment.displayName, { exact: true })).toBeVisible();
+  }
+  await expect(assignment.getByRole('combobox')).toHaveCount(0);
 }
 
 test('renames during busy, blocks Delete, then deletes the conversation persistently', async ({
@@ -19,6 +87,8 @@ test('renames during busy, blocks Delete, then deletes the conversation persiste
 
   await page.goto('/');
   const { result } = await submitPrompt(page, prompt, /\/api\/v1\/conversations$/);
+  expectDeploymentSummaries(result, defaultDeploymentIds);
+  let terminalObserved = false;
   try {
     await expect(
       page.getByRole('status').filter({ hasText: 'Procesando respuestas' })
@@ -48,6 +118,7 @@ test('renames during busy, blocks Delete, then deletes the conversation persiste
     const reopenedStreamPromise = waitForTurnStream(page);
     await sidebar.getByRole('button', { name: renamedTitle, exact: true }).click();
     const reopenedStream = await reopenedStreamPromise;
+    await expectReadOnlyAssignment(page);
     await expect(
       page.getByRole('status').filter({ hasText: 'Procesando respuestas' })
     ).toBeVisible();
@@ -65,6 +136,10 @@ test('renames during busy, blocks Delete, then deletes the conversation persiste
     });
     expect(release.status()).toBe(204);
     await reopenedStream.finished();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Procesando respuestas' })
+    ).toBeHidden();
+    terminalObserved = true;
     await expect(deleteItem).toBeEnabled();
     await deleteItem.click();
 
@@ -83,9 +158,17 @@ test('renames during busy, blocks Delete, then deletes the conversation persiste
     await page.reload();
     await expect(sidebar.getByRole('button', { name: renamedTitle, exact: true })).toHaveCount(0);
   } finally {
-    await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
-      params: { prompt },
-    });
+    if (!terminalObserved) {
+      const terminalPromise = waitForTerminalTurn(
+        page,
+        result.conversation.id,
+        result.turn.id
+      );
+      await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
+        params: { prompt },
+      });
+      await terminalPromise;
+    }
   }
 });
 
@@ -99,7 +182,9 @@ test('shows a real-time update error when reopening a busy conversation loses SS
 
   await page.goto('/');
   const { result } = await submitPrompt(page, prompt, /\/api\/v1\/conversations$/);
+  expectDeploymentSummaries(result, defaultDeploymentIds);
   await page.route(events, route => route.abort('connectionfailed'));
+  let terminalObserved = false;
 
   try {
     await page.reload();
@@ -111,6 +196,7 @@ test('shows a real-time update error when reopening a busy conversation loses SS
       .getByRole('button', { name: prompt, exact: true })
       .click();
     await streamRequestPromise;
+    await expectReadOnlyAssignment(page);
 
     const streamError = page
       .getByRole('alert')
@@ -120,23 +206,27 @@ test('shows a real-time update error when reopening a busy conversation loses SS
     await page.getByRole('textbox', { name: 'Prompt' }).fill('No debe enviarse durante busy');
     await expect(page.getByRole('button', { name: 'Enviar' })).toBeDisabled();
 
+    await page.unroute(events);
+    const terminalPromise = waitForTerminalTurn(page, result.conversation.id, result.turn.id);
     const release = await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
       params: { prompt },
     });
     expect(release.status()).toBe(204);
-    await expect
-      .poll(async () => {
-        const response = await request.get(
-          `${E2E_BACKEND_ORIGIN}/api/v1/conversations/${result.conversation.id}`
-        );
-        return ((await response.json()) as { hasWorkInProgress: boolean }).hasWorkInProgress;
-      })
-      .toBe(false);
+    await terminalPromise;
+    terminalObserved = true;
     await expect(streamError).toBeVisible();
   } finally {
     await page.unroute(events);
-    await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
-      params: { prompt },
-    });
+    if (!terminalObserved) {
+      const terminalPromise = waitForTerminalTurn(
+        page,
+        result.conversation.id,
+        result.turn.id
+      );
+      await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
+        params: { prompt },
+      });
+      await terminalPromise;
+    }
   }
 });
