@@ -3,7 +3,7 @@ name: completed-scope-audit
 description: Perform a bounded, read-only static audit of an already implemented scope against explicit task criteria and normative artifacts.
 metadata:
   author: junforever
-  version: "1.0"
+  version: "1.1"
   category: read-only-audit
 ---
 
@@ -40,7 +40,13 @@ Use this protocol only when the task explicitly requests a read-only audit of an
 
 ## Checkpoints and partial results
 
-Emit one JSON progress report before the first group, after every completed group, after 15 minutes in an unfinished group, and immediately before the final report. Do not emit duplicate checkpoints for the same event.
+Progress is an external coordination requirement, not an internal note. The delegation MUST provide a canonical `coordinator_target` task identifier. Send each JSON progress report by invoking the runtime tool `collaboration.send_message` with `target` set to that exact identifier and `message` set to the JSON object. Do not use the final response, commentary, or an unaddressed message as a checkpoint. Do not wait for a coordinator reply unless the coordinator explicitly asks for one.
+
+Before reading any file, make the initial checkpoint call as a transport probe. If `coordinator_target` is missing, `collaboration.send_message` is unavailable, or the call is rejected, stop before auditing and emit a blocked final report with the phase, target state, and raw safe tool error.
+
+Send one JSON progress report within 90 seconds of starting, before reading the first group, after every completed group, every 5 minutes while a group remains active, after 10 read-only inspection operations, whichever comes first, immediately after a blocker or failed operation, and immediately before the final report. Do not emit duplicate checkpoints for the same event.
+
+If the messaging channel is unavailable, stop before auditing and emit a blocked report. A final response without the required external progress reports is incomplete evidence.
 
 Progress reports MUST use this shape:
 
@@ -49,6 +55,7 @@ Progress reports MUST use this shape:
   "report_type": "audit_progress",
   "task_id": "string",
   "status": "in_progress|blocked|incomplete",
+  "phase": "started|inventory|group_audit|finalizing",
   "completed_groups": ["string"],
   "current_group": "string|null",
   "files_scanned": 0,

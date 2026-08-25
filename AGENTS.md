@@ -146,6 +146,16 @@ Este protocolo es una regla del repositorio y aplica independientemente de la he
 - Formula la delegación inicial con suficiente alcance y acceptance criteria para minimizar followups.
 - Reactiva/envía followup a un agente únicamente por blocker concreto, acceptance criterion fallido, evidencia faltante o nuevo trabajo necesario. No lo reactives sólo para volver a explicar, resumir o confirmar trabajo ya terminado.
 
+### Watchdog de auditorías read-only de alcance completado
+
+- Cada delegación de `backend-completed-scope-auditor` o `frontend-completed-scope-auditor` debe incluir `coordinator_target` con el identificador canónico de la tarea del coordinador. El auditor debe enviar el checkpoint invocando `collaboration.send_message` con ese destino exacto; no se aceptan comentarios ni el informe final como sustituto.
+- Para un agente que use la skill común de auditoría de alcance completado, el primer checkpoint externo debe llegar dentro de 90 segundos de la delegación y antes de que el agente abra el primer grupo de archivos.
+- Si falta ese checkpoint, envía un único followup de estado y concede 90 segundos adicionales. Si no llega respuesta, interrumpe el agente y clasifica la tarea como `incomplete`; no ejecutes la auditoría desde el coordinador ni declares PASS.
+- Después del checkpoint inicial, espera un heartbeat externo cada 5 minutos, después de cada grupo o después de 10 operaciones de inspección, lo que ocurra primero. Dos intervalos consecutivos sin heartbeat permiten un único followup; si no hay respuesta dentro del intervalo siguiente, interrumpe y clasifica la tarea como `incomplete`.
+- El deadline total de una auditoría de alcance completado es de 60 minutos desde su primera operación de inspección. Al alcanzar ese límite, interrumpe el agente y conserva el último informe parcial como evidencia incompleta.
+- Un informe parcial debe incluir task ID, fase, grupos completados, grupo actual, archivos inspeccionados/total, cobertura, hallazgos acumulados, blockers y siguiente acción. Un resultado final sin el checkpoint inicial y los heartbeats requeridos no es evidencia suficiente para declarar la tarea completada.
+- Los checkpoints deben llegar por el canal de mensajería entre agentes; un agente listado como `running` sin mensajes no se considera progreso observable.
+
 ### Control del crecimiento de contexto
 
 - No pegues archivos completos, diffs completos, logs extensos o resultados de tests extensos en mensajes inter-agent si basta con indicar paths, líneas relevantes o un resumen verificable.
