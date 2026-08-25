@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createServer } from 'node:http';
 import process from 'node:process';
 
@@ -9,18 +10,32 @@ import { ContextBuilder } from '../../../backend/src/services/conversations/Cont
 import { ConversationService } from '../../../backend/src/services/conversations/ConversationService.js';
 import { TurnEventPublisher } from '../../../backend/src/services/conversations/turnEventPublisher.js';
 import { TurnOrchestrator } from '../../../backend/src/services/conversations/TurnOrchestrator.js';
+import { ModelCatalogService } from '../../../backend/src/services/llm/ModelCatalogService.js';
 import {
   assertModelFuseSchema,
   createIntegrationPool,
 } from '../../../backend/src/test/integration/testDatabase.js';
-import type { ResponseSlot } from '../../../backend/src/types/conversations.js';
+import type {
+  CredentialEnvironmentVariable,
+  DeploymentDefinition,
+  ProviderId,
+  ResponseSlot,
+} from '../../../backend/src/types/conversations.js';
 import type {
   LlmProvider,
   LlmProviderError,
   LlmRequest,
   LlmResult,
+  ProviderRegistry,
 } from '../../../backend/src/types/llm.js';
-import { E2E_FRONTEND_ORIGIN, fakeModelResponses, fakeModelScenarios } from './scenarios.js';
+import {
+  catalogScenarioProviders,
+  E2E_FRONTEND_ORIGIN,
+  fakeDeploymentCatalog,
+  fakeModelScenarios,
+  fakeResponseContent,
+  type CatalogScenario,
+} from './scenarios.js';
 
 const PORT = 3001;
 const HOST = '127.0.0.1';
@@ -28,6 +43,7 @@ const STARTED_AT = '2026-01-02T03:04:05.000Z';
 const COMPLETED_AT = '2026-01-02T03:04:06.000Z';
 const RUN_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const requestCatalogScenario = new AsyncLocalStorage<CatalogScenario>();
 
 const runId = process.env.MODELFUSE_E2E_RUN_ID;
 if (!runId || !RUN_ID_PATTERN.test(runId)) {
@@ -37,9 +53,20 @@ if (!runId || !RUN_ID_PATTERN.test(runId)) {
 process.env.NODE_ENV = 'test';
 process.env.FRONTEND_URL_LOCALHOST = E2E_FRONTEND_ORIGIN;
 
-const responseContent = Object.fromEntries(
-  fakeModelResponses.map(response => [response.slot, response.content])
-) as Record<ResponseSlot, string>;
+const credentialByProvider: Readonly<Record<ProviderId, CredentialEnvironmentVariable>> = {
+  openai: 'OPENAI_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
+  qwen: 'QWEN_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+};
+
+const deploymentDefinitions: readonly DeploymentDefinition[] = fakeDeploymentCatalog.map(
+  deployment => ({
+    ...deployment,
+    credentialEnv: credentialByProvider[deployment.providerId],
+  })
+);
 
 const continuationGates = new Map<
   string,
@@ -60,27 +87,19 @@ function continuationGate(prompt: string) {
 }
 
 class ScenarioLlmProvider implements LlmProvider {
-  readonly provider: string;
-  readonly model: string;
-  readonly context = {
-    limitTokens: 320,
-    measureInputTokens: (messages: LlmRequest['messages']) =>
-      messages.some(message =>
-        message.content.includes(fakeModelScenarios.contextProtection.marker)
-      )
-        ? {
-            kind: 'upper_bound' as const,
-            tokens: messages.reduce((total, message) => total + message.content.length, 0),
-            basis: 'E2E fake: one token per UTF-16 code unit',
-          }
-        : { kind: 'exact' as const, tokens: 1 },
-  };
-
   private readonly callsByPrompt = new Map<string, number>();
 
-  constructor(readonly slot: ResponseSlot) {
-    this.provider = `${slot}-e2e-fake`;
-    this.model = `${slot}-e2e-model`;
+  constructor(readonly providerId: ProviderId) {}
+
+  async measureInputTokens(
+    deployment: LlmRequest['deployment'],
+    messages: LlmRequest['messages']
+  ): Promise<number> {
+    if (!messages.some(message => message.content.includes(fakeModelScenarios.contextProtection.marker))) {
+      return 1;
+    }
+    const contentLength = messages.reduce((total, message) => total + message.content.length, 0);
+    return Math.ceil((contentLength * deployment.contextLimitTokens) / 400);
   }
 
   async generate(request: LlmRequest): Promise<LlmResult> {
@@ -90,47 +109,51 @@ class ScenarioLlmProvider implements LlmProvider {
       await continuationGate(prompt).promise;
     }
 
-    if (this.slot === 'openai' && prompt.includes(fakeModelScenarios.retry.marker)) {
+    if (request.slot === 'base-1' && prompt.includes(fakeModelScenarios.retry.marker)) {
       const attempt = (this.callsByPrompt.get(prompt) ?? 0) + 1;
       this.callsByPrompt.set(prompt, attempt);
-      if (attempt === 1) throw this.timeoutFailure();
-      return this.result(fakeModelScenarios.retry.recoveredOpenAiContent);
+      if (attempt === 1) throw this.timeoutFailure(request);
+      return this.result(fakeModelScenarios.retry.recoveredBase1Content, request);
     }
 
-    if (this.slot === 'openai' && prompt.includes(fakeModelScenarios.continueWithout.marker)) {
-      throw this.timeoutFailure();
+    if (request.slot === 'base-1' && prompt.includes(fakeModelScenarios.continueWithout.marker)) {
+      throw this.timeoutFailure(request);
     }
 
-    if (this.slot === 'qwen' && prompt.includes(fakeModelScenarios.retry.marker)) {
-      const hasRecoveredOpenAi = request.messages.some(message =>
-        message.content.includes(`openai:\n${fakeModelScenarios.retry.recoveredOpenAiContent}`)
+    if (request.slot === 'consolidator' && prompt.includes(fakeModelScenarios.retry.marker)) {
+      const hasRecoveredBase1 = request.messages.some(message =>
+        message.content.includes(`base-1:\n${fakeModelScenarios.retry.recoveredBase1Content}`)
       );
       return this.result(
-        hasRecoveredOpenAi
-          ? fakeModelScenarios.retry.reconsolidatedQwenContent
-          : fakeModelScenarios.retry.initialQwenContent
+        hasRecoveredBase1
+          ? fakeModelScenarios.retry.reconsolidatedContent
+          : fakeModelScenarios.retry.initialConsolidatorContent,
+        request
       );
     }
 
-    return this.result(responseContent[this.slot]);
+    return this.result(
+      fakeResponseContent(request.slot, request.deployment.deploymentId),
+      request
+    );
   }
 
-  private result(content: string): LlmResult {
+  private result(content: string, request: LlmRequest): LlmResult {
     return {
       content,
-      provider: this.provider,
-      model: this.model,
+      provider: request.deployment.providerId,
+      model: request.deployment.modelId,
       startedAt: STARTED_AT,
       completedAt: COMPLETED_AT,
     };
   }
 
-  private timeoutFailure(): LlmProviderError {
+  private timeoutFailure(request: LlmRequest): LlmProviderError {
     return {
       code: 'timeout',
-      safeMessage: 'The deterministic OpenAI provider timed out.',
-      provider: this.provider,
-      model: this.model,
+      safeMessage: 'The deterministic base-1 deployment timed out.',
+      provider: request.deployment.providerId,
+      model: request.deployment.modelId,
       recoverable: true,
     };
   }
@@ -143,12 +166,60 @@ const conversationRepository = new ConversationRepository(pool);
 const contextRepository = new ContextRepository(pool);
 const turnRepository = new TurnRepository(pool);
 const publisher = new TurnEventPublisher();
-const providerRegistry: Record<ResponseSlot, LlmProvider> = {
+const providerRegistry: ProviderRegistry = {
   openai: new ScenarioLlmProvider('openai'),
   google: new ScenarioLlmProvider('google'),
-  minimax: new ScenarioLlmProvider('minimax'),
-  qwen: new ScenarioLlmProvider('qwen'),
+  openrouter: new ScenarioLlmProvider('openrouter'),
 };
+
+function providersFor(scenario: CatalogScenario): ProviderRegistry {
+  const providers: Partial<Record<ProviderId, LlmProvider>> = {};
+  for (const providerId of catalogScenarioProviders[scenario]) {
+    const provider = providerRegistry[providerId];
+    if (provider) providers[providerId] = provider;
+  }
+  return providers;
+}
+
+const modelCatalogServices: Readonly<Record<CatalogScenario, ModelCatalogService>> = {
+  full: new ModelCatalogService(deploymentDefinitions, providersFor('full')),
+  'without-openai': new ModelCatalogService(
+    deploymentDefinitions,
+    providersFor('without-openai')
+  ),
+  'without-openrouter': new ModelCatalogService(
+    deploymentDefinitions,
+    providersFor('without-openrouter')
+  ),
+};
+
+class RequestModelCatalogService extends ModelCatalogService {
+  constructor() {
+    super([], {});
+  }
+
+  override listAvailableDeployments() {
+    return this.current().listAvailableDeployments();
+  }
+
+  override getAvailableDeployment(deploymentId: string) {
+    return this.current().getAvailableDeployment(deploymentId);
+  }
+
+  override resolveExplicitAssignment(assignment: Parameters<ModelCatalogService['resolveExplicitAssignment']>[0]) {
+    return this.current().resolveExplicitAssignment(assignment);
+  }
+
+  override resolveDefaultAssignment() {
+    return this.current().resolveDefaultAssignment();
+  }
+
+  private current(): ModelCatalogService {
+    return modelCatalogServices[requestCatalogScenario.getStore() ?? 'full'];
+  }
+}
+
+const modelCatalogService = new RequestModelCatalogService();
 const orchestrator = new TurnOrchestrator({
   turnRepository,
   providerRegistry,
@@ -159,8 +230,21 @@ const conversationService = new ConversationService({
   conversationRepository,
   turnRepository,
   orchestrator,
+  modelCatalogService,
 });
-const app = createApp({ conversationService, turnEventPublisher: publisher });
+const app = createApp({
+  conversationService,
+  turnEventPublisher: publisher,
+  providerRegistry,
+  modelCatalogService,
+});
+
+function catalogScenarioFromAuthorization(authorization: string | undefined): CatalogScenario {
+  const prefix = `Bearer modelfuse-e2e:${runId}:`;
+  if (!authorization?.startsWith(prefix)) return 'full';
+  const scenario = authorization.slice(prefix.length);
+  return scenario in catalogScenarioProviders ? (scenario as CatalogScenario) : 'full';
+}
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${HOST}:${PORT}`);
@@ -231,7 +315,10 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  app(request, response);
+  requestCatalogScenario.run(
+    catalogScenarioFromAuthorization(request.headers.authorization),
+    () => app(request, response)
+  );
 });
 
 await new Promise<void>((resolve, reject) => {

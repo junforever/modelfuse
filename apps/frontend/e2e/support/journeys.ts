@@ -1,7 +1,11 @@
 import type { Page, Response } from '@playwright/test';
 import { expect } from '@playwright/test';
 
-import type { ConversationTurnResponse } from '../../src/features/conversations/types/conversation';
+import type {
+  ConversationTurnResponse,
+  DeploymentIds,
+} from '../../src/features/conversations/types/conversation';
+import { deploymentSummaries } from './scenarios';
 
 export function waitForTurnStream(page: Page): Promise<Response> {
   return page.waitForResponse(
@@ -33,4 +37,11 @@ export async function submitPrompt(page: Page, prompt: string, endpoint: RegExp)
     result: (await response.json()) as ConversationTurnResponse,
     stream: await streamPromise,
   };
+}
+
+export function expectDeploymentSummaries(
+  result: ConversationTurnResponse,
+  deploymentIds: DeploymentIds
+): void {
+  expect(result.conversation.deployments).toEqual(deploymentSummaries(deploymentIds));
 }

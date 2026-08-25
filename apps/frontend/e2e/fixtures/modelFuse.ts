@@ -2,18 +2,42 @@ import process from 'node:process';
 
 import { test as base, expect, type Response } from '@playwright/test';
 
-import { E2E_BACKEND_ORIGIN, fakeModelResponses, fakeModelScenarios } from '../support/scenarios';
+import {
+  catalogScenarioAuthorization,
+  defaultDeploymentIds,
+  deploymentSummaries,
+  E2E_BACKEND_ORIGIN,
+  fakeDeploymentCatalog,
+  fakeModelResponses,
+  fakeModelScenarios,
+  mixedDeploymentIds,
+  type CatalogScenario,
+} from '../support/scenarios';
 
-export { fakeModelResponses, fakeModelScenarios };
+export {
+  defaultDeploymentIds,
+  deploymentSummaries,
+  fakeDeploymentCatalog,
+  fakeModelResponses,
+  fakeModelScenarios,
+  mixedDeploymentIds,
+};
 
 type ScenarioPrompts = Record<keyof typeof fakeModelScenarios, string>;
 
 type ModelFuseFixtures = {
+  catalogScenario: CatalogScenario;
+  deploymentCatalog: typeof fakeDeploymentCatalog;
   fakeProviders: typeof fakeModelResponses;
   scenarioPrompts: ScenarioPrompts;
 };
 
 export const test = base.extend<ModelFuseFixtures>({
+  catalogScenario: ['full', { option: true }],
+  deploymentCatalog: async ({ browserName }, provide) => {
+    void browserName;
+    await provide(fakeDeploymentCatalog);
+  },
   fakeProviders: async ({ browserName }, provide) => {
     void browserName;
     await provide(fakeModelResponses);
@@ -31,7 +55,12 @@ export const test = base.extend<ModelFuseFixtures>({
       contextProtection: `${fakeModelScenarios.contextProtection.prompt} ${owner}`,
     });
   },
-  page: async ({ page, request }, provide) => {
+  page: async ({ page, request, catalogScenario }, provide) => {
+    const runId = process.env.MODELFUSE_E2E_RUN_ID;
+    if (!runId) throw new Error('MODELFUSE_E2E_RUN_ID is required');
+    await page.setExtraHTTPHeaders({
+      authorization: catalogScenarioAuthorization(runId, catalogScenario),
+    });
     const conversationIds = new Set<string>();
     const captures: Promise<void>[] = [];
     const captureConversation = (response: Response) => {
