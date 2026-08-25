@@ -94,6 +94,12 @@ function response(config: InternalAxiosRequestConfig, data: unknown, status = 20
   };
 }
 
+function throwApiError(config: InternalAxiosRequestConfig, data: unknown, status = 503): never {
+  const error = new AxiosError('transport detail', 'ERR_BAD_REQUEST', config);
+  error.response = response(config, data, status);
+  throw error;
+}
+
 describe('conversations API contract', () => {
   it('maps catalog, detail, create and turn actions to their validated REST contracts', async () => {
     const requests: InternalAxiosRequestConfig[] = [];
@@ -222,5 +228,93 @@ describe('conversations API contract', () => {
       requestId: 'unavailable',
     });
     expect(JSON.stringify(failure)).not.toContain('database-password-must-not-leak');
+  });
+
+  it('preserves a strictly valid generic ApiError', async () => {
+    const apiError = {
+      code: 'CONVERSATION_BUSY',
+      message: 'La conversación está procesando otro turno',
+      requestId: 'request-123',
+    };
+    const adapter: AxiosAdapter = async config => throwApiError(config, apiError, 409);
+    const client = createApiClient({ baseURL: '/api/v1', adapter });
+
+    await expect(retryResponse(client, conversationId, turnId, 'base-1')).rejects.toEqual(apiError);
+  });
+
+  it('preserves a valid 503 DEFAULT_PROFILE_UNAVAILABLE error with unique missing IDs', async () => {
+    const apiError = {
+      code: 'DEFAULT_PROFILE_UNAVAILABLE',
+      message: 'No hay credenciales para el perfil por defecto',
+      requestId: 'request-503',
+      missingDeploymentIds: ['deployment-2', 'deployment-3'],
+    };
+    const adapter: AxiosAdapter = async config => throwApiError(config, apiError);
+    const client = createApiClient({ baseURL: '/api/v1', adapter });
+
+    await expect(createConversation(client, { clientRequestId, prompt: 'Primer prompt' })).rejects.toEqual(
+      apiError
+    );
+  });
+
+  it('rejects extra public-error fields and falls back to the safe error', async () => {
+    const payloads = [
+      {
+        code: 'CONVERSATION_BUSY',
+        message: 'La conversación está procesando otro turno',
+        requestId: 'request-extra-field-errors',
+        fieldErrors: { prompt: ['No válido'] },
+      },
+      {
+        code: 'CONVERSATION_BUSY',
+        message: 'La conversación está procesando otro turno',
+        requestId: 'request-extra-debug',
+        debug: 'internal detail',
+      },
+    ];
+    for (const payload of payloads) {
+      const payloadAdapter: AxiosAdapter = async config => throwApiError(config, payload, 409);
+      const payloadClient = createApiClient({ baseURL: '/api/v1', adapter: payloadAdapter });
+
+      await expect(retryResponse(payloadClient, conversationId, turnId, 'base-1')).rejects.toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'No se pudo completar la solicitud',
+        requestId: 'unavailable',
+      });
+    }
+
+  });
+
+  it('rejects DEFAULT_PROFILE_UNAVAILABLE errors without a unique non-empty ID list', async () => {
+    const payloads = [
+      {
+        code: 'DEFAULT_PROFILE_UNAVAILABLE',
+        message: 'No hay credenciales',
+        requestId: 'request-no-ids',
+      },
+      {
+        code: 'DEFAULT_PROFILE_UNAVAILABLE',
+        message: 'No hay credenciales',
+        requestId: 'request-empty-ids',
+        missingDeploymentIds: [],
+      },
+      {
+        code: 'DEFAULT_PROFILE_UNAVAILABLE',
+        message: 'No hay credenciales',
+        requestId: 'request-duplicate-ids',
+        missingDeploymentIds: ['deployment-2', 'deployment-2'],
+      },
+    ];
+
+    for (const payload of payloads) {
+      const adapter: AxiosAdapter = async config => throwApiError(config, payload);
+      const client = createApiClient({ baseURL: '/api/v1', adapter });
+
+      await expect(createConversation(client, { clientRequestId, prompt: 'Primer prompt' })).rejects.toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'No se pudo completar la solicitud',
+        requestId: 'unavailable',
+      });
+    }
   });
 });

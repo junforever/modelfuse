@@ -182,13 +182,13 @@ describe('DeploymentSelectors', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('announces duplicate deploymentIds and describes each affected selector', () => {
+  it('describes unavailable duplicate selections with both visible messages', () => {
     render(
       <DeploymentSelectors
         items={items}
         selection={{
-          'base-1': 'deployment-1',
-          'base-2': 'deployment-1',
+          'base-1': 'deployment-removed',
+          'base-2': 'deployment-removed',
           'base-3': 'deployment-3',
           consolidator: 'deployment-4',
         }}
@@ -198,10 +198,29 @@ describe('DeploymentSelectors', () => {
       />
     );
 
-    const error = 'Cada slot debe usar un deployment distinto.';
-    expect(screen.getByRole('alert')).toHaveTextContent(error);
-    expect(screen.getByRole('combobox', { name: 'Base 1' })).toHaveAccessibleDescription(error);
-    expect(screen.getByRole('combobox', { name: 'Base 2' })).toHaveAccessibleDescription(error);
+    const alerts = screen.getAllByRole('alert');
+    const unavailableAlert = alerts.find(alert =>
+      alert.textContent?.includes('Una selección ya no está disponible')
+    );
+    const duplicateAlert = alerts.find(alert =>
+      alert.textContent?.includes('Cada slot debe usar un deployment distinto')
+    );
+    expect(unavailableAlert).toBeDefined();
+    expect(duplicateAlert).toBeDefined();
+    const affectedSelectors = [
+      screen.getByRole('combobox', { name: 'Base 1' }),
+      screen.getByRole('combobox', { name: 'Base 2' }),
+    ];
+
+    expect(screen.getAllByRole('combobox')).toHaveLength(4);
+    for (const selector of affectedSelectors) {
+      const describedBy = selector.getAttribute('aria-describedby')?.split(' ') ?? [];
+      expect(describedBy).toHaveLength(2);
+      expect(describedBy).toEqual(
+        expect.arrayContaining([unavailableAlert!.id, duplicateAlert!.id])
+      );
+      expect(describedBy.every(id => document.getElementById(id))).toBe(true);
+    }
   });
 });
 

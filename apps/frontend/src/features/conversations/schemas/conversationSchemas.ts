@@ -13,6 +13,7 @@ import {
   type DeploymentCatalogItem,
   type DeploymentIds,
   type DeploymentSummaryTuple,
+  type DefaultProfileUnavailableError,
   type Modality,
   type ModelCatalogResponse,
   type ResponseSlot,
@@ -117,7 +118,7 @@ const responseCommonShape = {
   provider: z.string(),
   model: z.string(),
   recoverable: z.boolean(),
-  attemptNo: z.number().int().nonnegative(),
+  attemptNo: z.number().int().min(1),
   metadata: responseMetadataSchema,
   startedAt: dateTimeSchema.nullable(),
   completedAt: dateTimeSchema.nullable(),
@@ -258,12 +259,27 @@ export const turnPageSchema: z.ZodType<TurnPage> = z.strictObject({
   hasOlder: z.boolean(),
 });
 
-export const apiErrorSchema: z.ZodType<ApiError> = z.strictObject({
-  code: z.string(),
+const genericApiErrorSchema = z.strictObject({
+  code: z.string().refine(code => code !== 'DEFAULT_PROFILE_UNAVAILABLE'),
   message: z.string(),
   requestId: z.string(),
-  fieldErrors: z.record(z.string(), z.array(z.string())).optional(),
 });
+
+const defaultProfileUnavailableErrorSchema: z.ZodType<DefaultProfileUnavailableError> = z
+  .strictObject({
+    code: z.literal('DEFAULT_PROFILE_UNAVAILABLE'),
+    message: z.string(),
+    requestId: z.string(),
+    missingDeploymentIds: z
+      .array(nonBlankStringSchema)
+      .nonempty()
+      .refine(ids => new Set(ids).size === ids.length),
+  }) as z.ZodType<DefaultProfileUnavailableError>;
+
+export const apiErrorSchema: z.ZodType<ApiError | DefaultProfileUnavailableError> = z.union([
+  genericApiErrorSchema,
+  defaultProfileUnavailableErrorSchema,
+]);
 
 export const conversationTurnResponseSchema: z.ZodType<ConversationTurnResponse> = z.strictObject({
   conversation: conversationDetailSchema,

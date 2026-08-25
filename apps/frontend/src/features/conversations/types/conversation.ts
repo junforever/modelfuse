@@ -60,7 +60,11 @@ export interface ApiError {
   readonly code: string;
   readonly message: string;
   readonly requestId: string;
-  readonly fieldErrors?: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface DefaultProfileUnavailableError extends ApiError {
+  readonly code: 'DEFAULT_PROFILE_UNAVAILABLE';
+  readonly missingDeploymentIds: readonly [string, ...string[]];
 }
 
 export interface ModelResponseError {

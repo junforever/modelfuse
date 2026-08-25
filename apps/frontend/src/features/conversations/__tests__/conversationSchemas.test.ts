@@ -140,6 +140,15 @@ describe('frontend conversation contracts', () => {
         turn: { ...turn, responses: turn.responses.slice(0, 3) },
       }).success
     ).toBe(false);
+    expect(
+      turnSnapshotResponseSchema.safeParse({
+        ...snapshot,
+        turn: {
+          ...turn,
+          responses: [{ ...response('base-1'), attemptNo: 0 }, ...turn.responses.slice(1)],
+        },
+      }).success
+    ).toBe(false);
   });
 
   it('accepts only the strict canonical slot shape across UI, REST and SSE contracts', () => {

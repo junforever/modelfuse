@@ -46,6 +46,7 @@ export function DeploymentSelectors({
   onChange,
 }: DeploymentSelectorsProps) {
   const duplicateErrorId = useId();
+  const unavailableErrorId = useId();
   const availableDeploymentIds = new Set(items.map(item => item.deploymentId));
   const duplicateDeploymentIds = getDuplicateDeploymentIds(selection);
   const isEmpty = !isLoading && !isError && items.length === 0;
@@ -57,6 +58,7 @@ export function DeploymentSelectors({
   const hasUnavailableSelection = RESPONSE_SLOTS.some(
     slot => selection[slot] && !availableDeploymentIds.has(selection[slot])
   );
+  const unavailableSelectionMessageVisible = hasUnavailableSelection && !isLoading && !isError;
   const selectorsDisabled = disabled || isLoading || isError || isEmpty;
 
   return (
@@ -77,8 +79,8 @@ export function DeploymentSelectors({
           No hay deployments disponibles.
         </p>
       )}
-      {hasUnavailableSelection && !isLoading && !isError && (
-        <p role="alert" className="text-sm text-destructive">
+      {unavailableSelectionMessageVisible && (
+        <p id={unavailableErrorId} role="alert" className="text-sm text-destructive">
           Una selección ya no está disponible. Elige otro deployment para continuar.
         </p>
       )}
@@ -111,7 +113,16 @@ export function DeploymentSelectors({
               <SelectLabel>{SLOT_LABELS[slot]}</SelectLabel>
               <SelectTrigger
                 aria-invalid={selectedUnavailable || selectedDuplicate}
-                aria-describedby={selectedDuplicate ? duplicateErrorId : undefined}
+                aria-describedby={
+                  [
+                    selectedUnavailable && unavailableSelectionMessageVisible
+                      ? unavailableErrorId
+                      : undefined,
+                    selectedDuplicate ? duplicateErrorId : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
               >
                 <SelectValue placeholder="Selecciona un deployment" />
               </SelectTrigger>
