@@ -12,15 +12,34 @@ $scriptDirectory = $PSScriptRoot
 $repoRoot = Split-Path -Parent $scriptDirectory
 $configPath = Join-Path $scriptDirectory 'runtime.local.json'
 
+function Format-Command {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+
+    $formatted = $Arguments | ForEach-Object {
+        $argument = [string]$_
+        if ($argument -match '[\s"]') {
+            '"' + $argument.Replace('"', '\\"') + '"'
+        }
+        else {
+            $argument
+        }
+    }
+
+    return 'pnpm ' + ($formatted -join ' ')
+}
+
 if (-not (Test-Path -LiteralPath $configPath)) {
-    throw 'Runtime no inicializado. El coordinador debe ejecutar .\agent-scripts\initialize-runtime.ps1.'
+    throw "Runtime no inicializado.`nConfig esperada: $configPath`nAcción: ejecutar .\agent-scripts\initialize-runtime.ps1."
 }
 
 try {
     $runtime = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
 }
 catch {
-    throw 'runtime.local.json no es válido. El coordinador debe ejecutar initialize-runtime.ps1.'
+    throw "runtime.local.json no es válido.`nConfig: $configPath`nExcepción: $($_.Exception.Message)`nAcción: ejecutar initialize-runtime.ps1."
 }
 
 $requiredProperties = @('nodeExe', 'nodeDir', 'pnpmCmd', 'nodeVersion', 'pnpmVersion')
@@ -32,16 +51,16 @@ if ($missingProperties.Count -gt 0) {
 if (-not (Test-Path -LiteralPath $runtime.nodeExe) -or
     -not (Test-Path -LiteralPath $runtime.pnpmCmd) -or
     -not (Test-Path -LiteralPath (Join-Path $runtime.nodeDir 'node.exe'))) {
-    throw 'Las rutas del runtime ya no existen. El coordinador debe ejecutar initialize-runtime.ps1 -Force.'
+    throw "Las rutas del runtime ya no existen.`nNode: $($runtime.nodeExe)`nPnpm: $($runtime.pnpmCmd)`nNodeDir: $($runtime.nodeDir)`nAcción: ejecutar initialize-runtime.ps1 -Force."
 }
 
 $actualNodeVersion = (& $runtime.nodeExe --version 2>$null).Trim()
 $actualPnpmVersion = (& $runtime.pnpmCmd --version 2>$null).Trim()
 if ($actualNodeVersion -ne $runtime.nodeVersion -or $actualPnpmVersion -ne $runtime.pnpmVersion) {
-    throw 'Las versiones del runtime cambiaron. El coordinador debe ejecutar initialize-runtime.ps1 -Force.'
+    throw "Las versiones del runtime cambiaron.`nNode esperado/actual: $($runtime.nodeVersion) / $actualNodeVersion`nPnpm esperado/actual: $($runtime.pnpmVersion) / $actualPnpmVersion`nAcción: ejecutar initialize-runtime.ps1 -Force."
 }
 if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
-    throw 'Faltan argumentos de pnpm.'
+    throw 'Faltan argumentos de pnpm.`nUso: .\agent-scripts\run-pnpm.ps1 [opciones] -- <argumentos de pnpm>.'
 }
 
 # The first `--` is the PowerShell end-of-parameters marker for this wrapper.
@@ -50,7 +69,7 @@ if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
 if ($CommandArgs[0] -eq '--') {
     $CommandArgs = @($CommandArgs | Select-Object -Skip 1)
     if ($CommandArgs.Count -eq 0) {
-        throw 'El separador `--` debe ir seguido de argumentos de pnpm.'
+        throw 'El separador `--` debe ir seguido de argumentos de pnpm.`nComando recibido: .\agent-scripts\run-pnpm.ps1 --'
     }
 }
 
@@ -59,14 +78,16 @@ if ($EnvFile) {
         throw "No existe el archivo de entorno indicado: $EnvFile."
     }
 
+    $lineNumber = 0
     foreach ($line in Get-Content -LiteralPath $EnvFile) {
+        $lineNumber++
         $trimmed = $line.Trim()
         if (-not $trimmed -or $trimmed.StartsWith('#')) {
             continue
         }
 
         if ($trimmed -notmatch '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-            throw "Línea inválida en el archivo de entorno: $EnvFile."
+            throw "Línea inválida en el archivo de entorno.`nArchivo: $EnvFile`nLínea: $lineNumber`nAcción: corregir el formato NOMBRE=VALOR sin exponer el valor en el reporte."
         }
 
         $name = $Matches[1]
@@ -85,6 +106,10 @@ try {
 }
 finally {
     Pop-Location
+}
+
+if ($exitCode -ne 0) {
+    [Console]::Error.WriteLine("RUN_PNPM_FAILURE`nComando: $(Format-Command -Arguments $CommandArgs)`nExitCode: $exitCode`nEnvFile: $EnvFile")
 }
 
 exit $exitCode

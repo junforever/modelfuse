@@ -44,7 +44,7 @@ Para toda ejecución de implementación basada en un archivo `tasks.md`:
   - `UX` -> `product-designer`
 - Delega toda tarea de product code y tests a su owner declarado, respetando dependencias y orden de ejecución de `tasks.md`.
 - El agente principal actúa sólo como coordinador: puede inspeccionar contexto, delegar, seguir progreso, revisar evidencia y reportar resultados, pero no debe implementar ni modificar directamente product code o tests.
-- Si el agente owner requerido no existe o no está disponible, detén el trabajo afectado y reporta el bloqueo. No implementes la tarea directamente ni la reasignes a otro owner.
+- Si el agente owner requerido no existe o no está disponible, detén el trabajo afectado y reporta el bloqueo. No implementes la tarea directamente ni la reasignes a otro owner. El reporte no puede usar un mensaje genérico: debe conservar el identificador del perfil, la ruta de configuración resuelta, la etapa de activación que falló, el error original del loader, el exit code o código de error si existe, y las skills/rutas que no pudieron cargarse. Si el orquestador no expone alguno de esos datos, debe indicarlo explícitamente como `evidencia_no_disponible` y conservar el mensaje bruto recibido.
 
 ## Reglas obligatorias de eficiencia de tokens
 
@@ -81,6 +81,7 @@ Estas reglas priorizan reducir contexto innecesario, trabajo duplicado, waits re
   preventivo de remediación explícitamente autorizado se rige por los ciclos acotados
   definidos abajo y no sustituye esa ejecución final.
 - Tras una validación fallida, el owner debe aplicar el protocolo portable de remediación definido abajo. No se permiten reintentos por variaciones de sintaxis, binario o directorio sin un diagnóstico que los justifique.
+- Ningún wrapper, preflight, delegación o cierre de subagente debe sustituir una excepción, stderr, stdout, exit code o código de error por frases genéricas como "no se pudo completar". Todo bloqueo debe conservar el comando exacto seguro, la fase, el exit code, el mensaje original y la evidencia relevante, omitiendo únicamente secretos y valores sensibles. Si una capa no puede obtener alguno de esos campos, debe reportar el campo como `no_disponible` y conservar la razón.
 - Evita outputs masivos: usa comandos focalizados, filtros y extractos relevantes. No devuelvas logs completos cuando basten el error, resumen y evidencia necesaria.
 - Antes de solicitar una validación, el coordinador debe consultar la evidencia ya reportada por el owner y el estado de los archivos desde esa ejecución. Una validación exitosa del owner, incluido `git diff --check`, es evidencia suficiente para el coordinador salvo que haya cambios posteriores en los archivos validados, falte evidencia verificable o una integración cross-task exija una comprobación distinta. Revisar un diff para entenderlo no autoriza a repetir su validación.
 

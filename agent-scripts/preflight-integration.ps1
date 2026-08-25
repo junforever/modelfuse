@@ -22,6 +22,25 @@ function Stop-WithBlocker {
     throw "$Code`n$Message"
 }
 
+function Format-Command {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+
+    $formatted = $Arguments | ForEach-Object {
+        $argument = [string]$_
+        if ($argument -match '[\s"]') {
+            '"' + $argument.Replace('"', '\\"') + '"'
+        }
+        else {
+            $argument
+        }
+    }
+
+    return 'docker ' + ($formatted -join ' ')
+}
+
 function Invoke-DockerChecked {
     param(
         [Parameter(Mandatory)]
@@ -32,13 +51,35 @@ function Invoke-DockerChecked {
     )
 
     $stderrPath = [System.IO.Path]::GetTempFileName()
+    $commandText = Format-Command -Arguments $Arguments
     try {
         $output = @(& docker @Arguments 2> $stderrPath)
-        if ($LASTEXITCODE -ne 0) {
-            Stop-WithBlocker -Code $FailureCode -Message 'El comando de infraestructura requerido no pudo completarse.'
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            $stderr = if (Test-Path -LiteralPath $stderrPath) {
+                (Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue).Trim()
+            }
+            else {
+                ''
+            }
+            $stdout = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+            $details = @(
+                "Comando: $commandText"
+                "ExitCode: $exitCode"
+            )
+            if ($stdout) { $details += "Stdout: $stdout" }
+            if ($stderr) { $details += "Stderr: $stderr" }
+            Stop-WithBlocker -Code $FailureCode -Message ($details -join "`n")
         }
 
         return $output
+    }
+    catch {
+        if ($_.Exception.Message -match '^(BLOQUEO_DOCKER|BLOQUEO_INTEGRATION_ENV)') {
+            throw
+        }
+
+        Stop-WithBlocker -Code $FailureCode -Message "Comando: $commandText`nExcepción: $($_.Exception.Message)"
     }
     finally {
         if (Test-Path -LiteralPath $stderrPath) {
