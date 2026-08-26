@@ -3,7 +3,7 @@ name: completed-scope-audit
 description: Perform a bounded, read-only static audit of an already implemented scope against explicit task criteria and normative artifacts.
 metadata:
   author: junforever
-  version: "1.1"
+  version: "1.3"
   category: read-only-audit
 ---
 
@@ -40,13 +40,21 @@ Use this protocol only when the task explicitly requests a read-only audit of an
 
 ## Checkpoints and partial results
 
-Progress is an external coordination requirement, not an internal note. The delegation MUST provide a canonical `coordinator_target` task identifier. Send each JSON progress report by invoking the runtime tool `collaboration.send_message` with `target` set to that exact identifier and `message` set to the JSON object. Do not use the final response, commentary, or an unaddressed message as a checkpoint. Do not wait for a coordinator reply unless the coordinator explicitly asks for one.
+Progress is an external coordination requirement, not an internal note. The delegation MUST provide a canonical `coordinator_target` task identifier. In normal mode, send each JSON progress report by invoking the runtime tool `collaboration.send_message` with `target` set to that exact identifier and `message` set to the JSON object. Do not use commentary or an unaddressed message as a checkpoint.
 
-Before reading any file, make the initial checkpoint call as a transport probe. If `coordinator_target` is missing, `collaboration.send_message` is unavailable, or the call is rejected, stop before auditing and emit a blocked final report with the phase, target state, and raw safe tool error.
+Before reading any file, make the initial checkpoint call as a transport probe. If `coordinator_target` is missing, stop before auditing and emit a blocked final report with the phase, target state, and raw safe tool error.
+
+If `collaboration.send_message` is unavailable or rejects the target, switch to mailbox mode instead of blocking the task:
+
+1. On the current turn, do not inspect files. Emit one final `audit_progress` JSON with `status: "in_progress"`, `phase: "started"`, zero coverage, `blocker: "coordination_channel_unavailable"`, and `next_action: "await_coordinator_followup"`.
+2. The coordinator reactivates the same agent with one follow-up. On every mailbox turn, inspect exactly one bounded group, then emit one final `audit_progress` JSON containing the accumulated coverage, findings, blockers, and the next group. Do not inspect a second group in that turn.
+3. After the last group, emit the normal `audit_final` JSON. The coordinator must reactivate the agent only while the latest mailbox report has `status: "in_progress"` and `next_action` is not complete.
+
+Mailbox mode uses the same group, time, coverage, finding, and safe-output limits. It is the required fallback when the runtime lacks the collaboration tool; it is not a reason to classify the audit as incomplete.
 
 Send one JSON progress report within 90 seconds of starting, before reading the first group, after every completed group, every 5 minutes while a group remains active, after 10 read-only inspection operations, whichever comes first, immediately after a blocker or failed operation, and immediately before the final report. Do not emit duplicate checkpoints for the same event.
 
-If the messaging channel is unavailable, stop before auditing and emit a blocked report. A final response without the required external progress reports is incomplete evidence.
+In mailbox mode, the final `audit_progress` response is the checkpoint for that turn. It MUST include the accumulated findings table and the next group. A final response without the required progress evidence is incomplete evidence.
 
 Progress reports MUST use this shape:
 
@@ -132,6 +140,10 @@ Set `status` deterministically:
 - `incomplete`: any assigned group is unreviewed or blocked, regardless of finding count.
 
 If the time or file budget is exhausted, emit the final shape with `status: "incomplete"`; never claim `passes` or `passes_with_warnings` for partial coverage.
+
+## Human-readable findings table
+
+Every final audit response MUST include a Markdown table before the JSON evidence object. The table title MUST be `Hallazgos por severidad` and rows MUST be sorted in this order: `critical`, `high`, `medium`, `low`, `info`. Include one row per finding with these columns: `Severidad`, `ID`, `Ubicación`, `Categoría`, `Resumen`, and `Owner/retoma`. Use `file_path:line_start-line_end` in `Ubicación`. Do not omit, merge, or reorder findings. If there are no findings, include one row stating `Sin hallazgos`. Mailbox-mode progress responses MUST use the same table for `findings_so_far`.
 
 ## Safe output
 
