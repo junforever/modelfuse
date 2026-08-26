@@ -78,11 +78,8 @@ Do not use integration coverage when a direct unit test proves the same rule fas
 - Prefer at most one specialized skill per task. Combine skills only when the tested boundary genuinely crosses their concerns.
 
 🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
-- Runtime paths are owned by the coordinator. Do not resolve another Node/pnpm installation or repair `PATH` locally.
-- Every Node.js or pnpm command must run through `.\agent-scripts\run-pnpm.ps1`. If the wrapper fails, report the command/runtime blocker and stop.
-- The coordinator owns the Docker/Compose and integration-infrastructure preflight. For delegated work, consume its handoff evidence before editing or executing tests; it must identify the exact Compose file/project, required service states, Liquibase completion with exit code `0`, safe loopback test-database identity, migrated ModelFuse tables, and configured test ports.
-- If the coordinator does not provide current-block evidence for the exact integration target, stop with external `BLOQUEO_INTEGRATION_ENV` and request a corrected handoff; do not perform a duplicate preflight, search for alternate binaries/directories, start partial services, or run Vitest. The coordinator's preflight evidence is the prerequisite for this agent's environment use.
-- If a requested test command nevertheless reports a Docker daemon/CLI/socket failure, classify it as external `BLOQUEO_DOCKER`; classify database, migration, service, test-target, or port failures as external `BLOQUEO_INTEGRATION_ENV`. Stop without retrying the same command; repeat only after the coordinator confirms the external prerequisite was corrected.
+- Apply the universal runtime, Docker/Compose preflight, coordinator handoff, blocking, and command-gate rules in the repository's `AGENTS.md`; consume the current coordinator handoff before using integration infrastructure.
+- Do not run, repeat, or remediate Docker/Compose or integration-infrastructure preflight locally. If the handoff is missing or a prerequisite fails, stop and report the external blocker using the classifications in `AGENTS.md`.
 
 🔍 REPOSITORY AND CONTRACT DISCOVERY
 Before changing tests:
@@ -245,11 +242,11 @@ Fix integration-owned test or fixture defects. Report product, migration, or con
 10. Report exact commands, results, environment class, cleanup, assumptions, and product defects separately.
 
 ▶️ EXECUTION POLICY
-- Use `.\agent-scripts\run-pnpm.ps1` together with the repository's existing scripts.
+- Use the repository's supported commands and follow the wrapper, runtime, and command-gate rules in `AGENTS.md`.
 - Prefer non-interactive commands suitable for local and CI execution.
 - Select integration files or configured integration projects so unit and E2E suites are not run accidentally.
-- Start databases and fake services only through project-supported commands or fixtures.
-- Before running Vitest, read the lockfile and target workspace's `package.json`, then run the focused test from the repository root through `.\agent-scripts\run-pnpm.ps1 --filter <workspace> run test --run <relative-test-path>`; when the test requires `MODELFUSE_TEST_DATABASE_URL`, place `-EnvFile apps/backend/.env.integration` immediately after the wrapper path: `.\agent-scripts\run-pnpm.ps1 -EnvFile apps/backend/.env.integration --filter <workspace> run test --run <relative-test-path>`. If the workspace script cannot select one file, report a tooling blocker. Do not run a project or full suite except in the three cases defined in step 9.
+- Use project-supported commands or fixtures for test-owned non-Docker fake services. Docker/Compose-backed databases and services follow the coordinator-owned startup rules in `AGENTS.md`.
+- Before running Vitest, follow the focused-test command, workspace selection, `EnvFile`, and broader-suite rules in `AGENTS.md`. If the workspace script cannot select one file, report a tooling blocker.
 - Run database migration/rollback checks only against a target proven disposable.
 - Preserve configured worker counts unless diagnosing isolation; rerun normally before declaring parallel safety.
 - Record exact commands and exit status.

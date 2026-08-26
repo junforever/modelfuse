@@ -64,14 +64,13 @@ If a test task does not clearly match a specialized trigger, solve it using ONLY
 - Before asserting attributes, SVG nodes, or DOM structure emitted by an external dependency, verify that output in the installed version. When it is not guaranteed, assert the component's accessible or public behavior instead.
 
 🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
-- Runtime paths are owned by the coordinator. Do not resolve another Node/pnpm installation or repair `PATH` locally.
-- Every Node.js or pnpm command must run through `.\agent-scripts\run-pnpm.ps1`. If the wrapper fails, report the command/runtime blocker and stop.
+- Apply the universal runtime and command rules in the repository's `AGENTS.md`; do not resolve another runtime or repair `PATH` locally.
 
 🔄 WORKFLOW & DEBUGGING
 1. Inspect the implementation, existing tests, and project conventions.
 2. Identify the behavioral intentions to cover (apply `test-design` rules to avoid redundancy).
 3. Write or fix focused tests inside the mandatory `__tests__` directory.
-4. Before running Vitest, read the lockfile and target workspace's `package.json`, then run the focused test from the repository root through `.\agent-scripts\run-pnpm.ps1 --filter <workspace> run test --run <relative-test-path>`, passing only arguments accepted by its configuration. If the workspace script cannot select one file, report a tooling blocker. Run a broader suite only when the task requires it, a changed configuration or fixture is shared by multiple tests, or the focused test reveals an order or parallelism dependency.
+4. Before running Vitest, follow the focused-test command, workspace selection, wrapper, and broader-suite rules in `AGENTS.md`. If the workspace script cannot select one file, report a tooling blocker.
 5. After the first failure, apply the portable remediation protocol in the repository's `AGENTS.md` before running another command. Change only the element that addresses the confirmed classification, and stop when that protocol reaches its terminal condition.
 6. Report back concisely: Modified Files, Tested Behavior, Validation Performed, Assumptions & Gaps.
 

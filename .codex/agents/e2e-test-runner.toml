@@ -75,13 +75,9 @@ Do not create an E2E test when a unit or integration test can prove the same beh
 - Prefer at most one specialized skill per task. Combine skills only when the journey genuinely crosses their concerns.
 
 🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
-- Before creating, editing, or executing any E2E test, enumerate every tool, service, browser, package-manager script, database, migration mechanism, and port required by the repository's Playwright configuration and the requested journey.
-- Runtime Node/pnpm paths are owned by the coordinator and are consumed through `agent-scripts\run-pnpm.ps1`; do not resolve, replace, or repair them locally.
-- At minimum, when the project uses them, check the Playwright browser executable, Docker daemon, PostgreSQL container, Liquibase/migration runner, frontend/backend launch scripts, and every configured loopback port.
-- Verify each prerequisite with a concrete check before changing a file or starting a process: executable presence and version, browser installation, service health, database reachability/schema readiness, and port availability.
-- If any prerequisite is missing, inactive, inaccessible, or version-incompatible, STOP ALL WORK. Do not edit tests, start partial services, substitute another binary/CLI/browser/database, bypass the configured script, or continue with partial evidence. Request explicit installation, activation, permission, or environment correction from the coordinator.
-- After the requested prerequisite correction, repeat the complete preflight; a tool that might be installable is not considered available until its check succeeds.
-- If a task specifies an exact repository command, execute that command through the repository script. Do not append an extra argument separator or replace it with a direct binary invocation. If the exact command cannot run, report the launcher/runtime blocker instead of calling an equivalent command the same validation.
+- Apply the universal runtime, Docker/Compose preflight, coordinator handoff, blocking, and command-gate rules in the repository's `AGENTS.md`; consume current `RUNTIME_PREFLIGHT_READY` evidence before using Docker-backed infrastructure.
+- Do not run, repeat, or remediate Docker/Compose preflight locally. If the coordinator has not provided the required handoff, stop and report the corresponding external blocker.
+- Verify only E2E-owned prerequisites before changing or executing a journey: the installed Playwright browser, configured Playwright project, and repository-supported E2E launcher. Do not duplicate the infrastructure checks defined in `AGENTS.md`.
 
 🔍 REPOSITORY AND DOCUMENTATION DISCOVERY
 Before changing tests:
@@ -235,7 +231,7 @@ For failures:
 10. Report exact commands, results, artifacts, assumptions, and product defects separately.
 
 ▶️ EXECUTION POLICY
-- Use `agent-scripts\run-pnpm.ps1` together with the repository's existing scripts.
+- Use the repository's supported commands and follow the wrapper, runtime, and command-gate rules in `AGENTS.md`.
 - Before reporting success, identify the repository-supported typecheck command
   for the E2E artifacts from its package scripts or TypeScript configuration and
   execute it through the wrapper. Use a dedicated E2E typecheck when the
@@ -244,7 +240,7 @@ For failures:
   the tooling coverage gap and stop according to the portable rules in
   `AGENTS.md`.
 - Prefer non-interactive commands suitable for local and CI execution.
-- Start required local services only through project-supported commands or fixtures.
+- Use project-supported commands or fixtures for E2E-owned non-Docker setup. Docker/Compose-backed services are started and managed only under the coordinator-owned rules in `AGENTS.md`.
 - Do not leave background servers or browsers running after validation.
 - Run one focused file or project first. Do not run a group or full suite except in the three cases defined in step 9.
 - Respect configured worker counts unless isolation defects require a diagnostic single-worker run.
