@@ -10,6 +10,7 @@ import {
   deleteOwnedConversationRequests,
 } from '../test/integration/testDatabase.js';
 import type { UnsequencedTurnEvent } from '../services/conversations/turnEventPublisher.js';
+import type { ProviderRegistry } from '../types/llm.js';
 
 const LIFECYCLE_REQUEST_ID = '10000000-0000-4000-8000-000000000046';
 
@@ -132,7 +133,10 @@ describe('backend application lifecycle', () => {
     vi.doMock('../infrastructure/postgres/postgresPool.js', () => ({
       createPostgresPool: () => lifecyclePool,
     }));
-    vi.doMock('../infrastructure/llm/providerRegistry.js', () => ({ providerRegistry: providers }));
+    vi.doMock('../infrastructure/llm/providerRegistry.js', () => ({
+      createProviderRegistry: () => toProviderRegistry(providers),
+      providerRegistry: toProviderRegistry(providers),
+    }));
     vi.doMock('../services/conversations/turnEventPublisher.js', async importOriginal => {
       const actual =
         await importOriginal<typeof import('../services/conversations/turnEventPublisher.js')>();
@@ -237,8 +241,10 @@ describe('backend application lifecycle', () => {
         return pool;
       },
     }));
+    const providers = createControlledProviders();
     vi.doMock('../infrastructure/llm/providerRegistry.js', () => ({
-      providerRegistry: createControlledProviders(),
+      createProviderRegistry: () => toProviderRegistry(providers),
+      providerRegistry: toProviderRegistry(providers),
     }));
     vi.doMock('../services/conversations/recoverInterruptedTurns.js', () => ({
       recoverInterruptedTurns: vi.fn(async () => {
@@ -292,8 +298,10 @@ describe('backend application lifecycle', () => {
     vi.doMock('../infrastructure/postgres/postgresPool.js', () => ({
       createPostgresPool: createPool.mockReturnValue(pool),
     }));
+    const providers = createControlledProviders();
     vi.doMock('../infrastructure/llm/providerRegistry.js', () => ({
-      providerRegistry: createControlledProviders(),
+      createProviderRegistry: () => toProviderRegistry(providers),
+      providerRegistry: toProviderRegistry(providers),
     }));
     vi.doMock('../services/conversations/recoverInterruptedTurns.js', () => ({
       recoverInterruptedTurns,
@@ -351,4 +359,22 @@ function stubProductionEnvironment(): void {
     CONVERSATION_SIDEBAR_PAGE_SIZE: '20',
   } as const;
   for (const [name, value] of Object.entries(values)) vi.stubEnv(name, value);
+}
+
+function toProviderRegistry(providers: ReturnType<typeof createControlledProviders>): ProviderRegistry {
+  return {
+    openai: providers['base-1'],
+    google: providers['base-2'],
+    openrouter: {
+      providerId: 'openrouter',
+      measureInputTokens: (deployment, messages) => {
+        const provider = deployment.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
+        return provider.measureInputTokens(deployment, messages);
+      },
+      generate: request => {
+        const provider = request.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
+        return provider.generate(request);
+      },
+    },
+  };
 }
