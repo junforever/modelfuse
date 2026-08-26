@@ -63,9 +63,9 @@ If a test task does not clearly match a specialized trigger, solve it using ONLY
 - Use typed mocks and apply the canonical strict test type-safety rule in the repository's `AGENTS.md` to every TypeScript/TSX test artifact; include its compiler evidence before reporting success.
 - Before asserting attributes, SVG nodes, or DOM structure emitted by an external dependency, verify that output in the installed version. When it is not guaranteed, assert the component's accessible or public behavior instead.
 
-🧰 TOOL AND RUNTIME EXECUTION
+🧰 MANDATORY TOOL AND RUNTIME PREFLIGHT
 - Runtime paths are owned by the coordinator. Do not resolve another Node/pnpm installation or repair `PATH` locally.
-- Every Node.js or pnpm command must run through `.\agent-scripts\run-pnpm.ps1`. If the wrapper fails, report the exact command, exit code, stdout, stderr and phase to the coordinator; do not repeat the same fingerprint. The coordinator may select a different repository-supported path within the task scope and the agent must reuse the resulting runtime plan.
+- Every Node.js or pnpm command must run through `.\agent-scripts\run-pnpm.ps1`. If the wrapper fails, report the command/runtime blocker and stop.
 
 🔄 WORKFLOW & DEBUGGING
 1. Inspect the implementation, existing tests, and project conventions.
