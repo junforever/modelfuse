@@ -3,7 +3,7 @@ name: completed-scope-audit
 description: Perform a bounded, read-only static audit of an already implemented scope against explicit task criteria and normative artifacts.
 metadata:
   author: junforever
-  version: "1.3"
+  version: "1.4"
   category: read-only-audit
 ---
 
@@ -143,7 +143,7 @@ If the time or file budget is exhausted, emit the final shape with `status: "inc
 
 ## Human-readable findings table
 
-Every final audit response MUST include a Markdown table before the JSON evidence object. The table title MUST be `Hallazgos por severidad` and rows MUST be sorted in this order: `critical`, `high`, `medium`, `low`, `info`. Include one row per finding with these columns: `Severidad`, `ID`, `Ubicación`, `Categoría`, `Resumen`, and `Owner/retoma`. Use `file_path:line_start-line_end` in `Ubicación`. Do not omit, merge, or reorder findings. If there are no findings, include one row stating `Sin hallazgos`. Mailbox-mode progress responses MUST use the same table for `findings_so_far`.
+Every final audit response MUST include a Markdown table before the JSON evidence object. The table title MUST be `Hallazgos por severidad` and rows MUST be sorted in this order: `critical`, `high`, `medium`, `low`, `info`. Include one row per finding with these columns: `Severidad`, `ID`, `Ubicación`, `Categoría`, `Resumen`, `Sugerencia`, and `Owner/retoma`. Use `file_path:line_start-line_end` in `Ubicación`. Do not omit, merge, or reorder findings. If there are no findings, include one row stating `Sin hallazgos`. Mailbox-mode progress responses MUST use the same table for `findings_so_far`.
 
 ## Safe output
 
