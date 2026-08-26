@@ -51,30 +51,39 @@ describe('comparison workspace components', () => {
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs).toHaveLength(4);
-    expect(tabs.map(tab => tab.textContent)).toEqual(['OpenAI', 'Google', 'MiniMax', 'Qwen']);
-    expect(screen.getByRole('tabpanel', { name: 'OpenAI' })).toHaveTextContent(
+    expect(tabs.map(tab => tab.textContent)).toEqual([
+      'Base 1 · Model 1',
+      'Base 2 · Model 2',
+      'Base 3 · Model 3',
+      'Consolidador · Model 4',
+    ]);
+    expect(screen.getByRole('tabpanel', { name: 'Base 1 · Model 1' })).toHaveTextContent(
       'Respuesta exclusiva de OpenAI'
     );
     expect(screen.queryByText('Google no respondió')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('tab', { name: 'Google' }));
-    const googlePanel = screen.getByRole('tabpanel', { name: 'Google' });
+    await user.click(screen.getByRole('tab', { name: 'Base 2 · Model 2' }));
+    const googlePanel = screen.getByRole('tabpanel', { name: 'Base 2 · Model 2' });
     expect(googlePanel).toHaveTextContent('Google no respondió');
-    expect(within(googlePanel).getByRole('button', { name: 'Reintentar Google' })).toBeEnabled();
-    expect(within(googlePanel).getByRole('button', { name: 'Continuar sin Google' })).toBeEnabled();
-
-    await user.click(screen.getByRole('tab', { name: 'MiniMax' }));
-    const minimaxPanel = screen.getByRole('tabpanel', { name: 'MiniMax' });
-    expect(minimaxPanel).toHaveTextContent('MiniMax no disponible');
     expect(
-      within(minimaxPanel).queryByRole('button', { name: 'Reintentar MiniMax' })
-    ).not.toBeInTheDocument();
+      within(googlePanel).getByRole('button', { name: 'Reintentar Base 2 · Model 2' })
+    ).toBeEnabled();
     expect(
-      within(minimaxPanel).getByRole('button', { name: 'Continuar sin MiniMax' })
+      within(googlePanel).getByRole('button', { name: 'Continuar sin Base 2 · Model 2' })
     ).toBeEnabled();
 
-    await user.click(screen.getByRole('tab', { name: 'Qwen' }));
-    const qwenPanel = screen.getByRole('tabpanel', { name: 'Qwen' });
+    await user.click(screen.getByRole('tab', { name: 'Base 3 · Model 3' }));
+    const minimaxPanel = screen.getByRole('tabpanel', { name: 'Base 3 · Model 3' });
+    expect(minimaxPanel).toHaveTextContent('MiniMax no disponible');
+    expect(
+      within(minimaxPanel).queryByRole('button', { name: 'Reintentar Base 3 · Model 3' })
+    ).not.toBeInTheDocument();
+    expect(
+      within(minimaxPanel).getByRole('button', { name: 'Continuar sin Base 3 · Model 3' })
+    ).toBeEnabled();
+
+    await user.click(screen.getByRole('tab', { name: 'Consolidador · Model 4' }));
+    const qwenPanel = screen.getByRole('tabpanel', { name: 'Consolidador · Model 4' });
     expect(qwenPanel).toHaveTextContent('Consolidando…');
     expect(
       within(qwenPanel).queryByRole('button', { name: /Continuar sin/i })
@@ -117,22 +126,24 @@ describe('comparison workspace components', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Procesando respuestas');
     expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Reintentar OpenAI' })).toBeDisabled();
-    const continueButton = screen.getByRole('button', { name: 'Continuar sin OpenAI' });
+    expect(screen.getByRole('button', { name: 'Reintentar Base 1 · Model 1' })).toBeDisabled();
+    const continueButton = screen.getByRole('button', {
+      name: 'Continuar sin Base 1 · Model 1',
+    });
     expect(continueButton).toBeEnabled();
 
     await user.click(continueButton);
-    const dialog = screen.getByRole('dialog', { name: 'Continuar sin OpenAI' });
+    const dialog = screen.getByRole('dialog', { name: 'Continuar sin Base 1 · Model 1' });
     expect(dialog).toHaveTextContent(/permanente/i);
-    expect(dialog).toHaveTextContent(/no podrás reintentar OpenAI/i);
+    expect(dialog).toHaveTextContent(/no podrás reintentar Base 1 · Model 1/i);
     const confirm = within(dialog).getByRole('button', {
-      name: 'Confirmar continuar sin OpenAI',
+      name: 'Confirmar continuar sin Base 1 · Model 1',
     });
     expect(confirm).toHaveFocus();
 
     await user.click(confirm);
     expect(continueWithout).toHaveBeenCalledOnce();
-    expect(continueWithout).toHaveBeenCalledWith('openai');
+    expect(continueWithout).toHaveBeenCalledWith('base-1');
     expect(retry).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
   });
