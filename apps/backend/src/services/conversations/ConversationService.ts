@@ -55,11 +55,7 @@ export class ConversationService {
     );
     if (replay) {
       this.assertCreated(replay);
-      const committed = await this.requireCommittedTurn(
-        replay.conversationId,
-        replay.turnId,
-        replay.deployments
-      );
+      const committed = await this.requireCommittedTurn(replay.conversationId, replay.turnId);
       this.logReplay(committed.response);
       return committed.response;
     }
@@ -93,11 +89,7 @@ export class ConversationService {
       deployments,
     });
     this.assertCreated(created);
-    const committed = await this.requireCommittedTurn(
-      created.conversationId,
-      created.turnId,
-      created.deployments
-    );
+    const committed = await this.requireCommittedTurn(created.conversationId, created.turnId);
     if (created.kind === 'created') {
       this.launch(committed, false);
     } else {
@@ -137,11 +129,7 @@ export class ConversationService {
         );
       case 'created':
       case 'replay': {
-        const committed = await this.requireCommittedTurn(
-          created.conversationId,
-          created.turnId,
-          created.deployments
-        );
+        const committed = await this.requireCommittedTurn(created.conversationId, created.turnId);
         if (created.kind === 'created') this.launch(committed, false);
         else this.logReplay(committed.response);
         return committed.response;
@@ -310,12 +298,11 @@ export class ConversationService {
 
   private async requireCommittedTurn(
     conversationId: string,
-    turnId: string,
-    deployments?: ConversationDeploymentSnapshotTuple
+    turnId: string
   ): Promise<CommittedTurn> {
     const snapshot = await this.dependencies.turnRepository.getTurnSnapshot(conversationId, turnId);
     if (!snapshot) throw new ConversationError(404, 'TURN_NOT_FOUND', 'Turn not found.');
-    return this.completeSnapshot(snapshot, deployments);
+    return this.completeSnapshot(snapshot);
   }
 
   private completeSnapshot(
