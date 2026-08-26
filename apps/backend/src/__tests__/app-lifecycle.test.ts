@@ -163,7 +163,7 @@ describe('backend application lifecycle', () => {
         clientRequestId: LIFECYCLE_REQUEST_ID,
         prompt: 'Finish or cancel this tracked lifecycle job.',
       });
-      expect(accepted.status).toBe(202);
+      expect(accepted.status).toBe(201);
       await Promise.all([
         providers['base-1'].waitUntilCalled(),
         providers['base-2'].waitUntilCalled(),
