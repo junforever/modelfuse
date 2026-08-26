@@ -114,11 +114,52 @@ function Get-ServiceRow {
     )
 
     $row = @($Rows | Where-Object { $_.Service -eq $Service })
-    if ($row.Count -ne 1) {
-        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "El servicio Compose requerido no tiene una instancia única: $Service."
+    if ($row.Count -eq 1) {
+        return $row[0]
     }
 
-    return $row[0]
+    return $null
+}
+
+function Get-ServiceStateSummary {
+    param(
+        [object]$Service
+    )
+
+    if ($null -eq $Service) {
+        return 'no encontrado'
+    }
+
+    $state = if ($null -eq $Service.State) { 'no_disponible' } else { [string]$Service.State }
+    $health = if ($null -eq $Service.Health -or -not [string]$Service.Health) { 'no_disponible' } else { [string]$Service.Health }
+    $exitCode = if ($null -eq $Service.ExitCode) { 'no_disponible' } else { [string]$Service.ExitCode }
+    return "State=$state Health=$health ExitCode=$exitCode"
+}
+
+function Get-ComposeServiceRows {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$ComposePrefix
+    )
+
+    $rowsOutput = Invoke-DockerChecked -Arguments ($ComposePrefix + @('ps', '-a', '--format', 'json')) -FailureCode 'BLOQUEO_INTEGRATION_ENV'
+    if (-not (($rowsOutput -join "`n").Trim())) {
+        return @()
+    }
+
+    try {
+        return @(
+            foreach ($row in $rowsOutput) {
+                $rowText = ([string]$row).Trim()
+                if ($rowText) {
+                    $rowText | ConvertFrom-Json
+                }
+            }
+        )
+    }
+    catch {
+        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "No se pudo interpretar el estado seguro de los servicios Compose. Detalle: $($_.Exception.Message)"
+    }
 }
 
 $composePath = $null
@@ -173,34 +214,48 @@ try {
 
     [void](Invoke-DockerChecked -Arguments ($composePrefix + @('config', '--quiet')) -FailureCode 'BLOQUEO_INTEGRATION_ENV')
 
-    $rowsOutput = Invoke-DockerChecked -Arguments ($composePrefix + @('ps', '-a', '--format', 'json')) -FailureCode 'BLOQUEO_INTEGRATION_ENV'
-    $rowsJson = ($rowsOutput -join "`n").Trim()
-    if (-not $rowsJson) {
-        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message 'El proyecto Compose de integración no tiene servicios creados.'
-    }
+    $maxSnapshots = 6
+    $snapshotIntervalSeconds = 10
+    $lastPostgresSummary = 'no comprobado'
+    $lastLiquibaseSummary = 'no comprobado'
+    $servicesReady = $false
 
-    try {
-        $serviceRows = @(
-            foreach ($row in $rowsOutput) {
-                $rowText = ([string]$row).Trim()
-                if ($rowText) {
-                    $rowText | ConvertFrom-Json
+    for ($snapshot = 1; $snapshot -le $maxSnapshots; $snapshot++) {
+        $serviceRows = @(Get-ComposeServiceRows -ComposePrefix $composePrefix)
+        $postgres = Get-ServiceRow -Rows $serviceRows -Service $PostgresService
+        $liquibase = Get-ServiceRow -Rows $serviceRows -Service $LiquibaseService
+        $lastPostgresSummary = Get-ServiceStateSummary -Service $postgres
+        $lastLiquibaseSummary = Get-ServiceStateSummary -Service $liquibase
+
+        if ($null -ne $postgres) {
+            $postgresState = [string]$postgres.State
+            $postgresHealth = [string]$postgres.Health
+            if ($postgresState -eq 'exited') {
+                Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "PostgreSQL terminó antes de estar listo. Snapshot $snapshot/$maxSnapshots. Estado: $lastPostgresSummary"
+            }
+            if ($postgresHealth -eq 'unhealthy') {
+                Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "El healthcheck de PostgreSQL falló. Snapshot $snapshot/$maxSnapshots. Estado: $lastPostgresSummary"
+            }
+
+            if ($postgresHealth -eq 'healthy' -and $null -ne $liquibase) {
+                $liquibaseState = [string]$liquibase.State
+                if ($liquibaseState -eq 'exited') {
+                    if ([int]$liquibase.ExitCode -ne 0) {
+                        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "Liquibase terminó con error. Snapshot $snapshot/$maxSnapshots. Estado: $lastLiquibaseSummary"
+                    }
+                    $servicesReady = $true
+                    break
                 }
             }
-        )
-    }
-    catch {
-        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "No se pudo interpretar el estado seguro de los servicios Compose. Detalle: $($_.Exception.Message)"
+        }
+
+        if ($snapshot -lt $maxSnapshots) {
+            Start-Sleep -Seconds $snapshotIntervalSeconds
+        }
     }
 
-    $postgres = Get-ServiceRow -Rows $serviceRows -Service $PostgresService
-    if ([string]$postgres.Health -ne 'healthy') {
-        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message 'PostgreSQL no está healthy.'
-    }
-
-    $liquibase = Get-ServiceRow -Rows $serviceRows -Service $LiquibaseService
-    if ([string]$liquibase.State -ne 'exited' -or [int]$liquibase.ExitCode -ne 0) {
-        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message 'Liquibase no terminó correctamente.'
+    if (-not $servicesReady) {
+        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "Timeout esperando los servicios de integración tras $maxSnapshots snapshots cada $snapshotIntervalSeconds segundos. PostgreSQL: $lastPostgresSummary. Liquibase: $lastLiquibaseSummary."
     }
 
     $publishedPortOutput = Invoke-DockerChecked -Arguments ($composePrefix + @('port', $PostgresService, '5432')) -FailureCode 'BLOQUEO_INTEGRATION_ENV'
@@ -223,6 +278,7 @@ try {
     Write-Output "Database: loopback / $databaseName"
     Write-Output "Port: $($databaseUri.Port)"
     Write-Output 'Schema: ready'
+    Write-Output "Snapshots: $snapshot/$maxSnapshots (intervalo ${snapshotIntervalSeconds}s)"
 }
 catch {
     Write-Error $_.Exception.Message
