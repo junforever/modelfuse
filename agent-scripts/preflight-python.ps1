@@ -33,6 +33,19 @@ function Format-Command {
     return $formatted -join ' '
 }
 
+function Get-TrimmedText {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) {
+        return ''
+    }
+
+    return ([string]$Value).Trim()
+}
+
 function Stop-Preflight {
     param(
         [Parameter(Mandatory)]
@@ -74,11 +87,21 @@ function Add-Candidate {
 
     $resolvedPath = $Path
     if (-not [System.IO.Path]::IsPathRooted($resolvedPath)) {
-        $command = Get-Command $resolvedPath -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -eq $command) {
+        $commands = @(Get-Command $resolvedPath -All -ErrorAction SilentlyContinue)
+        if ($commands.Count -eq 0) {
             return
         }
-        $resolvedPath = if ($command.Source) { $command.Source } else { $command.Path }
+
+        foreach ($command in $commands) {
+            $commandPath = if ($command.Source) { $command.Source } else { $command.Path }
+            if ($commandPath -and (Test-Path -LiteralPath $commandPath -PathType Leaf)) {
+                $fullPath = (Get-Item -LiteralPath $commandPath).FullName
+                if (-not $Candidates.Contains($fullPath)) {
+                    [void]$Candidates.Add($fullPath)
+                }
+            }
+        }
+        return
     }
 
     if ($resolvedPath -and (Test-Path -LiteralPath $resolvedPath -PathType Leaf)) {
@@ -102,7 +125,7 @@ function Invoke-Python {
         $output = @(& $Path @Arguments 2> $stderrPath)
         $exitCode = $LASTEXITCODE
         $stderr = if (Test-Path -LiteralPath $stderrPath) {
-            (Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue).Trim()
+            Get-TrimmedText -Value (Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue)
         }
         else {
             ''
@@ -111,7 +134,7 @@ function Invoke-Python {
         [pscustomobject]@{
             Command = Format-Command -Path $Path -Arguments $Arguments
             ExitCode = $exitCode
-            Stdout = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+            Stdout = Get-TrimmedText -Value (($output | ForEach-Object { [string]$_ }) -join "`n")
             Stderr = $stderr
         }
     }
@@ -120,7 +143,11 @@ function Invoke-Python {
             Command = Format-Command -Path $Path -Arguments $Arguments
             ExitCode = -1
             Stdout = ''
-            Stderr = $_.Exception.Message
+            Stderr = @(
+                "ExceptionType: $($_.Exception.GetType().FullName)"
+                "Exception: $($_.Exception.Message)"
+                "ScriptStackTrace: $($_.ScriptStackTrace)"
+            ) -join "`n"
         }
     }
     finally {
@@ -154,8 +181,10 @@ try {
 
     $versionResult = $null
     $pythonPath = $null
+    $probeResults = [System.Collections.Generic.List[object]]::new()
     foreach ($candidate in $candidates) {
         $probe = Invoke-Python -Path $candidate -Arguments @('--version')
+        [void]$probeResults.Add($probe)
         $versionText = @($probe.Stdout, $probe.Stderr) | Where-Object { $_ } | Select-Object -First 1
         if ($probe.ExitCode -eq 0 -and $versionText -match '^Python\s+(\d+\.\d+\.\d+)') {
             $pythonPath = $candidate
@@ -170,7 +199,17 @@ try {
 
     if ($null -eq $versionResult) {
         $candidateList = $candidates -join '; '
-        Stop-Preflight -Code 'BLOQUEO_RUNTIME' -Message "Los candidatos Python no pudieron ejecutar --version. Candidatos inspeccionados: $candidateList" -Command 'python --version'
+        $probeDetails = @(
+            $probeResults | ForEach-Object {
+                @(
+                    "Command: $($_.Command)"
+                    "ExitCode: $($_.ExitCode)"
+                    "Stdout: $($_.Stdout)"
+                    "Stderr: $($_.Stderr)"
+                ) -join "`n"
+            }
+        ) -join "`n---`n"
+        Stop-Preflight -Code 'BLOQUEO_RUNTIME' -Message "Los candidatos Python no pudieron ejecutar --version. Candidatos inspeccionados: $candidateList" -Command 'python --version' -Stdout $probeDetails
     }
 
     if ($MinimumVersion) {
