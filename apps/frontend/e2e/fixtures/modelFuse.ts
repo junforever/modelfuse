@@ -65,7 +65,7 @@ export const test = base.extend<ModelFuseFixtures>({
     const captures: Promise<void>[] = [];
     const captureConversation = (response: Response) => {
       if (
-        response.status() !== 202 ||
+        response.status() !== 201 ||
         response.request().method() !== 'POST' ||
         !new URL(response.url()).pathname.endsWith('/api/v1/conversations')
       ) {
