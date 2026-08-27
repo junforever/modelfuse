@@ -28,16 +28,17 @@ vi.mock('../../../utils/logger.js', () => ({
 describe('ConversationService background execution', () => {
   it('commits the complete canonical assignment and reads it back before provider work starts', async () => {
     const trace: string[] = [];
-    const deployments = deploymentSnapshots();
+    const catalogDeployments = deploymentSnapshots();
+    const persistedDeployments = defaultDeploymentSnapshots();
     const committed = deferred<{
       kind: 'created';
       conversationId: string;
       turnId: string;
       deployments: ConversationDeploymentSnapshotTuple;
     }>();
-    const stored = storedTurnSnapshot(deployments);
+    const stored = storedTurnSnapshot(persistedDeployments);
     const deploymentIds = Object.fromEntries(
-      deployments.map(({ slot, deploymentId }) => [slot, deploymentId])
+      catalogDeployments.map(({ slot, deploymentId }) => [slot, deploymentId])
     ) as unknown as DeploymentAssignment;
     const createConversation = vi.fn(
       (input: {
@@ -51,7 +52,7 @@ describe('ConversationService background execution', () => {
           clientRequestId: stored.turn.clientRequestId,
           prompt: stored.turn.prompt,
           title: stored.turn.prompt,
-          deployments,
+          deployments: catalogDeployments,
         });
         return committed.promise;
       }
@@ -72,7 +73,10 @@ describe('ConversationService background execution', () => {
       }),
     } as unknown as TurnOrchestrator;
     const modelCatalogService = {
-      resolveExplicitAssignment: vi.fn(() => ({ kind: 'resolved', deployments })),
+      resolveExplicitAssignment: vi.fn(() => ({
+        kind: 'resolved',
+        deployments: catalogDeployments,
+      })),
     } as unknown as ModelCatalogService;
     const service = new ConversationService({
       conversationRepository,
@@ -93,19 +97,17 @@ describe('ConversationService background execution', () => {
       kind: 'created',
       conversationId: stored.conversation.id,
       turnId: stored.turn.id,
-      deployments,
+      deployments: persistedDeployments,
     });
     const result = await creation;
     await service.stop();
 
     expect(trace).toEqual(['transaction', 'read:turn', 'provider-work']);
-    expect(result.conversation.deployments.map(({ slot }) => slot)).toEqual([
-      'base-1',
-      'base-2',
-      'base-3',
-      'consolidator',
-    ]);
-    expect(orchestrator.executeTurn).toHaveBeenCalledWith(expect.objectContaining({ deployments }));
+    expect(result.conversation.deployments).toEqual(publicDeployments(persistedDeployments));
+    expect(result.conversation.deployments).not.toEqual(publicDeployments(catalogDeployments));
+    expect(orchestrator.executeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ deployments: persistedDeployments })
+    );
   });
 
   it('uses the exact four-slot default when deploymentIds are omitted', async () => {
