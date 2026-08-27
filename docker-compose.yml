@@ -1,14 +1,18 @@
 services:
   postgres_template:
     image: postgres:16-alpine
-    container_name: dev_postgres_template
+    container_name: postgres_modelfuse_dev
     restart: unless-stopped
     env_file:
       - ./apps/backend/.env
     ports:
-      - '5432:5432'
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-db_dev}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-db_dev}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -20,12 +24,12 @@ services:
 
   pgadmin_template:
     image: dpage/pgadmin4:latest
-    container_name: dev_pgadmin_template
+    container_name: pgadmin_modelfuse_dev
     restart: unless-stopped
     env_file:
       - ./apps/backend/.env
     ports:
-      - '8080:80'
+      - "8080:80"
     depends_on:
       postgres_template:
         condition: service_healthy
@@ -36,7 +40,7 @@ services:
 
   liquibase_template:
     image: liquibase/liquibase:4.30.0
-    container_name: dev_liquibase_template
+    container_name: liquibase_modelfuse_dev
     env_file:
       - ./apps/backend/.env
     volumes:
@@ -49,7 +53,7 @@ services:
       - --password=${POSTGRES_PASSWORD:-postgres}
       - update
     # This is a one-shot migration job; readiness is its successful exit, not a long-lived healthcheck.
-    restart: 'no'
+    restart: "no"
     depends_on:
       postgres_template:
         condition: service_healthy
