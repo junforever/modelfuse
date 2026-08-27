@@ -14,8 +14,8 @@ export const CANONICAL_SLOTS = ['base-1', 'base-2', 'base-3', 'consolidator'] as
 export const TEST_DEPLOYMENT_SNAPSHOTS = [
   snapshot('base-1', 'openai'),
   snapshot('base-2', 'google'),
-  snapshot('base-3', 'minimax'),
-  snapshot('consolidator', 'qwen'),
+  snapshot('base-3', 'openrouter'),
+  snapshot('consolidator', 'openrouter'),
 ] as const satisfies ConversationDeploymentSnapshotTuple;
 
 export const TEST_DEPLOYMENT_SUMMARIES = TEST_DEPLOYMENT_SNAPSHOTS.map(

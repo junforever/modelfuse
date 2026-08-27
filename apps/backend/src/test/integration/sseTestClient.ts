@@ -8,48 +8,54 @@ export interface ParsedSseEvent {
 
 export async function openSse(app: Express, path: string) {
   const server = createServer(app);
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
 
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Expected an ephemeral TCP address');
+    const address = server.address();
+    if (!address || typeof address === 'string')
+      throw new Error('Expected an ephemeral TCP address');
 
-  const abort = new AbortController();
-  const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
-    signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5_000)]),
-  });
-  const body = response.body;
-  if (!body) throw new Error('Expected SSE response body');
-  const reader = body.getReader();
+    const abort = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
+      signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5_000)]),
+    });
+    const body = response.body;
+    if (!body) throw new Error('Expected SSE response body');
+    const reader = body.getReader();
 
-  let buffer = '';
-  const decoder = new TextDecoder();
+    let buffer = '';
+    const decoder = new TextDecoder();
 
-  async function nextEvent(): Promise<ParsedSseEvent | null> {
-    while (true) {
-      const boundary = buffer.indexOf('\n\n');
-      if (boundary >= 0) {
-        const block = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        const parsed = parseBlock(block);
-        if (parsed) return parsed;
+    async function nextEvent(): Promise<ParsedSseEvent | null> {
+      while (true) {
+        const boundary = buffer.indexOf('\n\n');
+        if (boundary >= 0) {
+          const block = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const parsed = parseBlock(block);
+          if (parsed) return parsed;
+        }
+
+        const chunk = await reader.read();
+        if (chunk.done) return null;
+        buffer += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, '\n');
       }
-
-      const chunk = await reader.read();
-      if (chunk.done) return null;
-      buffer += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, '\n');
     }
-  }
 
-  async function close(): Promise<void> {
-    abort.abort();
-    await reader.cancel().catch(() => undefined);
+    async function close(): Promise<void> {
+      abort.abort();
+      await reader.cancel().catch(() => undefined);
+      await closeServer(server);
+    }
+
+    return { response, nextEvent, close, server };
+  } catch (error) {
     await closeServer(server);
+    throw error;
   }
-
-  return { response, nextEvent, close, server };
 }
 
 export async function closeServer(server: Server): Promise<void> {
