@@ -13,11 +13,13 @@ import type {
   ConversationTurnResponse,
   DeploymentIds,
   ResponseSlot,
-  Turn,
 } from '../types/conversation';
 import type { TurnEventSnapshot } from '../types/sse';
 import { HistoryTopSentinel } from '../components/HistoryTopSentinel';
-import { getDefaultDeploymentSelection, getDuplicateDeploymentIds } from '../components/deploymentSelectorUtils';
+import {
+  getDefaultDeploymentSelection,
+  getDuplicateDeploymentIds,
+} from '../components/deploymentSelectorUtils';
 
 interface Selection {
   readonly conversationId: string;
@@ -31,7 +33,7 @@ interface Timeline {
 
 function toSnapshot(
   result: ConversationTurnResponse,
-  lastEventSequence: number,
+  lastEventSequence: number
 ): TurnEventSnapshot {
   return {
     conversationId: result.conversation.id,
@@ -53,12 +55,14 @@ export function useConversationWorkspace(withHistory: boolean) {
   const queryClient = useQueryClient();
   const historyRef = useRef<HTMLDivElement>(null);
   const [apiClient] = useState(() =>
-    createApiClient({ baseURL: parseFrontendEnv(import.meta.env).apiBaseUrl }),
+    createApiClient({ baseURL: parseFrontendEnv(import.meta.env).apiBaseUrl })
   );
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
-  const [draftDeploymentSelection, setDraftDeploymentSelection] = useState<DeploymentIds | null>(null);
+  const [draftDeploymentSelection, setDraftDeploymentSelection] = useState<DeploymentIds | null>(
+    null
+  );
   const [draftGeneration, setDraftGeneration] = useState(0);
   const [streamGeneration, setStreamGeneration] = useState(0);
   const environment = parseFrontendEnv(import.meta.env);
@@ -107,10 +111,10 @@ export function useConversationWorkspace(withHistory: boolean) {
       const result = await getTurnSnapshot(
         apiClient,
         activeSelection.conversationId,
-        activeSelection.turnId,
+        activeSelection.turnId
       );
       const previous = queryClient.getQueryData<TurnEventSnapshot>(
-        conversationKeys.turn(activeSelection.conversationId, activeSelection.turnId),
+        conversationKeys.turn(activeSelection.conversationId, activeSelection.turnId)
       );
       const deployments = previous?.deployments ?? management.detail.data?.deployments;
       if (!deployments) throw new Error('No se pudo conservar la asignación de la conversación');
@@ -131,7 +135,7 @@ export function useConversationWorkspace(withHistory: boolean) {
   function updateSidebar(result: ConversationTurnResponse) {
     queryClient.setQueryData<InfiniteData<ConversationPage>>(
       conversationKeys.list(null),
-      (current) => {
+      current => {
         if (!current) {
           return {
             pages: [{ items: [result.conversation], nextCursor: null }],
@@ -146,12 +150,12 @@ export function useConversationWorkspace(withHistory: boolean) {
               index === 0
                 ? [
                     result.conversation,
-                    ...page.items.filter((item) => item.id !== result.conversation.id),
+                    ...page.items.filter(item => item.id !== result.conversation.id),
                   ]
-                : page.items.filter((item) => item.id !== result.conversation.id),
+                : page.items.filter(item => item.id !== result.conversation.id),
           })),
         };
-      },
+      }
     );
   }
 
@@ -162,10 +166,13 @@ export function useConversationWorkspace(withHistory: boolean) {
     };
     const turnKey = conversationKeys.turn(nextSelection.conversationId, nextSelection.turnId);
     const previous = queryClient.getQueryData<TurnEventSnapshot>(turnKey);
-    queryClient.setQueryData(conversationKeys.detail(nextSelection.conversationId), result.conversation);
+    queryClient.setQueryData(
+      conversationKeys.detail(nextSelection.conversationId),
+      result.conversation
+    );
     queryClient.setQueryData(turnKey, toSnapshot(result, previous?.lastEventSequence ?? 0));
     updateSidebar(result);
-    setTimeline((current) =>
+    setTimeline(current =>
       current?.conversationId !== nextSelection.conversationId
         ? {
             conversationId: nextSelection.conversationId,
@@ -173,7 +180,7 @@ export function useConversationWorkspace(withHistory: boolean) {
           }
         : current.turnIds.includes(nextSelection.turnId)
           ? current
-          : { ...current, turnIds: [...current.turnIds, nextSelection.turnId] },
+          : { ...current, turnIds: [...current.turnIds, nextSelection.turnId] }
     );
     setSelectedConversationId(nextSelection.conversationId);
     setSelection(nextSelection);
@@ -197,9 +204,9 @@ export function useConversationWorkspace(withHistory: boolean) {
       if (!activeSelection) throw new Error('No hay un turno seleccionado');
       return retryResponse(apiClient, activeSelection.conversationId, turnId, slot);
     },
-    onSuccess: (result) => {
+    onSuccess: result => {
       cacheResult(result);
-      setStreamGeneration((generation) => generation + 1);
+      setStreamGeneration(generation => generation + 1);
     },
   });
   const continueMutation = useMutation({
@@ -220,40 +227,39 @@ export function useConversationWorkspace(withHistory: boolean) {
   const isPending = execution.isPending || retryMutation.isPending || continueMutation.isPending;
   const isNewConversation = selectedConversationId === null;
   const deploymentSelection =
-    draftDeploymentSelection ??
-    getDefaultDeploymentSelection(management.catalog.data?.items ?? []);
-  const availableDeploymentIds = new Set(management.catalog.data?.items.map(item => item.deploymentId) ?? []);
+    draftDeploymentSelection ?? getDefaultDeploymentSelection(management.catalog.data?.items ?? []);
+  const availableDeploymentIds = new Set(
+    management.catalog.data?.items.map(item => item.deploymentId) ?? []
+  );
   const hasDuplicateDeploymentIds = getDuplicateDeploymentIds(deploymentSelection).size > 0;
   const deploymentIds =
     isNewConversation &&
     management.catalog.isSuccess &&
     !hasDuplicateDeploymentIds &&
-    Object.values(deploymentSelection).every((id) => availableDeploymentIds.has(id))
+    Object.values(deploymentSelection).every(id => availableDeploymentIds.has(id))
       ? deploymentSelection
       : undefined;
-  const localTurns = timeline?.turnIds.flatMap(turnId => {
-    const cached = queryClient.getQueryData<TurnEventSnapshot>(
-      conversationKeys.turn(timeline.conversationId, turnId),
-    );
-    return cached ? [cached.turn] : [];
-  }) ?? [];
+  const localTurns =
+    timeline?.turnIds.flatMap(turnId => {
+      const cached = queryClient.getQueryData<TurnEventSnapshot>(
+        conversationKeys.turn(timeline.conversationId, turnId)
+      );
+      return cached ? [cached.turn] : [];
+    }) ?? [];
   const historyTurnIds = new Set(management.history.turns.map(turn => turn.id));
   const turns = (
     withHistory && selectedConversationId
-      ? [
-          ...management.history.turns,
-          ...localTurns.filter((turn) => !historyTurnIds.has(turn.id)),
-        ]
+      ? [...management.history.turns, ...localTurns.filter(turn => !historyTurnIds.has(turn.id))]
       : localTurns
-  ).map((turn) =>
+  ).map(turn =>
     selectedConversationId
-      ? queryClient.getQueryData<TurnEventSnapshot>(
-          conversationKeys.turn(selectedConversationId, turn.id),
-        )?.turn ?? turn
-      : turn,
+      ? (queryClient.getQueryData<TurnEventSnapshot>(
+          conversationKeys.turn(selectedConversationId, turn.id)
+        )?.turn ?? turn)
+      : turn
   );
-  const sidebarConversations = management.conversations.items.map((conversation) =>
-    conversation.id === management.detail.data?.id ? management.detail.data : conversation,
+  const sidebarConversations = management.conversations.items.map(conversation =>
+    conversation.id === management.detail.data?.id ? management.detail.data : conversation
   );
   const historyInitialError =
     selectedConversationId !== null &&
@@ -308,8 +314,7 @@ export function useConversationWorkspace(withHistory: boolean) {
     activeSelection,
     setDraftDeploymentSelection,
     execute: execution.execute,
-    retry: (turnId: string, slot: ResponseSlot) =>
-      retryMutation.mutate({ turnId, slot }),
+    retry: (turnId: string, slot: ResponseSlot) => retryMutation.mutate({ turnId, slot }),
     continueWithout: (turnId: string, slot: ResponseSlot) =>
       continueMutation.mutate({ turnId, slot }),
     startNewConversation,

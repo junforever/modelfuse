@@ -271,10 +271,10 @@ const defaultProfileUnavailableErrorSchema: z.ZodType<DefaultProfileUnavailableE
     message: z.string(),
     requestId: z.string(),
     missingDeploymentIds: z
-      .array(nonBlankStringSchema)
-      .nonempty()
+      .tuple([nonBlankStringSchema])
+      .rest(nonBlankStringSchema)
       .refine(ids => new Set(ids).size === ids.length),
-  }) as z.ZodType<DefaultProfileUnavailableError>;
+  });
 
 export const apiErrorSchema: z.ZodType<ApiError | DefaultProfileUnavailableError> = z.union([
   genericApiErrorSchema,
