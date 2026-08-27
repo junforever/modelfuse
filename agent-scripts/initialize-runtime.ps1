@@ -31,32 +31,97 @@ function Get-ConfigProperty {
     return [string]$property.Value
 }
 
-function Get-ToolVersion {
+function Get-ToolProbe {
     param(
         [Parameter(Mandatory)]
         [string]$Path
     )
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        return $null
+        return [pscustomobject]@{
+            Path = $Path
+            Exists = $false
+            Version = $null
+            ExitCode = $null
+            Output = $null
+            Error = $null
+        }
     }
 
+    $probeId = [guid]::NewGuid()
+    $stdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) "modelfuse-runtime-$PID-$probeId.stdout"
+    $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) "modelfuse-runtime-$PID-$probeId.stderr"
     try {
-        $output = & $Path --version 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return $null
+        $process = Start-Process -FilePath $Path -ArgumentList @('--version') -Wait -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -ErrorAction Stop
+        $exitCode = $process.ExitCode
+        $stdoutText = if (Test-Path -LiteralPath $stdoutPath) {
+            ((Get-Content -LiteralPath $stdoutPath -Raw) ?? '').Trim()
         }
-
-        $version = ($output -join "`n").Trim()
-        if ($version) {
-            return $version
+        else {
+            ''
+        }
+        $stderrText = if (Test-Path -LiteralPath $stderrPath) {
+            ((Get-Content -LiteralPath $stderrPath -Raw) ?? '').Trim()
+        }
+        else {
+            ''
+        }
+        $outputText = (@($stdoutText, $stderrText) | Where-Object { $_ }) -join "`n"
+        return [pscustomobject]@{
+            Path = $Path
+            Exists = $true
+            Version = if ($exitCode -eq 0 -and $stdoutText) { $stdoutText } else { $null }
+            ExitCode = $exitCode
+            Output = if ($outputText) { $outputText } else { $null }
+            Error = $null
         }
     }
     catch {
-        return $null
+        return [pscustomobject]@{
+            Path = $Path
+            Exists = $true
+            Version = $null
+            ExitCode = $null
+            Output = $null
+            Error = $_.Exception.Message
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $stdoutPath) {
+            Remove-Item -LiteralPath $stdoutPath -Force
+        }
+        if (Test-Path -LiteralPath $stderrPath) {
+            Remove-Item -LiteralPath $stderrPath -Force
+        }
+    }
+}
+
+function Format-ToolProbe {
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Probe
+    )
+
+    if (-not $Probe.Exists) {
+        return "$($Probe.Path): la ruta no existe"
     }
 
-    return $null
+    $details = [System.Collections.Generic.List[string]]::new()
+    if ($null -ne $Probe.ExitCode) {
+        [void]$details.Add("exit code $($Probe.ExitCode)")
+    }
+    if ($Probe.Error) {
+        [void]$details.Add("error: $($Probe.Error)")
+    }
+    if ($Probe.Output) {
+        [void]$details.Add("salida: $($Probe.Output -replace "`r?`n", ' | ')")
+    }
+    if ($details.Count -eq 0) {
+        [void]$details.Add('no devolvió una versión')
+    }
+
+    return "$($Probe.Path): $($details -join ', ')"
 }
 
 function Resolve-ToolPath {
@@ -88,8 +153,14 @@ function Add-Candidate {
         [string]$Path
     )
 
-    if ($Path -and (Test-Path -LiteralPath $Path) -and -not $Candidates.Contains($Path)) {
-        [void]$Candidates.Add((Get-Item -LiteralPath $Path).FullName)
+    if ($Path -and -not $Candidates.Contains($Path)) {
+        $normalizedPath = if (Test-Path -LiteralPath $Path) {
+            (Get-Item -LiteralPath $Path).FullName
+        }
+        else {
+            $Path
+        }
+        [void]$Candidates.Add($normalizedPath)
     }
 }
 
@@ -102,15 +173,18 @@ function Select-Node {
         [int]$MinimumMajor
     )
 
+    $diagnostics = [System.Collections.Generic.List[string]]::new()
     foreach ($path in $Candidates) {
-        $version = Get-ToolVersion -Path $path
-        $match = [regex]::Match([string]$version, '^v?(\d+)')
+        $probe = Get-ToolProbe -Path $path
+        $match = [regex]::Match([string]$probe.Version, '^v?(\d+)')
         if ($match.Success -and [int]$match.Groups[1].Value -ge $MinimumMajor) {
-            return [pscustomobject]@{ Path = $path; Version = $version }
+            return [pscustomobject]@{ Path = $path; Version = $probe.Version }
         }
+        [void]$diagnostics.Add((Format-ToolProbe -Probe $probe))
     }
 
-    throw "No se encontró un Node.js válido (mínimo: $($package.engines.node))."
+    $details = if ($diagnostics.Count -gt 0) { $diagnostics -join '; ' } else { 'ninguna ruta candidata' }
+    throw "No se encontró un Node.js válido (mínimo: $($package.engines.node)). Diagnóstico: $details."
 }
 
 function Select-Pnpm {
@@ -122,19 +196,17 @@ function Select-Pnpm {
         [string]$RequiredVersion
     )
 
-    $detected = [System.Collections.Generic.List[string]]::new()
+    $diagnostics = [System.Collections.Generic.List[string]]::new()
     foreach ($path in $Candidates) {
-        $version = Get-ToolVersion -Path $path
-        if ($version) {
-            [void]$detected.Add("$version ($path)")
+        $probe = Get-ToolProbe -Path $path
+        if ($probe.Version -eq $RequiredVersion) {
+            return [pscustomobject]@{ Path = $path; Version = $probe.Version }
         }
-        if ($version -eq $RequiredVersion) {
-            return [pscustomobject]@{ Path = $path; Version = $version }
-        }
+        [void]$diagnostics.Add((Format-ToolProbe -Probe $probe))
     }
 
-    $available = if ($detected.Count -gt 0) { $detected -join '; ' } else { 'ninguna ruta candidata válida' }
-    throw "No se encontró pnpm $RequiredVersion. Candidatos inspeccionados: $available."
+    $details = if ($diagnostics.Count -gt 0) { $diagnostics -join '; ' } else { 'ninguna ruta candidata' }
+    throw "No se encontró pnpm $RequiredVersion. Diagnóstico: $details."
 }
 
 $requiredNodeMatch = [regex]::Match([string]$package.engines.node, '(\d+)')
