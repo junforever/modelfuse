@@ -1,5 +1,5 @@
 services:
-  postgres_template:
+  postgres_modelfuse:
     image: postgres:16-alpine
     container_name: postgres_modelfuse_dev
     restart: unless-stopped
@@ -18,11 +18,11 @@ services:
       retries: 12
       start_period: 5s
     volumes:
-      - postgres_template_data:/var/lib/postgresql/data
+      - postgres_modelfuse_data:/var/lib/postgresql/data
     networks:
-      - dev_template_network
+      - modelfuse_network_dev
 
-  pgadmin_template:
+  pgadmin_modelfuse:
     image: dpage/pgadmin4:latest
     container_name: pgadmin_modelfuse_dev
     restart: unless-stopped
@@ -31,14 +31,14 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      postgres_template:
+      postgres_modelfuse:
         condition: service_healthy
     networks:
-      - dev_template_network
+      - modelfuse_network_dev
     volumes:
-      - pgadmin_template_data:/var/lib/pgadmin
+      - pgadmin_modelfuse_data:/var/lib/pgadmin
 
-  liquibase_template:
+  liquibase_modelfuse:
     image: liquibase/liquibase:4.30.0
     container_name: liquibase_modelfuse_dev
     env_file:
@@ -46,7 +46,7 @@ services:
     volumes:
       - ./db/changelogs:/liquibase/changelog
     command:
-      - --url=jdbc:postgresql://postgres_template:5432/${POSTGRES_DB:-db_dev}
+      - --url=jdbc:postgresql://postgres_modelfuse:5432/${POSTGRES_DB:-db_dev}
       - --search-path=/liquibase/changelog
       - --changelog-file=db.changelog-master.xml
       - --username=${POSTGRES_USER:-postgres}
@@ -55,15 +55,15 @@ services:
     # This is a one-shot migration job; readiness is its successful exit, not a long-lived healthcheck.
     restart: "no"
     depends_on:
-      postgres_template:
+      postgres_modelfuse:
         condition: service_healthy
     networks:
-      - dev_template_network
+      - modelfuse_network_dev
 
 volumes:
-  postgres_template_data:
-  pgadmin_template_data:
+  postgres_modelfuse_data:
+  pgadmin_modelfuse_data:
 
 networks:
-  dev_template_network:
+  modelfuse_network_dev:
     driver: bridge
