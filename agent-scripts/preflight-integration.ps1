@@ -255,7 +255,13 @@ try {
     }
 
     if (-not $servicesReady) {
-        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "Timeout esperando los servicios de integración tras $maxSnapshots snapshots cada $snapshotIntervalSeconds segundos. PostgreSQL: $lastPostgresSummary. Liquibase: $lastLiquibaseSummary."
+        $postgresHint = if ($lastPostgresSummary -eq 'no encontrado') {
+            ' Verifica que Docker Desktop esté activo y que el contenedor de PostgreSQL exista y esté iniciado; si acabas de iniciarlo, espera unos segundos y repite el preflight para evitar un diagnóstico equivocado por una condición de carrera.'
+        }
+        else {
+            ''
+        }
+        Stop-WithBlocker -Code 'BLOQUEO_INTEGRATION_ENV' -Message "Timeout esperando los servicios de integración tras $maxSnapshots snapshots cada $snapshotIntervalSeconds segundos. PostgreSQL: $lastPostgresSummary. Liquibase: $lastLiquibaseSummary.$postgresHint"
     }
 
     $publishedPortOutput = Invoke-DockerChecked -Arguments ($composePrefix + @('port', $PostgresService, '5432')) -FailureCode 'BLOQUEO_INTEGRATION_ENV'
