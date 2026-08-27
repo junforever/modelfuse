@@ -2,7 +2,7 @@
 
 **Feature Branch**: `002-configurable-provider-deployments`  
 **Created**: 2026-08-19  
-**Status**: Draft  
+**Status**: Implemented
 **Input**: Fuente normativa: `specs/002-configurable-provider-deployments/requirements-brief.md`
 
 ## User Scenarios & Testing _(mandatory)_
