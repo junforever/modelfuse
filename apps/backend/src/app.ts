@@ -40,8 +40,8 @@ export const createApp = (
   app.use((request, response, next) =>
     request.path.endsWith('/events') ? next() : timeoutMiddleware(request, response, next)
   );
-  app.use(haltOnTimedout);
   app.use(requestTimeOut);
+  app.use(haltOnTimedout);
 
   app.use(
     express.json({
