@@ -35,7 +35,7 @@ Como usuario, quiero crear una conversación sin seleccionar deployments manualm
 **Acceptance Scenarios**:
 
 1. **Given** `OPENAI_API_KEY`, `GOOGLE_API_KEY` y `OPENROUTER_API_KEY` configuradas, **When** el usuario crea una conversación sin `deploymentIds`, **Then** se asignan `openai-5.6-sol` a `base-1`, `gemini-3.7-flash` a `base-2`, `openrouter-minimax-m3` a `base-3` y `openrouter-qwen-3.8-max` a `consolidator`.
-2. **Given** que falta al menos una credencial requerida por el perfil por defecto, **When** se crea una conversación sin `deploymentIds`, **Then** la creación se rechaza con `503 DEFAULT_PROFILE_UNAVAILABLE` y el cuerpo contiene únicamente un mensaje seguro y los `deploymentId` faltantes.
+2. **Given** que falta al menos una credencial requerida por el perfil por defecto, **When** se crea una conversación sin `deploymentIds`, **Then** la creación se rechaza con `503 DEFAULT_PROFILE_UNAVAILABLE` y el cuerpo contiene únicamente `code`, `message`, `requestId` y `missingDeploymentIds`, con un mensaje seguro y los `deploymentId` faltantes, sin credenciales, detalles upstream ni otros datos sensibles.
 3. **Given** que el perfil por defecto está disponible, **When** se abre la pantalla de nueva conversación, **Then** los cuatro selectores aparecen preseleccionados con ese perfil.
 
 ---
@@ -127,7 +127,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 
 - `deploymentIds` está presente pero omite uno de los cuatro slots, incluye una clave adicional, contiene un valor vacío o contiene `null`: la creación se rechaza sin filas ni llamadas externas.
 - Un `deploymentId` existe en el catálogo estático pero su credencial requerida no está configurada: no aparece en el catálogo disponible y una selección directa recibe `422 DEPLOYMENT_UNAVAILABLE`.
-- Falta cualquiera de las credenciales requeridas por los cuatro deployments por defecto: la creación sin selección recibe `503 DEFAULT_PROFILE_UNAVAILABLE` con solo un mensaje seguro y los identificadores faltantes.
+- Falta cualquiera de las credenciales requeridas por los cuatro deployments por defecto: la creación sin selección recibe `503 DEFAULT_PROFILE_UNAVAILABLE` con únicamente `code`, `message`, `requestId` y `missingDeploymentIds`; el mensaje es seguro y no se exponen credenciales, detalles upstream ni otros datos sensibles.
 - El mismo `deploymentId` aparece en más de un slot: se aplica la unicidad al identificador completo, aunque los slots sean diferentes.
 - Dos deployments diferentes pertenecen al mismo provider o apuntan al mismo modelo por rutas distintas: la selección sigue siendo válida mientras sus `deploymentId` sean distintos.
 - El catálogo o la configuración del proceso cambia después de crear una conversación: la conversación y sus turnos conservan la instantánea original.
@@ -150,7 +150,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - **FR-004**: Cuando `deploymentIds` esté presente, el sistema MUST exigir las cuatro claves, MUST rechazar claves adicionales y MUST rechazar valores vacíos o `null`.
 - **FR-005**: Cuando `deploymentIds` esté ausente, el sistema MUST aplicar exactamente este perfil: `base-1` = `openai-5.6-sol`, `base-2` = `gemini-3.7-flash`, `base-3` = `openrouter-minimax-m3`, `consolidator` = `openrouter-qwen-3.8-max`.
 - **FR-006**: El perfil por defecto MUST aplicarse solo cuando estén configuradas las credenciales requeridas por sus cuatro deployments.
-- **FR-007**: Si falta una credencial requerida por el perfil por defecto, la creación sin `deploymentIds` MUST responder `503 DEFAULT_PROFILE_UNAVAILABLE`; el cuerpo MUST contener únicamente un mensaje seguro y los `deploymentId` faltantes.
+- **FR-007**: Si falta una credencial requerida por el perfil por defecto, la creación sin `deploymentIds` MUST responder `503 DEFAULT_PROFILE_UNAVAILABLE`; el cuerpo MUST contener exactamente `code`, `message`, `requestId` y `missingDeploymentIds`, donde `code` sea `DEFAULT_PROFILE_UNAVAILABLE`, `message` sea seguro y `missingDeploymentIds` liste los `deploymentId` faltantes. No MUST incluir credenciales, detalles upstream ni otros datos sensibles.
 - **FR-008**: Una conversación MUST rechazar la repetición del mismo `deploymentId` en dos o más slots, tanto en frontend como en backend.
 - **FR-009**: El backend MUST reforzar la unicidad dentro de la transacción de creación y, ante una repetición, MUST responder `422 DUPLICATE_DEPLOYMENT_ASSIGNMENT` sin crear filas ni iniciar llamadas externas.
 - **FR-010**: La unicidad MUST evaluarse por `deploymentId` completo; deployments distintos del mismo provider o del mismo modelo subyacente MUST poder coexistir en una conversación.
