@@ -77,7 +77,7 @@ export function useConversationQueries(
   const catalog = useQuery({
     queryKey: conversationKeys.catalog,
     queryFn: ({ signal }) => listAvailableDeployments(client, signal),
-    enabled: conversationId === null,
+    enabled: enabled && conversationId === null,
   });
   const conversations = useInfiniteQuery({
     queryKey: conversationKeys.list(null),
