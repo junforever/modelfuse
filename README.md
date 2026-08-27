@@ -1,402 +1,232 @@
-﻿# ModelFuse
+# ModelFuse
 
-**ModelFuse** es una plataforma web full-stack para comparar, evaluar y fusionar respuestas de múltiples modelos de lenguaje (LLMs) dentro de una misma conversación multiturno, con trazabilidad completa, streaming en tiempo real y recuperación ante fallos.
+ModelFuse es una plataforma web full-stack para comparar y fusionar respuestas de varios modelos de lenguaje dentro de una conversación multiturno. Cada turno conserva sus respuestas, estados y metadatos en PostgreSQL, mientras el frontend recibe cambios en tiempo real mediante Server-Sent Events (SSE).
 
-La idea central es simple: el usuario escribe un prompt una sola vez y recibe, en paralelo, respuestas de varios modelos distintos. Luego, un **cuarto modelo integrador** analiza las respuestas anteriores, toma sus mejores partes, añade lo que falte y genera una respuesta final más completa y refinada.
+El sistema usa tres respuestas base en paralelo y una respuesta consolidada que combina sus resultados. Las integraciones con proveedores son intercambiables y las credenciales se configuran mediante variables de entorno.
 
-Este proyecto está diseñado como un **monorepo** orientado a escalabilidad, mantenimiento claro y colaboración asistida por agentes de IA. Está configurado con **pnpm workspaces, Vite, React, Express, TypeScript y Shadcn UI**.
+## Capacidades principales
 
----
+- Conversaciones multiturno con historial persistente.
+- Tres slots base (`base-1`, `base-2`, `base-3`) y un slot consolidator.
+- Selección de deployments al crear una conversación.
+- Catálogo estático de deployments filtrado por las credenciales disponibles.
+- Snapshot inmutable del deployment asignado a cada slot.
+- Streaming SSE para actualizaciones de turnos y respuestas.
+- Reintento de respuestas fallidas y continuación sin una respuesta base.
+- Recuperación de trabajo interrumpido después de reinicios.
+- Adaptadores para OpenAI, Google y OpenRouter, con soporte de proveedores adicionales en la infraestructura del backend.
 
-## 🎯 Problema que resuelve
+## Flujo funcional
 
-Una sola respuesta de un LLM rara vez es suficiente cuando se busca calidad, cobertura o contraste entre enfoques. ModelFuse permite:
+1. El usuario crea una conversación y, opcionalmente, asigna un `deploymentId` a cada slot.
+2. El backend persiste la conversación y sus cuatro snapshots de deployment.
+3. Cada turno se envía a los tres modelos base en paralelo.
+4. El consolidator recibe las respuestas disponibles y genera una respuesta unificada.
+5. El backend persiste cada transición y publica actualizaciones por SSE.
+6. El frontend muestra el historial, los estados y las respuestas por slot.
 
-- **Comparación sistemática:** evaluar qué modelo responde mejor ante los mismos prompts y en el mismo contexto.
-- **Fusión de conocimiento:** combinar lo mejor de varias respuestas en una respuesta final enriquecida.
-- **Trazabilidad completa:** saber exactamente qué turno, qué slot de ejecución y qué modelo generó cada respuesta.
-- **Resiliencia:** si el servicio se cae, las conversaciones no se pierden; se recuperan con estados coherentes.
-- **Reproducibilidad:** fixtures versionados de conversaciones permiten pruebas determinísticas y comparación histórica.
+Los endpoints principales están bajo `/api/v1`:
 
-Esto convierte a ModelFuse en una herramienta útil para investigación, redacción, ideación, validación técnica y workflows avanzados de prompting.
+- `GET /api/v1/model-catalog`
+- `GET|POST /api/v1/conversations`
+- `GET|PATCH|DELETE /api/v1/conversations/:conversationId`
+- `GET|POST /api/v1/conversations/:conversationId/turns`
+- `GET /api/v1/conversations/:conversationId/turns/:turnId`
+- `GET /api/v1/conversations/:conversationId/turns/:turnId/events`
+- `POST /api/v1/conversations/:conversationId/turns/:turnId/responses/:slot/retry`
+- `POST /api/v1/conversations/:conversationId/turns/:turnId/responses/:slot/continue-without`
 
----
-
-## 🚀 Qué hace ModelFuse
-
-La aplicación permite:
-
-- Escribir un prompt desde una interfaz principal tipo chat.
-- Enviar ese prompt a **tres modelos LLM distintos** en paralelo, cada uno respondiendo en su propio tab.
-- Mostrar un **cuarto tab integrador**, donde un modelo genera una respuesta consolidada usando lo mejor de las tres respuestas previas.
-- Mantener conversaciones de **múltiples turnos** con historial persistente.
-- Guardar y recuperar el historial de conversaciones desde una barra lateral.
-- Recibir respuestas en tiempo real vía **Server-Sent Events (SSE)**.
-- Limpiar la sesión actual para iniciar una conversación nueva.
-- Cargar API keys y configuraciones desde variables de entorno (`.env`).
-
----
-
-## 🧠 Flujo funcional
-
-1. El usuario escribe un prompt en el área principal de chat.
-2. El sistema envía ese prompt a tres modelos distintos; cada modelo recibe solo su propio historial individual.
-3. Cada modelo responde en su tab correspondiente.
-4. El sistema pasa esas tres respuestas a un cuarto modelo integrador, junto con el historial consolidado propio de este último, pero sin los historiales completos de los otros modelos.
-5. El cuarto modelo genera una respuesta unificada y enriquecida.
-6. La conversación queda persistida en PostgreSQL para continuar iterando después.
-7. El usuario puede reabrir conversaciones guardadas desde la barra lateral o limpiar la actual para comenzar una nueva.
-
-### Flujo técnico por turno
-
-1. `POST /conversations` → se genera `conversation_id`.
-2. `POST /conversations/:id/turns` → se crea un turno con ordinal.
-3. `SlotScheduler` asigna slots (uno por LLM configurado) en estado `pending`.
-4. Los LLM Adapters invocan los modelos → slots pasan a `running`.
-5. SSE emite deltas (`response:delta`) → el frontend actualiza la UI en tiempo real.
-6. Las respuestas completan (`response:complete`) → slots a `completed`.
-7. Todo queda persistido en PostgreSQL, trazable por `conversation_id`, `turn_id` y `slot_id`.
-
----
-
-## 🏗️ Arquitectura general
+## Arquitectura
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Frontend (React + TS)                         │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
-│  │  AppShell.tsx    │  │ Conversation-    │  │  Comparison-     │   │
-│  │  (layout, nav)   │  │ Workspace.tsx    │  │  Panel.tsx       │   │
-│  │                  │  │  (turnos, SSE,   │  │  (side-by-side   │   │
-│  │                  │  │   historial)     │  │   LLMs)          │   │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘   │
-│                                                                      │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
-│  │ Conversation-    │  │  PromptInput.tsx │  │  LLMProvider-    │   │
-│  │ Sidebar.tsx      │  │  (envío, queue)  │  │  Selector.tsx    │   │
-│  │  (lista, reopen) │  │                  │  │  (config models) │   │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              │ REST + SSE
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Backend (Node.js + TS)                        │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
-│  │  REST API        │  │  SSE Stream      │  │  LLM Adapters    │   │
-│  │  /conversations  │  │  /events         │  │  (OpenAI, etc.)  │   │
-│  │  /turns          │  │  turn:created    │  │                  │   │
-│  │  /responses      │  │  response:delta  │  │                  │   │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘   │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                     Servicios Core                           │   │
-│  │  • ConversationService  • TurnService  • ResponseService     │   │
-│  │  • SlotScheduler        • RecoveryService                    │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                       PostgreSQL (persistencia)                      │
-│  • conversations  • turns  • responses  • slots  • llm_providers    │
-└─────────────────────────────────────────────────────────────────────┘
+Frontend (React + Vite + TypeScript)
+  AppShell
+  ConversationWorkspace
+    ConversationSidebar
+    PromptComposer
+    TurnList / TurnCard
+    ResponseTabs / ResponsePanel
+    DeploymentSelectors
+          │ REST + SSE
+          ▼
+Backend (Node.js + Express + TypeScript)
+  Middleware y validación Zod
+  Controllers y rutas /api/v1
+  ConversationService
+  TurnOrchestrator + ContextBuilder
+  Recuperación y publicación de eventos SSE
+  ProviderRegistry + adaptadores LLM
+          │
+          ▼
+PostgreSQL + Liquibase
+  conversations
+  turns
+  model_responses
+  conversation_deployments
 ```
 
----
-
-## 📂 Estructura del repositorio
+## Estructura del repositorio
 
 ```text
 modelfuse/
 ├── apps/
-│   ├── frontend/          # Aplicación web (React + Vite + TypeScript)
-│   └── backend/           # Servidor API (Node.js + Express + TypeScript)
+│   ├── frontend/          # React, Vite, React Query y Playwright
+│   └── backend/           # Express, servicios, rutas y adaptadores LLM
 ├── packages/
-│   └── ui/                # Librería de componentes compartidos (Shadcn UI + Tailwind)
-├── specs/
-│   └── 001-compare-llm-responses/
-│       ├── spec.md        # Especificación funcional completa
-│       ├── tasks.md       # Tareas de implementación (T001–T118+)
-│       ├── plan.md        # Plan de ejecución, fases y dependencias
-│       ├── data-model.md  # Modelo de datos, tablas y relaciones
-│       └── ...            # Documentos auxiliares (research, quickstart, etc.)
+│   └── ui/                # Componentes visuales compartidos
 ├── db/
-│   └── changelogs/        # Migraciones SQL por módulo (Liquibase)
-├── tests/
-│   ├── integration/
-│   │   └── recovery.integration.test.ts
-│   └── fixtures/
-│       └── recoveryCases.ts
+│   └── changelogs/        # Changelogs SQL de Liquibase
+├── agent-scripts/         # Inicialización de runtime y preflights
+├── specs/                 # Especificaciones y contratos técnicos
+├── turbo.json             # Orquestación del monorepo
+├── pnpm-workspace.yaml
 └── README.md
 ```
 
----
+## Modelo de datos
 
-## 🧩 Responsabilidades por capa
+| Tabla | Propósito |
+| --- | --- |
+| `conversations` | Identidad, título, estado y timestamps de la conversación. |
+| `turns` | Prompt, ordinal, estado y relación con una conversación. |
+| `model_responses` | Respuesta por slot, estado, contenido, errores, intentos y metadatos. |
+| `conversation_deployments` | Snapshot inmutable del deployment asignado a cada slot. |
 
-### `apps/frontend/`
+Los slots válidos son exactamente `base-1`, `base-2`, `base-3` y `consolidator`. Los estados de las respuestas son `pending`, `running`, `completed` y `failed`; los turnos también pueden estar `partial` cuando solo una parte de sus respuestas está disponible.
 
-Responsable de la experiencia de usuario y del flujo conversacional:
+## Configuración
 
-| Componente                  | Responsabilidad                                                                                                            |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `AppShell.tsx`              | Layout principal, navegación entre sesiones, estado global de UI.                                                          |
-| `ConversationWorkspace.tsx` | Área central: lista de turnos, envío de prompts, recepción SSE, atribución de respuestas a slots.                          |
-| `ConversationSidebar.tsx`   | Historial de conversaciones, selección, reapertura y estados (`pending`, `running`, `completed`, `failed`, `interrupted`). |
-| `ComparisonPanel.tsx`       | Vista lado a lado de respuestas de múltiples LLMs para el mismo turno.                                                     |
-| `PromptInput.tsx`           | Input de usuario, validación, enqueue de solicitudes, manejo de estados de envío.                                          |
-| `LLMProviderSelector.tsx`   | Configuración de qué modelos se invocan para cada turno.                                                                   |
+1. Copia las plantillas de entorno:
 
-### `apps/backend/`
+   ```powershell
+   Copy-Item apps/backend/.env.sample apps/backend/.env
+   Copy-Item apps/frontend/.env.sample apps/frontend/.env
+   ```
 
-Responsable de la orquestación del sistema. Sigue una arquitectura limpia orientada a responsabilidades:
+2. Completa `apps/backend/.env` con la configuración de PostgreSQL, los límites de ejecución, el origen permitido del frontend y las credenciales de los proveedores que quieras habilitar.
 
-| Módulo            | Responsabilidad                                                                     |
-| ----------------- | ----------------------------------------------------------------------------------- |
-| `index.ts`        | **Única responsabilidad**: levantar el servidor (puerto y graceful shutdown).       |
-| `app.ts`          | Configuración de Express, middlewares globales y montado de rutas.                  |
-| `controllers/`    | Maneja peticiones HTTP (`req/res`), extrae parámetros e invoca la lógica necesaria. |
-| `routes/`         | Define endpoints de Express y los enlaza con sus controladores.                     |
-| `middleware/`     | Validación (Zod), autenticación, manejo centralizado de errores, logging.           |
-| `infrastructure/` | Conexiones a PostgreSQL, clientes LLM y servicios externos.                         |
-| `utils/`          | Funciones de apoyo y helpers genéricos.                                             |
-| `types/`          | Declaraciones globales de tipos TypeScript.                                         |
+3. Verifica que `VITE_API_BASE_URL` en `apps/frontend/.env` apunte al backend. El valor local predeterminado es `http://localhost:3001/api/v1`.
 
-Los **servicios core** que orquestan la lógica de negocio son:
+No guardes secretos en el repositorio. El catálogo solo expone deployments cuya variable de credenciales está configurada.
 
-| Servicio              | Responsabilidad                                                                               |
-| --------------------- | --------------------------------------------------------------------------------------------- |
-| `ConversationService` | CRUD de conversaciones, estados e historial.                                                  |
-| `TurnService`         | Creación de turnos, ordinales y atribución a conversaciones.                                  |
-| `ResponseService`     | Persistencia de respuestas, atribución a turnos y slots.                                      |
-| `SlotScheduler`       | Asignación de slots de ejecución a LLMs, manejo de colas.                                     |
-| `RecoveryService`     | Recuperación post-reinicio: conversión de slots `pending`/`running` a `failed`/`interrupted`. |
-| `SSE Gateway`         | Emisión de eventos en tiempo real: `turn:created`, `response:delta`, `response:complete`.     |
+## Primera inicialización
 
-### `packages/ui/`
+El proyecto requiere Node.js 22 o superior, pnpm 11.22.0, Docker Desktop con Compose y una cuenta de proveedor LLM para los modelos que se quieran usar.
 
-Librería de componentes visuales compartidos y reutilizables. Debe mantenerse **100% desacoplada** de la lógica de negocio y de cualquier dependencia específica de una aplicación.
+### 1. Instalar dependencias
 
----
+Desde la raíz del repositorio:
 
-## 🗄️ Modelo de datos
-
-| Tabla           | Propósito                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------- |
-| `conversations` | Metadatos de cada conversación (usuario, estado, timestamps).                               |
-| `turns`         | Turnos de conversación, ordinales y atribución a conversación.                              |
-| `responses`     | Respuestas de LLMs, atribución a turno y slot, contenido delta.                             |
-| `slots`         | Slots de ejecución con estado (`pending`, `running`, `completed`, `failed`, `interrupted`). |
-| `llm_providers` | Configuración de proveedores (API keys, modelos, timeouts).                                 |
-
-### Estados de slots y transiciones
-
-| Estado        | Descripción                                   | Transiciones                           |
-| ------------- | --------------------------------------------- | -------------------------------------- |
-| `pending`     | Slot asignado, no iniciado.                   | → `running`                            |
-| `running`     | LLM invocándose, streaming en curso.          | → `completed`, `failed`, `interrupted` |
-| `completed`   | Respuesta completa persistida.                | —                                      |
-| `failed`      | Error no recuperable.                         | —                                      |
-| `interrupted` | Error recuperable (`error_recoverable=true`). | → `pending` (reintentar)               |
-
----
-
-## 🔄 Recuperación ante fallos
-
-El sistema está diseñado para sobrevivir a reinicios del servicio sin pérdida de datos:
-
-- Al iniciar, `RecoveryService` escanea slots en estado `pending` o `running`.
-- Los marca como `failed` o `interrupted` con `error_recoverable=true`.
-- Conserva ordinales de turnos, atribución de respuestas y estados de conversación.
-- Permite consultar el historial completo tras la recuperación.
-
-> **Criterio de aceptación (SC-002):** tras recrear la aplicación sobre la misma BD, se verifica: conservación del orden de turnos, atribución correcta de respuestas a turno y slot, estados coherentes y consulta posterior del historial.
-
----
-
-## 🔐 Configuración y entorno
-
-Las credenciales y configuraciones sensibles se cargan desde un archivo `.env`. **Nunca se deben hardcodear secretos en el código fuente.**
-
-Variables de entorno requeridas:
-
-- `DATABASE_URL` — URL de conexión a PostgreSQL.
-- `LLM_API_KEYS` — API keys de los proveedores LLM.
-- `PORT` — Puerto del servidor backend.
-
----
-
-## ⚡ Quickstart
-
-```bash
-# 1. Clonar el repositorio
-git clone <repo-url> && cd modelfuse
-
-# 2. Instalar dependencias
+```powershell
 pnpm install
-
-# 3. Configurar base de datos
-psql -U postgres -f src/db/schema.sql
-
-# 4. Configurar variables de entorno
-cp .env.example .env  # y completar con tus valores
-
-# 5. Iniciar backend
-pnpm run dev:backend
-
-# 6. Iniciar frontend
-pnpm run dev:frontend
-
-# 7. Abrir en el navegador
-# http://localhost:3000
 ```
 
----
+### 2. Configurar los archivos `.env`
 
-## 🧰 Scripts para agentes y validaciones
+```powershell
+Copy-Item apps/backend/.env.sample apps/backend/.env
+Copy-Item apps/frontend/.env.sample apps/frontend/.env
+```
 
-El directorio `agent-scripts/` centraliza la preparación del runtime que usan los agentes y las validaciones automatizadas:
+Completa `apps/backend/.env` con:
 
-- `initialize-runtime.ps1` — localiza y valida Node.js y pnpm, comprueba las versiones requeridas y guarda una configuración local reutilizable. Es idempotente; usa `-Force` si cambia el runtime.
-- `run-pnpm.ps1` — ejecuta comandos de pnpm desde la raíz del repositorio usando el runtime inicializado y conserva el código de salida del comando.
+- `PORT`, `NODE_ENV` y `FRONTEND_URL_LOCALHOST`.
+- Los valores `POSTGRES_*` de la base que usará el backend.
+- Los límites `REQUEST_*`, `LLM_PROVIDER_TIMEOUT_MS`, `CONVERSATION_CONTEXT_MAX_TURNS`, `LLM_CONTEXT_THRESHOLD_RATIO` y `CONVERSATION_SIDEBAR_PAGE_SIZE`.
+- Las API keys de los proveedores cuyos deployments se utilizarán (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY` y las demás cuando correspondan).
 
-La configuración generada en `agent-scripts/runtime.local.json` es local y está excluida de Git. El flujo recomendado para una sesión de trabajo es:
+En `apps/frontend/.env`, verifica `VITE_API_BASE_URL`. Para desarrollo local debe apuntar normalmente a `http://localhost:3001/api/v1`.
+
+Ningún archivo `.env` debe incluirse en Git.
+
+### 3. Crear la base y ejecutar Liquibase
+
+La definición principal crea PostgreSQL, pgAdmin y un job de Liquibase. Desde la raíz, inicia los tres servicios:
+
+```powershell
+docker compose --file docker-compose.yml up -d
+```
+
+Comprueba el resultado:
+
+```powershell
+docker compose --file docker-compose.yml ps -a
+```
+
+El estado esperado es `postgres_template` saludable, `pgadmin_template` activo y `liquibase_template` terminado con código `0`. Que Liquibase aparezca como `exited (0)` es correcto: es un job de una sola ejecución y aplica `update` contra PostgreSQL. Las migraciones se cargan desde `db/changelogs/db.changelog-master.xml` y sus changelogs incluidos.
+
+pgAdmin queda disponible en `http://localhost:8080`. Usa por defecto el correo `admin@admin.com` y la clave `admin`, definidos en `apps/backend/.env.sample`, para acceder y consultar la base. Para conectar pgAdmin al servidor desde dentro de Docker, utiliza `postgres_template` como host y `5432` como puerto.
+
+Si Docker Desktop o la máquina se reinician, PostgreSQL y pgAdmin se vuelven a iniciar por su política `unless-stopped`. Si Liquibase vuelve a aparecer como `exited (0)`, no es un error; solo debe ejecutarse de nuevo si se quiere aplicar o comprobar una migración.
+
+### 4. Iniciar la aplicación
+
+```powershell
+pnpm run dev
+```
+
+La interfaz queda disponible normalmente en `http://localhost:5173` y el backend en `http://localhost:3001`.
+
+## Desarrollo con agentes
+
+Esta sección aplica al trabajo ejecutado por Codex u otros agentes del repositorio. `initialize-runtime.ps1` prepara el runtime de herramientas para el agente; no es necesario para la ejecución normal de la aplicación si Node.js y pnpm ya están instalados y disponibles.
+
+Inicializa el runtime una vez por entorno:
 
 ```powershell
 .\agent-scripts\initialize-runtime.ps1
-.\agent-scripts\run-pnpm.ps1 --filter backend run test --run <ruta-del-test>
 ```
 
-Los agentes no deben seleccionar manualmente otra instalación de Node/pnpm ni invocar directamente binarios de `node_modules`.
+Los comandos de Node y pnpm del agente se ejecutan desde la raíz mediante `run-pnpm.ps1`:
 
----
-
-## 🛠️ Stack tecnológico
-
-| Capa          | Tecnología                     |
-| ------------- | ------------------------------ |
-| Frontend      | React + Vite + TypeScript      |
-| Backend       | Node.js + Express + TypeScript |
-| UI            | Shadcn UI + Tailwind CSS       |
-| Monorepo      | pnpm workspaces                |
-| Base de datos | PostgreSQL                     |
-| Migraciones   | Liquibase                      |
-| Streaming     | Server-Sent Events (SSE)       |
-
----
-
-## 📌 Principios del proyecto
-
-Las decisiones de implementación dentro de ModelFuse deben alinearse con estos principios:
-
-- **Separación clara de responsabilidades** entre UI, orquestación y datos.
-- **Escalabilidad** para agregar más modelos o estrategias de fusión.
-- **Persistencia conversacional real**, no solo prompts aislados.
-- **UI consistente y reutilizable** a través de `packages/ui`.
-- **Configuración sensible fuera del código** (`.env`).
-- **Código comprensible tanto para humanos como para agentes de IA**.
-
----
-
-## 🤖 Instrucciones para Agentes de IA
-
-Si eres un agente de IA trabajando en este repositorio, **debes seguir estas reglas estrictamente**. La [constitución del proyecto](.specify/memory/constitution.md) es la autoridad principal; estas instrucciones operativas deben interpretarse dentro de sus límites.
-
-### Gestión de Componentes UI (Shadcn)
-
-Para saber qué componentes de Shadcn UI existen, usa siempre `list_dir` para explorar `packages/ui/src/components`. Para agregar uno nuevo:
-
-```bash
-pnpm dlx shadcn@latest add <nombre-componente> -c apps/frontend
+```powershell
+.\agent-scripts\run-pnpm.ps1 -- run build
+.\agent-scripts\run-pnpm.ps1 -- run test
+.\agent-scripts\run-pnpm.ps1 -- run lint
+.\agent-scripts\run-pnpm.ps1 -- run typecheck
+.\agent-scripts\run-pnpm.ps1 -- run format
 ```
 
-> Aunque se ejecuta con `-c apps/frontend`, el componente se instalará en `packages/ui/src/components` gracias a la configuración de `components.json`.
+Herramientas y preflights del agente:
 
-Todos los componentes en el frontend deben importarse desde el paquete compartido:
+- `initialize-runtime.ps1`: valida Node.js y pnpm y guarda la configuración local del runtime.
+- `run-pnpm.ps1`: ejecuta pnpm con el runtime inicializado y conserva el código de salida.
+- `preflight-python.ps1`: valida la versión y los módulos Python requeridos.
+- `preflight-integration.ps1`: valida el entorno PostgreSQL/Liquibase de integración.
 
-```tsx
-import { Button } from '@workspace/ui/components/button';
+El entorno de integración de los agentes usa `docker-compose.integration.yml` y `apps/backend/.env.integration`:
+
+```powershell
+Copy-Item apps/backend/.env.integration.sample apps/backend/.env.integration
 ```
 
-Nunca introduzcas dependencias específicas de una aplicación dentro de `packages/ui`.
+Antes de usarlo, cambia `MODELFUSE_TEST_DATABASE_PASSWORD` por una contraseña local. Antes de ejecutar comandos que dependan de un runtime o servicio, el agente debe ejecutar el preflight correspondiente. Para el entorno de integración:
 
-### Base de Datos y Migraciones (Liquibase)
+```powershell
+.\agent-scripts\preflight-integration.ps1 -EnvFile apps/backend/.env.integration
+```
 
-- Toda creación o modificación de BD (tablas, views, triggers, procedures) DEBE hacerse con scripts SQL formateados para Liquibase (`-- liquibase formatted sql`).
-- Las migraciones se organizan en subcarpetas por módulo dentro de `db/changelogs/` (ej. `db/changelogs/modulo_usuarios/001-init.sql`).
-- Todo nuevo changelog de módulo debe incluirse en su `db.changelog-<modulo>.xml`, que a su vez se importa en `db/changelogs/db.changelog-master.xml`.
+Los preflights de Node/pnpm, Python y Docker/Compose deben ejecutarse con la elevación real del host indicada en `AGENTS.md`. El preflight de integración no inicia ni repara servicios: valida que el entorno ya esté disponible.
 
-### Nuevas features
+La configuración generada en `agent-scripts/runtime.local.json` es local, no contiene secretos y está excluida de Git.
 
-Cuando implementes nuevas funcionalidades, mantén separadas estas responsabilidades:
+## Principios técnicos
 
-- UI y estado visual en frontend.
-- Orquestación de modelos y persistencia en backend.
-- Componentes reutilizables en `packages/ui`.
-- Integraciones externas dentro de `infrastructure/`.
+- Separación entre UI, orquestación, persistencia e infraestructura externa.
+- Contratos tipados y validación de entradas en los boundaries HTTP.
+- Adaptadores LLM desacoplados del flujo de conversación.
+- Persistencia explícita de estados y errores observables.
+- Componentes compartidos en `packages/ui` sin dependencias de una aplicación concreta.
+- Configuración sensible exclusivamente mediante el entorno.
 
-### Integraciones con LLMs
+## Contribuir
 
-Toda integración con modelos externos debe ser:
+Antes de proponer cambios, revisa la documentación técnica y los contratos relacionados con el área afectada. Mantén las responsabilidades separadas, añade las migraciones mediante Liquibase cuando corresponda y ejecuta las validaciones focalizadas antes de abrir un pull request.
 
-- configurable por `.env`,
-- desacoplada del proveedor,
-- extensible para nuevos modelos,
-- reutilizable para flujos de comparación, evaluación o fusión.
+Usa commits convencionales, por ejemplo: `feat:`, `fix:`, `test:` o `docs:`.
 
-### Ownership de pruebas
-
-| Rol                                      | Responsabilidad                                                           |
-| ---------------------------------------- | ------------------------------------------------------------------------- |
-| `frontend-builder` / `backend-builder`  | Código de producto y seams de testabilidad. No crean ni ejecutan pruebas. |
-| `frontend-auditor` / `backend-auditor`  | Auditoría read-only durante la implementación, con sus skills de dominio. |
-| `frontend-completed-scope-auditor` /<br>`backend-completed-scope-auditor` | Auditoría read-only acotada de un alcance ya completado; usa la skill común y no ejecuta build, tests ni comandos de runtime salvo autorización explícita. |
-| `unit-test-runner`                       | Pruebas unitarias aisladas y contract-unit.                               |
-| `integration-test-runner`                | Pruebas sin navegador entre componentes reales.                           |
-| `e2e-test-runner`                        | Journeys Playwright en navegador real.                                    |
-| `performance-test-runner`               | Pruebas de aceptación, regresión, carga, stress, spike y soak.            |
-| `product-ux`                             | Pruebas de usabilidad.                                                    |
-
-Los auditores de alcance completado comparten el protocolo portable de
-`.codex/skills/common/completed-scope-audit/SKILL.md`, que define agrupación de
-archivos, límites de tiempo, profundidad, checkpoints e informes parciales.
-
----
-
-## 📈 Estado actual y hoja de ruta
-
-**Estado actual del proyecto:**
-
-- ✅ Especificación funcional completa (`specs/001-compare-llm-responses/spec.md`).
-- ✅ Modelo de datos definido (`data-model.md`).
-- ✅ 118+ tareas de implementación identificadas, priorizadas y con dependencias.
-- 🔄 Fases de ejecución: US1 (setup) → US2 (workspace multiturno + SSE) → US3 (historial + reapertura) → US4 (comparación lateral + recovery).
-
-**Extensiones naturales previstas:**
-
-- Soporte para más proveedores y modelos.
-- Configuración dinámica de modelos desde la UI.
-- Evaluación automática de respuestas (scoring / ranking).
-- Métricas de costo y tokens por conversación.
-- Exportación de conversaciones.
-- Herramientas avanzadas de investigación y escritura asistida.
-
----
-
-## 🤝 Contribuir
-
-1. Leer `specs/001-compare-llm-responses/spec.md` para contexto funcional completo.
-2. Revisar `tasks.md` para tareas pendientes y sus dependencias.
-3. Seguir la convención de commits: `feat:`, `fix:`, `test:`, `docs:`.
-4. Los PRs requieren: tests passing, cobertura > 80%, y revisión de al menos 1 maintainer.
-
----
-
-## 📄 Licencia
+## Licencia
 
 MIT.
 
----
-
-_**ModelFuse** — Comparación y fusión de LLMs con trazabilidad, resiliencia y reproducibilidad._
+_ModelFuse — comparación y fusión de LLMs con trazabilidad, streaming y recuperación._
