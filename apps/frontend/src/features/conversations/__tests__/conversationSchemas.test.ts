@@ -9,7 +9,12 @@ import {
   turnEventSnapshotSchema,
   turnSnapshotResponseSchema,
 } from '../schemas/conversationSchemas';
-import type { DeploymentSummaryTuple, ModelResponse, ResponseSlot, Turn } from '../types/conversation';
+import type {
+  DeploymentSummaryTuple,
+  ModelResponse,
+  ResponseSlot,
+  Turn,
+} from '../types/conversation';
 
 const conversationId = '123e4567-e89b-42d3-a456-426614174000';
 const turnId = '223e4567-e89b-42d3-a456-426614174000';

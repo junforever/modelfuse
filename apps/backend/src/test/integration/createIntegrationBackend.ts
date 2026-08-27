@@ -63,7 +63,8 @@ function toProviderRegistry(providers: ProviderRegistry | ControlledProviders): 
     openrouter: {
       providerId: 'openrouter',
       measureInputTokens: (deployment, messages) => {
-        const provider = deployment.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
+        const provider =
+          deployment.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
         return provider.measureInputTokens(deployment, messages);
       },
       generate: request => {

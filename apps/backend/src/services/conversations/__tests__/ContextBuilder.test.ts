@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type {
-  ConversationDeploymentSnapshot,
-  ResponseSlot,
-} from '../../../types/conversations.js';
+import type { ConversationDeploymentSnapshot, ResponseSlot } from '../../../types/conversations.js';
 import type { LlmMessage, LlmProvider } from '../../../types/llm.js';
 import { CONTEXT_TRUNCATION_MARKER } from '../contextProtection.js';
 import { ContextBuilder } from '../ContextBuilder.js';

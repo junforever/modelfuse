@@ -84,10 +84,7 @@ export function deployment(
   };
 }
 
-const generationRequest = (
-  providerId: ProviderId,
-  signal = new AbortController().signal
-) => ({
+const generationRequest = (providerId: ProviderId, signal = new AbortController().signal) => ({
   slot: REQUEST_SLOT,
   deployment: deployment(providerId),
   messages,
@@ -203,9 +200,7 @@ export function runProviderContract(options: ContractOptions): void {
         signal: controller.signal,
       });
 
-      options.requestMock.mockRejectedValueOnce(
-        axiosError(undefined, { code: 'ECONNABORTED' })
-      );
+      options.requestMock.mockRejectedValueOnce(axiosError(undefined, { code: 'ECONNABORTED' }));
 
       await expect(provider.generate(generationRequest(options.providerId))).rejects.toMatchObject({
         code: 'timeout',

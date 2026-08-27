@@ -121,8 +121,8 @@ describe('protectContext', () => {
 
     const exercise = async (deployment: ConversationDeploymentSnapshot) => {
       const tokenCounts = [170_000, 150_000];
-      const measureInputTokens = vi.fn<LlmProvider['measureInputTokens']>(
-        async () => tokenCounts.shift()!
+      const measureInputTokens = vi.fn<LlmProvider['measureInputTokens']>(async () =>
+        tokenCounts.shift()!
       );
       const result = await protectContext(
         input(deployment, measureInputTokens, {

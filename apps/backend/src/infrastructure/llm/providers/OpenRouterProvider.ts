@@ -91,10 +91,7 @@ export class OpenRouterProvider implements LlmProvider {
     if (status === 408 || status === 502 || status === 503) return 'provider_transient_error';
     if (status === 402) return 'provider_error';
     const metadata = errorMetadata(error.response?.data);
-    if (
-      metadata?.error_type === 'content_policy_violation' ||
-      metadata?.error_type === 'refusal'
-    )
+    if (metadata?.error_type === 'content_policy_violation' || metadata?.error_type === 'refusal')
       return 'content_blocked';
     if (
       status === 403 &&

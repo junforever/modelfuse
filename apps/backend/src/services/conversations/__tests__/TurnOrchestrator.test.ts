@@ -54,12 +54,10 @@ describe('TurnOrchestrator', () => {
                   ? 'Consolidate the available model answers into one final answer.'
                   : 'Provide a complete, accurate answer to the user prompt.',
             },
-            ...(input.currentBaseResponses ?? []).map(
-              ({ slot, content }: CurrentBaseResponse) => ({
-                role: 'user' as const,
-                content: `${slot}:\n${content ?? '[unavailable]'}`,
-              })
-            ),
+            ...(input.currentBaseResponses ?? []).map(({ slot, content }: CurrentBaseResponse) => ({
+              role: 'user' as const,
+              content: `${slot}:\n${content ?? '[unavailable]'}`,
+            })),
             { role: 'user' as const, content: input.prompt },
           ],
           contextWindow: {

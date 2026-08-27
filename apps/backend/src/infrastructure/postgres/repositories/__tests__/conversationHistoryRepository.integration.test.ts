@@ -114,12 +114,7 @@ async function seedHistory(pool: Pool): Promise<void> {
   for (let ordinal = 1; ordinal <= 7; ordinal += 1) {
     await insertCompletedTurn(pool, HISTORY_ID, ordinal);
   }
-  await insertConversation(
-    pool,
-    OTHER_HISTORY_ID,
-    '2026-07-26T20:00:08.000Z',
-    'other-history'
-  );
+  await insertConversation(pool, OTHER_HISTORY_ID, '2026-07-26T20:00:08.000Z', 'other-history');
   await insertConversationDeployments(pool, OTHER_HISTORY_ID);
   await insertCompletedTurn(pool, OTHER_HISTORY_ID, 7, 'other-conversation-canary');
 }

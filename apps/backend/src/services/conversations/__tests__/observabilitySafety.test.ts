@@ -238,9 +238,7 @@ describe('conversation observability safety', () => {
     };
     const contextBuilder: Pick<ContextBuilder, 'build'> = {
       build: vi.fn(async input => {
-        await input.measureInputTokens(input.deployment, [
-          { role: 'user', content: input.prompt },
-        ]);
+        await input.measureInputTokens(input.deployment, [{ role: 'user', content: input.prompt }]);
         return {
           ok: true as const,
           messages: [{ role: 'user' as const, content: input.prompt }],

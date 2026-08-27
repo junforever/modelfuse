@@ -6,12 +6,7 @@ import {
   RESPONSE_SLOT_LABELS,
   type ConversationTurnResponse,
 } from '../src/features/conversations/types/conversation';
-import {
-  defaultDeploymentIds,
-  expect,
-  fakeModelResponses,
-  test,
-} from './fixtures/modelFuse';
+import { defaultDeploymentIds, expect, fakeModelResponses, test } from './fixtures/modelFuse';
 import { expectDeploymentSummaries } from './support/journeys';
 import { E2E_BACKEND_ORIGIN } from './support/scenarios';
 

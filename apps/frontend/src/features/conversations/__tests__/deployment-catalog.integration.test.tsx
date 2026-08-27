@@ -417,7 +417,8 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
     const adapter: AxiosAdapter = async config => {
       const method = (config.method ?? 'get').toLowerCase();
       const path = config.url ?? '';
-      if (method === 'get' && path === '/model-catalog') return response(config, { items: CATALOG_ITEMS });
+      if (method === 'get' && path === '/model-catalog')
+        return response(config, { items: CATALOG_ITEMS });
       if (method === 'get' && path === '/conversations') {
         return response(config, { items: [originalSummary], nextCursor: null });
       }
@@ -438,14 +439,18 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       await user.click(await screen.findByRole('button', { name: originalSummary.title }));
       expect(await screen.findByText('GPT-5.6 Terra')).toBeVisible();
 
-      await user.click(screen.getByRole('button', { name: `Acciones de ${originalSummary.title}` }));
+      await user.click(
+        screen.getByRole('button', { name: `Acciones de ${originalSummary.title}` })
+      );
       await user.click(await screen.findByRole('menuitem', { name: 'Renombrar' }));
       const titleInput = screen.getByRole('textbox', { name: 'Nombre de la conversación' });
       await user.clear(titleInput);
       await user.type(titleInput, renamedSummary.title);
       await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
-      await waitFor(() => expect(screen.getByRole('button', { name: renamedSummary.title })).toBeVisible());
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: renamedSummary.title })).toBeVisible()
+      );
       expect(queryClient.getQueryData(conversationKeys.detail(CONVERSATION_ID))).toEqual({
         ...originalSummary,
         title: renamedSummary.title,
@@ -471,22 +476,29 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
     const adapter: AxiosAdapter = async config => {
       const method = (config.method ?? 'get').toLowerCase();
       const path = config.url ?? '';
-      if (method === 'get' && path === '/model-catalog') return response(config, { items: CATALOG_ITEMS });
-      if (method === 'get' && path === '/conversations') return response(config, { items: [originalSummary], nextCursor: null });
-      if (method === 'patch' && path === `/conversations/${CONVERSATION_ID}`) return response(config, renamedSummary);
+      if (method === 'get' && path === '/model-catalog')
+        return response(config, { items: CATALOG_ITEMS });
+      if (method === 'get' && path === '/conversations')
+        return response(config, { items: [originalSummary], nextCursor: null });
+      if (method === 'patch' && path === `/conversations/${CONVERSATION_ID}`)
+        return response(config, renamedSummary);
       throw new Error(`Unexpected no-detail rename request: ${method.toUpperCase()} ${path}`);
     };
     const { queryClient, user, unmount } = renderHistoryWorkspace(adapter);
 
     try {
-      await user.click(await screen.findByRole('button', { name: `Acciones de ${originalSummary.title}` }));
+      await user.click(
+        await screen.findByRole('button', { name: `Acciones de ${originalSummary.title}` })
+      );
       await user.click(await screen.findByRole('menuitem', { name: 'Renombrar' }));
       const titleInput = screen.getByRole('textbox', { name: 'Nombre de la conversación' });
       await user.clear(titleInput);
       await user.type(titleInput, renamedSummary.title);
       await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
-      await waitFor(() => expect(screen.getByRole('button', { name: renamedSummary.title })).toBeVisible());
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: renamedSummary.title })).toBeVisible()
+      );
       expect(queryClient.getQueryData(conversationKeys.detail(CONVERSATION_ID))).toBeUndefined();
     } finally {
       unmount();

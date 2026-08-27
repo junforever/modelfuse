@@ -252,9 +252,9 @@ describe('conversations API contract', () => {
     const adapter: AxiosAdapter = async config => throwApiError(config, apiError);
     const client = createApiClient({ baseURL: '/api/v1', adapter });
 
-    await expect(createConversation(client, { clientRequestId, prompt: 'Primer prompt' })).rejects.toEqual(
-      apiError
-    );
+    await expect(
+      createConversation(client, { clientRequestId, prompt: 'Primer prompt' })
+    ).rejects.toEqual(apiError);
   });
 
   it('rejects extra public-error fields and falls back to the safe error', async () => {
@@ -282,7 +282,6 @@ describe('conversations API contract', () => {
         requestId: 'unavailable',
       });
     }
-
   });
 
   it('rejects DEFAULT_PROFILE_UNAVAILABLE errors without a unique non-empty ID list', async () => {
@@ -310,7 +309,9 @@ describe('conversations API contract', () => {
       const adapter: AxiosAdapter = async config => throwApiError(config, payload);
       const client = createApiClient({ baseURL: '/api/v1', adapter });
 
-      await expect(createConversation(client, { clientRequestId, prompt: 'Primer prompt' })).rejects.toEqual({
+      await expect(
+        createConversation(client, { clientRequestId, prompt: 'Primer prompt' })
+      ).rejects.toEqual({
         code: 'INTERNAL_ERROR',
         message: 'No se pudo completar la solicitud',
         requestId: 'unavailable',

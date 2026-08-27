@@ -94,7 +94,11 @@ class ScenarioLlmProvider implements LlmProvider {
     deployment: LlmRequest['deployment'],
     messages: LlmRequest['messages']
   ): Promise<number> {
-    if (!messages.some(message => message.content.includes(fakeModelScenarios.contextProtection.marker))) {
+    if (
+      !messages.some(message =>
+        message.content.includes(fakeModelScenarios.contextProtection.marker)
+      )
+    ) {
       return 1;
     }
     const contentLength = messages.reduce((total, message) => total + message.content.length, 0);
@@ -131,10 +135,7 @@ class ScenarioLlmProvider implements LlmProvider {
       );
     }
 
-    return this.result(
-      fakeResponseContent(request.slot, request.deployment.deploymentId),
-      request
-    );
+    return this.result(fakeResponseContent(request.slot, request.deployment.deploymentId), request);
   }
 
   private result(content: string, request: LlmRequest): LlmResult {
@@ -182,10 +183,7 @@ function providersFor(scenario: CatalogScenario): ProviderRegistry {
 
 const modelCatalogServices: Readonly<Record<CatalogScenario, ModelCatalogService>> = {
   full: new ModelCatalogService(deploymentDefinitions, providersFor('full')),
-  'without-openai': new ModelCatalogService(
-    deploymentDefinitions,
-    providersFor('without-openai')
-  ),
+  'without-openai': new ModelCatalogService(deploymentDefinitions, providersFor('without-openai')),
   'without-openrouter': new ModelCatalogService(
     deploymentDefinitions,
     providersFor('without-openrouter')
@@ -205,7 +203,9 @@ class RequestModelCatalogService extends ModelCatalogService {
     return this.current().getAvailableDeployment(deploymentId);
   }
 
-  override resolveExplicitAssignment(assignment: Parameters<ModelCatalogService['resolveExplicitAssignment']>[0]) {
+  override resolveExplicitAssignment(
+    assignment: Parameters<ModelCatalogService['resolveExplicitAssignment']>[0]
+  ) {
     return this.current().resolveExplicitAssignment(assignment);
   }
 
@@ -314,9 +314,8 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  requestCatalogScenario.run(
-    catalogScenarioFromAuthorization(request.headers.authorization),
-    () => app(request, response)
+  requestCatalogScenario.run(catalogScenarioFromAuthorization(request.headers.authorization), () =>
+    app(request, response)
   );
 });
 

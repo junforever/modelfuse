@@ -9,11 +9,7 @@ import {
   test,
 } from './fixtures/modelFuse';
 import { E2E_BACKEND_ORIGIN } from './support/scenarios';
-import {
-  expectDeploymentSummaries,
-  submitPrompt,
-  waitForTurnStream,
-} from './support/journeys';
+import { expectDeploymentSummaries, submitPrompt, waitForTurnStream } from './support/journeys';
 
 const EVENTS_PATH = /\/api\/v1\/conversations\/[^/]+\/turns\/[^/]+\/events$/;
 const EXPECTED_DEPLOYMENTS = deploymentSummaries(defaultDeploymentIds);
@@ -159,11 +155,7 @@ test('renames during busy, blocks Delete, then deletes the conversation persiste
     await expect(sidebar.getByRole('button', { name: renamedTitle, exact: true })).toHaveCount(0);
   } finally {
     if (!terminalObserved) {
-      const terminalPromise = waitForTerminalTurn(
-        page,
-        result.conversation.id,
-        result.turn.id
-      );
+      const terminalPromise = waitForTerminalTurn(page, result.conversation.id, result.turn.id);
       await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
         params: { prompt },
       });
@@ -218,11 +210,7 @@ test('shows a real-time update error when reopening a busy conversation loses SS
   } finally {
     await page.unroute(events);
     if (!terminalObserved) {
-      const terminalPromise = waitForTerminalTurn(
-        page,
-        result.conversation.id,
-        result.turn.id
-      );
+      const terminalPromise = waitForTerminalTurn(page, result.conversation.id, result.turn.id);
       await request.post(`${E2E_BACKEND_ORIGIN}/__e2e/release-continuation`, {
         params: { prompt },
       });

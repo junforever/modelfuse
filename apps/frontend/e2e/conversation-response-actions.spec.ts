@@ -13,8 +13,7 @@ import {
 } from './fixtures/modelFuse';
 import { expectDeploymentSummaries } from './support/journeys';
 
-const [base1Deployment, , , consolidatorDeployment] =
-  deploymentSummaries(defaultDeploymentIds);
+const [base1Deployment, , , consolidatorDeployment] = deploymentSummaries(defaultDeploymentIds);
 const BASE_1_LABEL = `Base 1 · ${base1Deployment.displayName}`;
 const CONSOLIDATOR_LABEL = `Consolidador · ${consolidatorDeployment.displayName}`;
 
@@ -58,9 +57,7 @@ test('retries one failed slot and replaces the stale consolidation', async ({
 
   await page.getByRole('tab', { name: BASE_1_LABEL, exact: true }).click();
   await expect(page.getByRole('button', { name: `Reintentar ${BASE_1_LABEL}` })).toBeEnabled();
-  await expect(
-    page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })).toBeVisible();
 
   await page.getByRole('tab', { name: CONSOLIDATOR_LABEL, exact: true }).click();
   await expect(page.getByRole('tabpanel', { name: CONSOLIDATOR_LABEL })).toContainText(
@@ -108,9 +105,7 @@ test('persists Continue-without and rejects a later retry with 409', async ({
   const initialStream = await initialStreamPromise;
 
   await page.getByRole('tab', { name: BASE_1_LABEL, exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })).toBeVisible();
   await initialStream.finished();
   await expect(page.getByRole('status').filter({ hasText: 'Procesando respuestas' })).toBeHidden();
   await page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` }).click();
@@ -124,9 +119,7 @@ test('persists Continue-without and rejects a later retry with 409', async ({
       response.request().method() === 'POST' &&
       /\/responses\/base-1\/continue-without$/.test(new URL(response.url()).pathname)
   );
-  await dialog
-    .getByRole('button', { name: `Confirmar continuar sin ${BASE_1_LABEL}` })
-    .click();
+  await dialog.getByRole('button', { name: `Confirmar continuar sin ${BASE_1_LABEL}` }).click();
   const continueResponse = await continueResponsePromise;
   expect(continueResponse.status()).toBe(200);
 
@@ -134,9 +127,7 @@ test('persists Continue-without and rejects a later retry with 409', async ({
   expectDeploymentSummaries({ conversation, turn }, defaultDeploymentIds);
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('button', { name: `Reintentar ${BASE_1_LABEL}` })).toHaveCount(0);
-  await expect(
-    page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })
-  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: `Continuar sin ${BASE_1_LABEL}` })).toHaveCount(0);
   await expect(page.getByRole('status').filter({ hasText: 'Procesando respuestas' })).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeEditable();
 

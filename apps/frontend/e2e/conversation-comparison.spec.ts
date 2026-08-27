@@ -1,10 +1,5 @@
 import type { ConversationDetail } from '../src/features/conversations/types/conversation';
-import {
-  deploymentSummaries,
-  expect,
-  mixedDeploymentIds,
-  test,
-} from './fixtures/modelFuse';
+import { deploymentSummaries, expect, mixedDeploymentIds, test } from './fixtures/modelFuse';
 import { expectDeploymentSummaries, submitPrompt } from './support/journeys';
 import { fakeResponseContent } from './support/scenarios';
 
@@ -71,8 +66,7 @@ test('persists a mixed-provider comparison and reopens its immutable assignment'
   const detailResponsePromise = page.waitForResponse(
     response =>
       response.request().method() === 'GET' &&
-      new URL(response.url()).pathname ===
-        `/api/v1/conversations/${created.result.conversation.id}`
+      new URL(response.url()).pathname === `/api/v1/conversations/${created.result.conversation.id}`
   );
   await conversationLink.click();
   const detailResponse = await detailResponsePromise;

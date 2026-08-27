@@ -361,14 +361,17 @@ function stubProductionEnvironment(): void {
   for (const [name, value] of Object.entries(values)) vi.stubEnv(name, value);
 }
 
-function toProviderRegistry(providers: ReturnType<typeof createControlledProviders>): ProviderRegistry {
+function toProviderRegistry(
+  providers: ReturnType<typeof createControlledProviders>
+): ProviderRegistry {
   return {
     openai: providers['base-1'],
     google: providers['base-2'],
     openrouter: {
       providerId: 'openrouter',
       measureInputTokens: (deployment, messages) => {
-        const provider = deployment.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
+        const provider =
+          deployment.slot === 'base-3' ? providers['base-3'] : providers.consolidator;
         return provider.measureInputTokens(deployment, messages);
       },
       generate: request => {

@@ -48,12 +48,7 @@ describe('mixed provider deployment execution integration', () => {
   });
 
   it('dispatches persisted mixed deployments through every real adapter, waits for bases, and exposes only normalized results', async () => {
-    const firstDeployments = deploymentTuple('first', [
-      'openrouter',
-      'qwen',
-      'openai',
-      'google',
-    ]);
+    const firstDeployments = deploymentTuple('first', ['openrouter', 'qwen', 'openai', 'google']);
     const secondDeployments = deploymentTuple('second', [
       'minimax',
       'openrouter',
@@ -81,9 +76,7 @@ describe('mixed provider deployment execution integration', () => {
 
       transportCalls.push({ request, deployment });
       transportEvents.push({ kind: 'request', modelId });
-      const gate = [firstBaseGate, secondBaseGate].find(candidate =>
-        candidate.models.has(modelId)
-      );
+      const gate = [firstBaseGate, secondBaseGate].find(candidate => candidate.models.has(modelId));
       if (gate) {
         gate.requested.add(modelId);
         if (gate.requested.size === gate.models.size) gate.allRequested.resolve();
@@ -269,7 +262,9 @@ class InMemoryTurnRepository {
     response.startedAt = input.startedAt;
     response.completedAt = input.completedAt;
     response.updatedAt = input.completedAt;
-    snapshot.turn.status = snapshot.turn.responses.every(candidate => candidate.status === 'completed')
+    snapshot.turn.status = snapshot.turn.responses.every(
+      candidate => candidate.status === 'completed'
+    )
       ? 'completed'
       : 'running';
     snapshot.turn.updatedAt = input.completedAt;
@@ -449,11 +444,11 @@ function assertBasesCompleteBeforeConsolidator(
   const consolidatorRequest = events.findIndex(
     event => event.kind === 'request' && event.modelId === deployments[3].modelId
   );
-  const baseResponses = deployments.slice(0, 3).map(deployment =>
-    events.findIndex(
-      event => event.kind === 'response' && event.modelId === deployment.modelId
-    )
-  );
+  const baseResponses = deployments
+    .slice(0, 3)
+    .map(deployment =>
+      events.findIndex(event => event.kind === 'response' && event.modelId === deployment.modelId)
+    );
   expect(baseResponses.every(index => index >= 0)).toBe(true);
   expect(consolidatorRequest).toBeGreaterThan(Math.max(...baseResponses));
 }

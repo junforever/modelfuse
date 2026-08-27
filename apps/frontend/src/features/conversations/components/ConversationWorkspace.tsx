@@ -47,10 +47,7 @@ function ActiveTimeline({
 
   return (
     <div className="grid gap-4">
-      <ConversationProcessingNotice
-        isBusy={snapshot.hasWorkInProgress}
-        sseError={error}
-      />
+      <ConversationProcessingNotice isBusy={snapshot.hasWorkInProgress} sseError={error} />
       <div
         ref={historyRef}
         role="region"
@@ -73,15 +70,10 @@ function ActiveTimeline({
   );
 }
 
-export function ConversationWorkspace({
-  withHistory = false,
-}: ConversationWorkspaceProps = {}) {
+export function ConversationWorkspace({ withHistory = false }: ConversationWorkspaceProps = {}) {
   const workspace = useConversationWorkspace(withHistory);
   const content = (
-    <section
-      aria-labelledby="workspace-title"
-      className="mx-auto grid w-full max-w-5xl gap-6"
-    >
+    <section aria-labelledby="workspace-title" className="mx-auto grid w-full max-w-5xl gap-6">
       <header className="grid gap-1">
         <h1 id="workspace-title" className="text-2xl font-semibold tracking-tight">
           Comparar respuestas
@@ -104,11 +96,7 @@ export function ConversationWorkspace({
         </Alert>
       )}
       {withHistory && workspace.historyLoading && (
-        <p
-          role="status"
-          aria-label="Cargando historial"
-          className="text-sm text-muted-foreground"
-        >
+        <p role="status" aria-label="Cargando historial" className="text-sm text-muted-foreground">
           Cargando historial…
         </p>
       )}
@@ -131,9 +119,7 @@ export function ConversationWorkspace({
         </Alert>
       )}
       {withHistory && workspace.historyEmpty && (
-        <p className="text-sm text-muted-foreground">
-          No hay turnos en esta conversación.
-        </p>
+        <p className="text-sm text-muted-foreground">No hay turnos en esta conversación.</p>
       )}
       {workspace.selectedConversationId && workspace.storedDeployments && (
         <ConversationDeploymentSummary deployments={workspace.storedDeployments} />
@@ -145,9 +131,7 @@ export function ConversationWorkspace({
           turns={workspace.turns}
           actionsDisabled={workspace.isPending}
           collapseThreshold={
-            withHistory
-              ? workspace.environment.historyCollapseCharThreshold
-              : undefined
+            withHistory ? workspace.environment.historyCollapseCharThreshold : undefined
           }
           historyRef={workspace.historyRef}
           historyTopSentinel={workspace.historyTopSentinel}
@@ -197,11 +181,9 @@ export function ConversationWorkspace({
               : void workspace.management.conversations.refetch()
           }
           onSelect={workspace.selectConversation}
-          onRename={(id, title) =>
-            workspace.management.rename.mutateAsync({ id, title })
-          }
-          onDelete={(id) => workspace.management.remove.mutateAsync(id)}
-          onDeleted={(id) => {
+          onRename={(id, title) => workspace.management.rename.mutateAsync({ id, title })}
+          onDelete={id => workspace.management.remove.mutateAsync(id)}
+          onDeleted={id => {
             if (id === workspace.selectedConversationId) {
               workspace.startNewConversation();
             }

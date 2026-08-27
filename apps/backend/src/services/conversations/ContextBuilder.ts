@@ -2,10 +2,7 @@ import type {
   ContextRepositoryPort,
   ContextTurn,
 } from '../../infrastructure/postgres/repositories/contextRepository.js';
-import type {
-  ConversationDeploymentSnapshot,
-  ResponseSlot,
-} from '../../types/conversations.js';
+import type { ConversationDeploymentSnapshot, ResponseSlot } from '../../types/conversations.js';
 import type { LlmMessage, LlmProvider } from '../../types/llm.js';
 import { protectContext } from './contextProtection.js';
 
@@ -58,9 +55,7 @@ export class ContextBuilder {
       },
       historicalTurns: history.map(this.toHistoricalTurn),
       auxiliaryMessages:
-        slot === 'consolidator'
-          ? this.baseResponseMessages(input.currentBaseResponses ?? [])
-          : [],
+        slot === 'consolidator' ? this.baseResponseMessages(input.currentBaseResponses ?? []) : [],
       currentPrompt: { role: 'user', content: input.prompt },
       currentOrdinal: input.currentOrdinal,
       deployment: input.deployment,

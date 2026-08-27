@@ -265,8 +265,8 @@ const genericApiErrorSchema = z.strictObject({
   requestId: z.string(),
 });
 
-const defaultProfileUnavailableErrorSchema: z.ZodType<DefaultProfileUnavailableError> = z
-  .strictObject({
+const defaultProfileUnavailableErrorSchema: z.ZodType<DefaultProfileUnavailableError> =
+  z.strictObject({
     code: z.literal('DEFAULT_PROFILE_UNAVAILABLE'),
     message: z.string(),
     requestId: z.string(),

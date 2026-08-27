@@ -98,9 +98,23 @@ async function seedContextHistory(pool: Pool): Promise<void> {
   );
   await insertResponse(pool, CONVERSATION_ID, 4, 'base-1', 'completed', 'base-1-4');
   await insertResponse(pool, CONVERSATION_ID, 4, 'base-3', 'completed', 'base-3-must-not-leak');
-  await insertResponse(pool, CONVERSATION_ID, 4, 'consolidator', 'failed', 'failed-consolidator-must-not-leak');
+  await insertResponse(
+    pool,
+    CONVERSATION_ID,
+    4,
+    'consolidator',
+    'failed',
+    'failed-consolidator-must-not-leak'
+  );
   await insertResponse(pool, OTHER_CONVERSATION_ID, 4, 'base-1', 'completed', 'other-base');
-  await insertResponse(pool, OTHER_CONVERSATION_ID, 4, 'consolidator', 'completed', 'other-consolidator');
+  await insertResponse(
+    pool,
+    OTHER_CONVERSATION_ID,
+    4,
+    'consolidator',
+    'completed',
+    'other-consolidator'
+  );
 }
 
 async function insertTurn(

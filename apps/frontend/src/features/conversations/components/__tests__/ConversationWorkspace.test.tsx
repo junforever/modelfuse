@@ -44,7 +44,9 @@ describe('ConversationWorkspace', () => {
     renderWithQueryClient(<ConversationWorkspace />);
 
     expect(
-      screen.getByText('Envía una consulta para comparar tres respuestas y obtener una consolidación.')
+      screen.getByText(
+        'Envía una consulta para comparar tres respuestas y obtener una consolidación.'
+      )
     ).toBeInTheDocument();
   });
 });

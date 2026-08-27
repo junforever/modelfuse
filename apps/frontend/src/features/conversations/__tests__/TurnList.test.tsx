@@ -1,7 +1,11 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { deploymentSummaries, modelResponse, turnFixture } from '../../../test/conversation-fixtures';
+import {
+  deploymentSummaries,
+  modelResponse,
+  turnFixture,
+} from '../../../test/conversation-fixtures';
 import { TurnList } from '../components/TurnList';
 
 describe('TurnList', () => {
