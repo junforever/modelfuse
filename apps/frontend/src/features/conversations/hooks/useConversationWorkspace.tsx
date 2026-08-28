@@ -8,6 +8,7 @@ import { useConversationExecution } from './useConversationExecution';
 import { useConversationQueries } from './useConversationQueries';
 import { conversationKeys } from '../queries/conversation-keys';
 import { apiErrorSchema } from '../schemas/conversationSchemas';
+import { responseFailureMessage } from '../utils/responseFailure';
 import type {
   ConversationPage,
   ConversationTurnResponse,
@@ -49,6 +50,13 @@ function toSnapshot(
 export function errorMessage(error: unknown): string {
   const parsed = apiErrorSchema.safeParse(error);
   return parsed.success ? parsed.data.message : 'No se pudo completar la solicitud';
+}
+
+function currentTurnFailureMessage(snapshot: TurnEventSnapshot | undefined): string | null {
+  const failedResponse = snapshot?.turn.responses.find(
+    response => response.status === 'failed' && !response.continuedWithout
+  );
+  return failedResponse ? responseFailureMessage(failedResponse) : null;
 }
 
 export function useConversationWorkspace(withHistory: boolean) {
@@ -218,6 +226,7 @@ export function useConversationWorkspace(withHistory: boolean) {
   });
 
   const snapshot = turnQuery.data;
+  const failedTurnMessage = currentTurnFailureMessage(snapshot);
   const storedDeployments =
     snapshot?.deployments ??
     (management.detail.data?.id === selectedConversationId
@@ -307,6 +316,7 @@ export function useConversationWorkspace(withHistory: boolean) {
     historyEmpty,
     historyTopSentinel,
     mutationError: execution.error ?? retryMutation.error ?? continueMutation.error,
+    failedTurnMessage,
     turnError: turnQuery.error,
     turnIsError: turnQuery.isError,
     streamGeneration,

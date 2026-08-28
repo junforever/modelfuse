@@ -83,10 +83,12 @@ export function ConversationWorkspace({ withHistory = false }: ConversationWorks
         </p>
       </header>
 
-      {workspace.mutationError && (
+      {(workspace.mutationError || workspace.failedTurnMessage) && (
         <Alert variant="destructive" role="alert">
           <AlertTitle>No se pudo completar la acción</AlertTitle>
-          <AlertDescription>{errorMessage(workspace.mutationError)}</AlertDescription>
+          <AlertDescription>
+            {workspace.failedTurnMessage ?? 'No se pudo completar la solicitud'}
+          </AlertDescription>
         </Alert>
       )}
       {workspace.turnIsError && (

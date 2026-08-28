@@ -3,10 +3,10 @@ import { useId, useState } from 'react';
 import { Button } from '@workspace/ui/components/button';
 
 import {
-  RESPONSE_SLOT_LABELS,
   type ModelResponse,
   type ResponseSlot,
 } from '../types/conversation';
+import { responseFailureMessage } from '../utils/responseFailure';
 import { CollapsibleHistoryMessage } from './CollapsibleHistoryMessage';
 import { ContinueWithoutDialog } from './ContinueWithoutDialog';
 
@@ -18,24 +18,6 @@ interface ResponsePanelProps {
   readonly collapseThreshold?: number;
   readonly onRetry: (slot: ResponseSlot) => void;
   readonly onContinueWithout: (slot: ResponseSlot) => void;
-}
-
-const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
-  authentication: 'el proveedor no está disponible por un problema de configuración.',
-  connectivity: 'no se pudo establecer la conexión con el proveedor.',
-  content_blocked: 'el proveedor bloqueó la solicitud por sus políticas de contenido.',
-  invalid_response: 'el proveedor devolvió una respuesta no válida.',
-  provider_error: 'el proveedor devolvió un error.',
-  provider_transient_error: 'el proveedor tuvo un fallo temporal.',
-  rate_limited: 'el proveedor está temporalmente saturado.',
-  timeout: 'se agotó el tiempo de espera del proveedor.',
-};
-
-function failureMessage(response: ModelResponse): string {
-  const slotLabel = RESPONSE_SLOT_LABELS[response.slot];
-  const detail = FAILURE_MESSAGES[response.error?.code ?? ''] ?? 'el proveedor devolvió un error no identificado.';
-
-  return `Falló el proveedor asignado a ${slotLabel}: ${detail}`;
 }
 
 export function ResponsePanel({
@@ -80,7 +62,7 @@ export function ResponsePanel({
   return (
     <div className="grid gap-4">
       <p id={errorId} role="alert" className="text-destructive">
-        {failureMessage(response)}
+        {responseFailureMessage(response)}
       </p>
       <div className="flex flex-wrap gap-2">
         {response.recoverable && (
