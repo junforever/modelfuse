@@ -368,7 +368,7 @@ export class ConversationService {
           ? this.dependencies.orchestrator.executeRetry({ ...input, slot })
           : this.dependencies.orchestrator.executeTurn(input)
       )
-      .catch(() => this.reconcileRejectedExecution(snapshot.response))
+      .catch(error => this.reconcileRejectedExecution(snapshot.response, error, slot))
       .finally(() => this.activeExecutions.delete(tracked));
     this.activeExecutions.add(tracked);
   }
@@ -377,12 +377,19 @@ export class ConversationService {
     await Promise.allSettled([...this.activeExecutions]);
   }
 
-  private async reconcileRejectedExecution(snapshot: ConversationTurnResponse): Promise<void> {
+  private async reconcileRejectedExecution(
+    snapshot: ConversationTurnResponse,
+    error: unknown,
+    slot?: ResponseSlot
+  ): Promise<void> {
     logger.error({
+      err: error,
       message: 'Background turn execution failed unexpectedly',
       operation: 'turn_execution_rejected',
       conversationId: snapshot.conversation.id,
       turnId: snapshot.turn.id,
+      ...(slot ? { slot } : {}),
+      phase: 'execute_turn',
     });
 
     try {
@@ -393,12 +400,15 @@ export class ConversationService {
       if (reconciled) {
         this.dependencies.orchestrator.publishSnapshot(reconciled.snapshot, reconciled.slots);
       }
-    } catch {
+    } catch (reconciliationError) {
       logger.error({
+        err: reconciliationError,
         message: 'Background turn reconciliation failed',
         operation: 'turn_reconciliation_failed',
         conversationId: snapshot.conversation.id,
         turnId: snapshot.turn.id,
+        ...(slot ? { slot } : {}),
+        phase: 'reconcile_interrupted_turn',
       });
     }
   }

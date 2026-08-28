@@ -1,6 +1,9 @@
+import { fileURLToPath } from 'node:url';
+
 import pino from 'pino';
 
 const isDev = process.env.NODE_ENV !== 'production';
+const logFile = fileURLToPath(new URL('../../logs/backend.log', import.meta.url));
 
 /**
  * Central application logger using Pino.
@@ -14,32 +17,37 @@ const isDev = process.env.NODE_ENV !== 'production';
  */
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
+  messageKey: 'message',
   base: {
     service: 'kb-agent-api',
     environment: process.env.NODE_ENV || 'development',
     pid: process.pid,
   },
-  // In production: Pure JSON for platform ingestion
-  // In development: pino-pretty for human readability
-  transport: isDev
-    ? {
-        target: 'pino-pretty',
+  transport: {
+    targets: [
+      {
+        target: 'pino/file',
         options: {
-          colorize: true,
-          translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
-          ignore: 'pid,hostname',
-          messageFormat: (
-            log: Record<string, unknown>,
-            messageKey: string,
-            levelLabel: string
-          ): string =>
-            `${log[levelLabel]} ${log[messageKey] ?? log.message ?? ''}`,
+          destination: logFile,
+          mkdir: true,
         },
-      }
-    : undefined,
-  // Reserved fields for future OpenTelemetry integration
-  formatters: {
-    level: (label: string) => ({ level: label }),
+      },
+      ...(isDev
+        ? [
+            {
+              target: 'pino-pretty',
+              options: {
+                colorize: true,
+                destination: 1,
+                ignore: 'pid,hostname',
+                levelFirst: true,
+                messageKey: 'message',
+                translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
+              },
+            },
+          ]
+        : []),
+    ],
   },
 });
 

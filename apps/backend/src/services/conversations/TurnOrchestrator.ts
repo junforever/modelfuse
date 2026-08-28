@@ -153,11 +153,19 @@ export class TurnOrchestrator {
     const deployment = input.deployments.find(candidate => candidate.slot === input.slot);
     if (!deployment) throw new Error(`Missing persisted deployment for slot ${input.slot}`);
 
-    const started = await this.dependencies.turnRepository.startResponseAttempt?.({
-      conversationId: input.conversationId,
-      turnId: input.turnId,
-      slot: input.slot,
-    });
+    let started:
+      | Awaited<ReturnType<NonNullable<TurnRepositoryPort['startResponseAttempt']>>>
+      | undefined;
+    try {
+      started = await this.dependencies.turnRepository.startResponseAttempt?.({
+        conversationId: input.conversationId,
+        turnId: input.turnId,
+        slot: input.slot,
+      });
+    } catch (error) {
+      this.logStageFailure(input, error, 'start_response_attempt');
+      throw error;
+    }
     if (this.dependencies.turnRepository.startResponseAttempt && !started) {
       return { slot: input.slot, result: null };
     }
@@ -173,7 +181,13 @@ export class TurnOrchestrator {
       return { slot: input.slot, result: null };
     }
 
-    const protectedContext = await this.buildContext(input, provider, deployment);
+    let protectedContext: Awaited<ReturnType<ContextBuilder['build']>>;
+    try {
+      protectedContext = await this.buildContext(input, provider, deployment);
+    } catch (error) {
+      this.logStageFailure(input, error, 'build_context', attemptNo);
+      throw error;
+    }
     if (!protectedContext.ok) {
       await this.persist(input, {
         attemptNo,
@@ -275,20 +289,57 @@ export class TurnOrchestrator {
   ): Promise<void> {
     const reconsolidateConsolidator =
       input.slot !== 'consolidator' && attempt.status === 'completed' && attempt.attemptNo > 1;
-    const snapshot = await this.dependencies.turnRepository.persistResponseAttempt({
+    let snapshot: StoredTurnSnapshot | null | undefined;
+    try {
+      snapshot = await this.dependencies.turnRepository.persistResponseAttempt({
+        turnId: input.turnId,
+        slot: input.slot,
+        ...attempt,
+        reconsolidateConsolidator,
+      });
+    } catch (error) {
+      this.logStageFailure(input, error, attempt.status === 'failed' ? 'persist_failure' : 'persist', attempt.attemptNo);
+      throw error;
+    }
+    if (snapshot) {
+      try {
+        this.publishSnapshot(
+          snapshot,
+          reconsolidateConsolidator ? [input.slot, 'consolidator'] : input.slot
+        );
+      } catch (error) {
+        this.logStageFailure(input, error, 'publish_snapshot', attempt.attemptNo);
+        throw error;
+      }
+    } else {
+      try {
+        await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
+      } catch (error) {
+        this.logStageFailure(input, error, 'reconcile_snapshot', attempt.attemptNo);
+        throw error;
+      }
+    }
+  }
+
+  private logStageFailure(
+    input: Pick<ExecuteTurnInput, 'turnId'> & {
+      conversationId?: string;
+      slot: ResponseSlot;
+    },
+    error: unknown,
+    phase: string,
+    attemptNo?: number
+  ): void {
+    logger.error({
+      err: { name: error instanceof Error ? error.name : 'NonErrorRejection' },
+      message: 'Conversation execution stage failed',
+      operation: 'turn_stage_failed',
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
       turnId: input.turnId,
       slot: input.slot,
-      ...attempt,
-      reconsolidateConsolidator,
+      phase,
+      ...(attemptNo === undefined ? {} : { attemptNo }),
     });
-    if (snapshot) {
-      this.publishSnapshot(
-        snapshot,
-        reconsolidateConsolidator ? [input.slot, 'consolidator'] : input.slot
-      );
-    } else {
-      await this.dependencies.turnRepository.recalculateTurn?.(input.turnId);
-    }
   }
 
   private async availableBases(turnId: string): Promise<ModelResponse[]> {
