@@ -1,6 +1,12 @@
 import axios from 'axios';
 
 import { isRecoverableLlmError } from '../../../services/llm/llmErrors.js';
+import {
+  createProviderRequestTrace,
+  logProviderRequestCompleted,
+  logProviderRequestFailed,
+  logProviderRequestStarted,
+} from './providerDiagnostics.js';
 import type {
   LlmErrorCode,
   LlmMessage,
@@ -37,11 +43,20 @@ export class GoogleProvider implements LlmProvider {
 
   async generate(request: LlmRequest): Promise<LlmResult> {
     const startedAt = new Date().toISOString();
+    const requestStartedAt = Date.now();
+    const url = `${this.config.endpoint}/v1beta/models/${encodeURIComponent(request.deployment.modelId)}:generateContent`;
+    const trace = createProviderRequestTrace(
+      this.providerId,
+      url,
+      this.config.timeoutMs,
+      request
+    );
+    logProviderRequestStarted(trace);
     let data: GoogleResponse;
     try {
-      ({ data } = await axios.request<GoogleResponse>({
+      const response = await axios.request<GoogleResponse>({
         method: 'POST',
-        url: `${this.config.endpoint}/v1beta/models/${encodeURIComponent(request.deployment.modelId)}:generateContent`,
+        url,
         timeout: this.config.timeoutMs,
         signal: request.signal,
         params: { key: this.config.apiKey },
@@ -49,8 +64,11 @@ export class GoogleProvider implements LlmProvider {
           ...this.mapMessages(request.messages),
           generationConfig: { maxOutputTokens: request.deployment.maxOutputTokens },
         },
-      }));
+      });
+      data = response.data;
+      logProviderRequestCompleted(trace, Date.now() - requestStartedAt, response.status);
     } catch (error) {
+      logProviderRequestFailed(trace, Date.now() - requestStartedAt, error);
       throw this.failure(this.classify(error), request.deployment.modelId);
     }
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text;

@@ -1,6 +1,12 @@
 import axios from 'axios';
 
 import { isRecoverableLlmError } from '../../../services/llm/llmErrors.js';
+import {
+  createProviderRequestTrace,
+  logProviderRequestCompleted,
+  logProviderRequestFailed,
+  logProviderRequestStarted,
+} from './providerDiagnostics.js';
 import type {
   LlmErrorCode,
   LlmMessage,
@@ -37,9 +43,17 @@ export class QwenProvider implements LlmProvider {
 
   async generate(request: LlmRequest): Promise<LlmResult> {
     const startedAt = new Date().toISOString();
+    const requestStartedAt = Date.now();
+    const trace = createProviderRequestTrace(
+      this.providerId,
+      this.config.endpoint,
+      this.config.timeoutMs,
+      request
+    );
+    logProviderRequestStarted(trace);
     let data: QwenResponse;
     try {
-      ({ data } = await axios.request<QwenResponse>({
+      const response = await axios.request<QwenResponse>({
         method: 'POST',
         url: this.config.endpoint,
         timeout: this.config.timeoutMs,
@@ -50,8 +64,11 @@ export class QwenProvider implements LlmProvider {
           input: { messages: request.messages },
           parameters: { result_format: 'message', max_tokens: request.deployment.maxOutputTokens },
         },
-      }));
+      });
+      data = response.data;
+      logProviderRequestCompleted(trace, Date.now() - requestStartedAt, response.status);
     } catch (error) {
+      logProviderRequestFailed(trace, Date.now() - requestStartedAt, error);
       throw this.failure(this.classify(error), request.deployment.modelId);
     }
     const content = data.output?.choices?.[0]?.message?.content;

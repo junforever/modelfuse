@@ -28,14 +28,17 @@ describe('ResponsePanel async failures', () => {
     );
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('El deployment tardó demasiado.');
+    const safeMessage =
+      'Falló el proveedor asignado a Base 1: se agotó el tiempo de espera del proveedor.';
+    expect(alert).toHaveTextContent(safeMessage);
+    expect(alert).not.toHaveTextContent('El deployment tardó demasiado.');
     const retry = screen.getByRole('button', {
       name: 'Reintentar Base 1 · GPT-5.6 Sol',
     });
-    expect(retry).toHaveAccessibleDescription('El deployment tardó demasiado.');
+    expect(retry).toHaveAccessibleDescription(safeMessage);
     expect(
       screen.getByRole('button', { name: 'Continuar sin Base 1 · GPT-5.6 Sol' })
-    ).toHaveAccessibleDescription('El deployment tardó demasiado.');
+    ).toHaveAccessibleDescription(safeMessage);
 
     await user.click(retry);
     expect(props.onRetry).toHaveBeenCalledOnce();

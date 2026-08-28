@@ -1,6 +1,12 @@
 import axios from 'axios';
 
 import { isRecoverableLlmError } from '../../../services/llm/llmErrors.js';
+import {
+  createProviderRequestTrace,
+  logProviderRequestCompleted,
+  logProviderRequestFailed,
+  logProviderRequestStarted,
+} from './providerDiagnostics.js';
 import type {
   LlmErrorCode,
   LlmMessage,
@@ -31,9 +37,17 @@ export class MiniMaxProvider implements LlmProvider {
 
   async generate(request: LlmRequest): Promise<LlmResult> {
     const startedAt = new Date().toISOString();
+    const requestStartedAt = Date.now();
+    const trace = createProviderRequestTrace(
+      this.providerId,
+      this.config.endpoint,
+      this.config.timeoutMs,
+      request
+    );
+    logProviderRequestStarted(trace);
     let data: MiniMaxResponse;
     try {
-      ({ data } = await axios.request<MiniMaxResponse>({
+      const response = await axios.request<MiniMaxResponse>({
         method: 'POST',
         url: this.config.endpoint,
         timeout: this.config.timeoutMs,
@@ -44,8 +58,11 @@ export class MiniMaxProvider implements LlmProvider {
           messages: request.messages,
           max_completion_tokens: request.deployment.maxOutputTokens,
         },
-      }));
+      });
+      data = response.data;
+      logProviderRequestCompleted(trace, Date.now() - requestStartedAt, response.status);
     } catch (error) {
+      logProviderRequestFailed(trace, Date.now() - requestStartedAt, error);
       throw this.failure(this.classify(error), request.deployment.modelId);
     }
     const content = data.choices?.[0]?.message?.content;
