@@ -28,7 +28,12 @@ export const logger = pino({
           colorize: true,
           translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
           ignore: 'pid,hostname',
-          messageFormat: '{levelLabel} {msg}',
+          messageFormat: (
+            log: Record<string, unknown>,
+            messageKey: string,
+            levelLabel: string
+          ): string =>
+            `${log[levelLabel]} ${log[messageKey] ?? log.message ?? ''}`,
         },
       }
     : undefined,
