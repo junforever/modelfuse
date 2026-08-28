@@ -144,7 +144,7 @@ Ningún archivo `.env` debe incluirse en Git.
 La definición principal crea PostgreSQL, pgAdmin y un job de Liquibase. Desde la raíz, inicia los tres servicios:
 
 ```powershell
-docker compose --file docker-compose.yml up -d
+docker compose --file docker-compose.yml --env-file apps/backend/.env up -d
 ```
 
 Comprueba el resultado:
