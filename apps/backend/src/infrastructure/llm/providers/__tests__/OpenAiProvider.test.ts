@@ -41,6 +41,9 @@ runProviderContract({
       },
     });
   },
+  assertOutputLimitOmitted: request => {
+    expect(request).not.toHaveProperty('data.max_completion_tokens');
+  },
   errorCases: [
     { expectedCode: 'authentication', recoverable: false, upstream: axiosError(401) },
     { expectedCode: 'rate_limited', recoverable: true, upstream: axiosError(429) },

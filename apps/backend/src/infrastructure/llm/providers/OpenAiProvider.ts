@@ -56,7 +56,9 @@ export class OpenAiProvider implements LlmProvider {
         data: {
           model: request.deployment.modelId,
           messages: request.messages,
-          max_completion_tokens: request.deployment.maxOutputTokens,
+          ...(request.deployment.maxOutputTokens === undefined
+            ? {}
+            : { max_completion_tokens: request.deployment.maxOutputTokens }),
         },
       });
       data = response.data;

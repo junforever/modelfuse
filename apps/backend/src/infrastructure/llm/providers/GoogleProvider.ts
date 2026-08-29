@@ -62,7 +62,9 @@ export class GoogleProvider implements LlmProvider {
         params: { key: this.config.apiKey },
         data: {
           ...this.mapMessages(request.messages),
-          generationConfig: { maxOutputTokens: request.deployment.maxOutputTokens },
+          ...(request.deployment.maxOutputTokens === undefined
+            ? {}
+            : { generationConfig: { maxOutputTokens: request.deployment.maxOutputTokens } }),
         },
       });
       data = response.data;

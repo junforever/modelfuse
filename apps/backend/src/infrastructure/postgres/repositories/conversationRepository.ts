@@ -430,7 +430,7 @@ export class ConversationRepository {
           deployment.modelId,
           deployment.displayName,
           deployment.contextLimitTokens,
-          deployment.maxOutputTokens,
+          deployment.maxOutputTokens ?? null,
           deployment.inputModalities,
           deployment.outputModalities,
         ]

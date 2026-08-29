@@ -61,6 +61,9 @@ runProviderContract({
       },
     });
   },
+  assertOutputLimitOmitted: request => {
+    expect(request).not.toHaveProperty('data.max_tokens');
+  },
   errorCases: [
     {
       expectedCode: 'connectivity',

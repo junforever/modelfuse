@@ -32,6 +32,7 @@ type ContractOptions = {
     request: Record<string, unknown>,
     deployment: ConversationDeploymentSnapshot
   ) => void;
+  assertOutputLimitOmitted: (request: Record<string, unknown>) => void;
   errorCases: ErrorCase[];
 };
 
@@ -77,7 +78,6 @@ export function deployment(
     modelId: MODEL,
     displayName: `${providerId} contract deployment`,
     contextLimitTokens: 262_144,
-    maxOutputTokens: MAX_OUTPUT_TOKENS,
     inputModalities: ['text'],
     outputModalities: ['text'],
     ...overrides,
@@ -86,7 +86,7 @@ export function deployment(
 
 const generationRequest = (providerId: ProviderId, signal = new AbortController().signal) => ({
   slot: REQUEST_SLOT,
-  deployment: deployment(providerId),
+  deployment: deployment(providerId, { maxOutputTokens: MAX_OUTPUT_TOKENS }),
   messages,
   signal,
 });
@@ -118,7 +118,8 @@ export function runProviderContract(options: ContractOptions): void {
       options.requestMock.mockReset();
     });
 
-    it('uses an arbitrary canonical slot and the exact snapshot in one native request, then returns only normalized fields', async () => {
+    it('uses an arbitrary canonical slot and sends the native output limit only when the snapshot defines it', async () => {
+      options.requestMock.mockResolvedValueOnce({ data: options.successfulResponse });
       options.requestMock.mockResolvedValueOnce({ data: options.successfulResponse });
       const provider = options.createProvider(adapterConfig);
       const request = generationRequest(options.providerId);
@@ -157,6 +158,16 @@ export function runProviderContract(options: ContractOptions): void {
       expect(Date.parse(result.completedAt)).toBeGreaterThanOrEqual(Date.parse(result.startedAt));
       expect(JSON.stringify(result)).not.toContain(SECRET);
       expect(JSON.stringify(result)).not.toContain(SENSITIVE_UPSTREAM);
+
+      await provider.generate({
+        ...request,
+        deployment: deployment(options.providerId),
+      });
+
+      expect(options.requestMock).toHaveBeenCalledTimes(2);
+      options.assertOutputLimitOmitted(
+        options.requestMock.mock.calls[1]?.[0] as Record<string, unknown>
+      );
     });
 
     it('omits metrics when the upstream does not report usage', async () => {

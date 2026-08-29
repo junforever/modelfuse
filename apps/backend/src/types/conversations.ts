@@ -19,7 +19,7 @@ export interface DeploymentDefinition {
   readonly providerId: ProviderId;
   readonly modelId: string;
   readonly contextLimitTokens: number;
-  readonly maxOutputTokens: number;
+  readonly maxOutputTokens?: number;
   readonly inputModalities: readonly [Modality, ...Modality[]];
   readonly outputModalities: readonly [Modality, ...Modality[]];
   readonly credentialEnv: CredentialEnvironmentVariable;

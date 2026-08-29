@@ -49,6 +49,9 @@ runProviderContract({
       },
     });
   },
+  assertOutputLimitOmitted: request => {
+    expect(request).not.toHaveProperty('data.generationConfig.maxOutputTokens');
+  },
   errorCases: [
     { expectedCode: 'authentication', recoverable: false, upstream: axiosError(401) },
     { expectedCode: 'rate_limited', recoverable: true, upstream: axiosError(429) },

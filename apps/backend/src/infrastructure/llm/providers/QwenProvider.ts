@@ -62,7 +62,12 @@ export class QwenProvider implements LlmProvider {
         data: {
           model: request.deployment.modelId,
           input: { messages: request.messages },
-          parameters: { result_format: 'message', max_tokens: request.deployment.maxOutputTokens },
+          parameters: {
+            result_format: 'message',
+            ...(request.deployment.maxOutputTokens === undefined
+              ? {}
+              : { max_tokens: request.deployment.maxOutputTokens }),
+          },
         },
       });
       data = response.data;

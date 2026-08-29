@@ -69,7 +69,9 @@ export class OpenRouterProvider implements LlmProvider {
         data: {
           model: request.deployment.modelId,
           messages: request.messages,
-          max_tokens: request.deployment.maxOutputTokens,
+          ...(request.deployment.maxOutputTokens === undefined
+            ? {}
+            : { max_tokens: request.deployment.maxOutputTokens }),
         },
       });
       data = response.data;

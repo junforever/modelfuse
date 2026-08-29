@@ -10,10 +10,10 @@ const currentPrompt = { role: 'user' as const, content: 'Current prompt must sur
 
 function snapshot(
   definition: (typeof DEPLOYMENT_CATALOG)[number],
-  maxOutputTokens: number = definition.maxOutputTokens
+  overrides: Partial<ConversationDeploymentSnapshot<'base-1'>> = {}
 ): ConversationDeploymentSnapshot<'base-1'> {
   const { credentialEnv: _credentialEnv, ...catalogItem } = definition;
-  return { ...catalogItem, maxOutputTokens, slot: 'base-1' };
+  return { ...catalogItem, slot: 'base-1', ...overrides };
 }
 
 function input(
@@ -69,7 +69,7 @@ describe('protectContext', () => {
   );
 
   it('drops oldest whole turns before truncating auxiliary context and awaits every remeasurement', async () => {
-    const selectedSnapshot = snapshot(DEPLOYMENT_CATALOG[0], 1);
+    const selectedSnapshot = snapshot(DEPLOYMENT_CATALOG[0], { maxOutputTokens: 1 });
     const auxiliary = { role: 'assistant' as const, content: 'A'.repeat(80) };
     const measuredPayloads: LlmMessage[][] = [];
     const tokenCounts = [500_000, 450_000, 400_000];
@@ -114,10 +114,10 @@ describe('protectContext', () => {
     });
   });
 
-  it('keeps admission and auxiliary truncation identical when only maxOutputTokens changes', async () => {
+  it('keeps admission and auxiliary truncation identical with or without maxOutputTokens', async () => {
     const definition = DEPLOYMENT_CATALOG[1];
-    const lowOutputSnapshot = snapshot(definition, 1);
-    const highOutputSnapshot = snapshot(definition, 999_999);
+    const withoutOutputLimitSnapshot = snapshot(definition);
+    const explicitOutputLimitSnapshot = snapshot(definition, { maxOutputTokens: 999_999 });
 
     const exercise = async (deployment: ConversationDeploymentSnapshot) => {
       const tokenCounts = [170_000, 150_000];
@@ -132,15 +132,15 @@ describe('protectContext', () => {
       return { result, measureInputTokens };
     };
 
-    const lowOutput = await exercise(lowOutputSnapshot);
-    const highOutput = await exercise(highOutputSnapshot);
+    const withoutOutputLimit = await exercise(withoutOutputLimitSnapshot);
+    const explicitOutputLimit = await exercise(explicitOutputLimitSnapshot);
 
-    expect(lowOutput.result).toEqual(highOutput.result);
-    expect(lowOutput.result).toMatchObject({
+    expect(withoutOutputLimit.result).toEqual(explicitOutputLimit.result);
+    expect(withoutOutputLimit.result).toMatchObject({
       ok: true,
       contextWindow: { truncated: true, protectionApplied: 'truncate' },
     });
-    expect(lowOutput.measureInputTokens).toHaveBeenCalledTimes(2);
-    expect(highOutput.measureInputTokens).toHaveBeenCalledTimes(2);
+    expect(withoutOutputLimit.measureInputTokens).toHaveBeenCalledTimes(2);
+    expect(explicitOutputLimit.measureInputTokens).toHaveBeenCalledTimes(2);
   });
 });

@@ -69,7 +69,7 @@ export interface ConversationDeploymentRow {
   model_id: string;
   display_name: string;
   context_limit_tokens: number;
-  max_output_tokens: number;
+  max_output_tokens: number | null;
   input_modalities: Modality[];
   output_modalities: Modality[];
   [column: string]: unknown;
@@ -175,7 +175,7 @@ export function mapConversationDeploymentRow(
     modelId: row.model_id,
     displayName: row.display_name,
     contextLimitTokens: row.context_limit_tokens,
-    maxOutputTokens: row.max_output_tokens,
+    ...(row.max_output_tokens === null ? {} : { maxOutputTokens: row.max_output_tokens }),
     inputModalities: row.input_modalities as [Modality, ...Modality[]],
     outputModalities: row.output_modalities as [Modality, ...Modality[]],
   };

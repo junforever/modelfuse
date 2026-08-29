@@ -15,7 +15,7 @@ export interface ProviderRequestTrace {
   timeoutMs: number;
   messageCount: number;
   inputChars: number;
-  maxOutputTokens: number;
+  maxOutputTokens?: number;
   signalAborted: boolean;
 }
 
@@ -48,7 +48,9 @@ export function createProviderRequestTrace(
     timeoutMs,
     messageCount: request.messages.length,
     inputChars: request.messages.reduce((total, message) => total + message.content.length, 0),
-    maxOutputTokens: request.deployment.maxOutputTokens,
+    ...(request.deployment.maxOutputTokens === undefined
+      ? {}
+      : { maxOutputTokens: request.deployment.maxOutputTokens }),
     signalAborted: request.signal?.aborted ?? false,
   };
 }
