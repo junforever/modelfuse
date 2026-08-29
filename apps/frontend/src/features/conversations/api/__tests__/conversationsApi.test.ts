@@ -71,7 +71,7 @@ const catalog: ModelCatalogResponse = {
   items: conversation.deployments.map(({ slot: _slot, ...deployment }, index) => ({
     ...deployment,
     contextLimitTokens: 100_000 + index,
-    maxOutputTokens: 8_000 + index,
+    ...(index === 0 ? {} : { maxOutputTokens: 8_000 + index }),
     inputModalities: ['text'] as const,
     outputModalities: ['text'] as const,
   })),
@@ -196,6 +196,22 @@ describe('conversations API contract', () => {
       requestId: 'unavailable',
     });
     expect(JSON.stringify(failure)).not.toMatch(/responses|schema|ZodError/i);
+  });
+
+  it('rejects catalog items with an invalid optional output limit', async () => {
+    for (const maxOutputTokens of [0, 8_000.5]) {
+      const adapter: AxiosAdapter = async config =>
+        response(config, {
+          items: [{ ...catalog.items[0], maxOutputTokens }],
+        });
+      const client = createApiClient({ baseURL: '/api/v1', adapter });
+
+      await expect(listAvailableDeployments(client)).rejects.toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'No se pudo completar la solicitud',
+        requestId: 'unavailable',
+      });
+    }
   });
 
   it('falls back to one safe error when the server error payload is not strictly public', async () => {

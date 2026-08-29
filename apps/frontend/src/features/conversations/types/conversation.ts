@@ -25,7 +25,7 @@ export interface DeploymentCatalogItem {
   readonly modelId: string;
   readonly displayName: string;
   readonly contextLimitTokens: number;
-  readonly maxOutputTokens: number;
+  readonly maxOutputTokens?: number;
   readonly inputModalities: readonly [Modality, ...Modality[]];
   readonly outputModalities: readonly [Modality, ...Modality[]];
 }

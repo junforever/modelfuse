@@ -45,7 +45,7 @@ export const deploymentCatalogItemSchema: z.ZodType<DeploymentCatalogItem> = z.s
   modelId: nonBlankStringSchema,
   displayName: nonBlankStringSchema,
   contextLimitTokens: z.number().int().positive(),
-  maxOutputTokens: z.number().int().positive(),
+  maxOutputTokens: z.number().int().positive().optional(),
   inputModalities: modalityListSchema,
   outputModalities: modalityListSchema,
 });
