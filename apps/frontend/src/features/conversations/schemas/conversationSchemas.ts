@@ -118,7 +118,7 @@ const responseCommonShape = {
   provider: z.string(),
   model: z.string(),
   recoverable: z.boolean(),
-  attemptNo: z.number().int().min(1),
+  attemptNo: z.number().int().nonnegative(),
   metadata: responseMetadataSchema,
   startedAt: dateTimeSchema.nullable(),
   completedAt: dateTimeSchema.nullable(),

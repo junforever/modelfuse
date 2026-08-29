@@ -41,6 +41,7 @@ async function validated<T>(
     response = await request;
   } catch (error) {
     if (!isAxiosError(error)) throw error;
+    if (error.code === 'ERR_CANCELED') throw error;
 
     const apiError = apiErrorSchema.safeParse(error.response?.data);
     throw apiError.success ? apiError.data : unknownApiError;
@@ -56,6 +57,7 @@ async function completed(request: Promise<AxiosResponse<unknown>>): Promise<void
     await request;
   } catch (error) {
     if (!isAxiosError(error)) throw error;
+    if (error.code === 'ERR_CANCELED') throw error;
 
     const apiError = apiErrorSchema.safeParse(error.response?.data);
     throw apiError.success ? apiError.data : unknownApiError;

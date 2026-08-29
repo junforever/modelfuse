@@ -258,6 +258,16 @@ describe('conversations API contract', () => {
     await expect(retryResponse(client, conversationId, turnId, 'base-1')).rejects.toEqual(apiError);
   });
 
+  it('rethrows Axios cancellations instead of normalizing them to a safe API error', async () => {
+    const cancellation = new AxiosError('Request cancelled', 'ERR_CANCELED');
+    const adapter: AxiosAdapter = async () => {
+      throw cancellation;
+    };
+    const client = createApiClient({ baseURL: '/api/v1', adapter });
+
+    await expect(getConversation(client, conversationId)).rejects.toBe(cancellation);
+  });
+
   it('preserves a valid 503 DEFAULT_PROFILE_UNAVAILABLE error with unique missing IDs', async () => {
     const apiError = {
       code: 'DEFAULT_PROFILE_UNAVAILABLE',

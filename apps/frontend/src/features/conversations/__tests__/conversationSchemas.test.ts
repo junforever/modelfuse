@@ -137,8 +137,20 @@ describe('frontend conversation contracts', () => {
       conversation: { id: conversationId, hasWorkInProgress: false },
       turn,
     };
+    const pendingResponse = {
+      ...response('base-1'),
+      attemptNo: 0,
+      completedAt: null,
+      content: null,
+      status: 'pending',
+    };
+    const pendingSnapshot = {
+      ...snapshot,
+      turn: { ...turn, responses: [pendingResponse, ...turn.responses.slice(1)] },
+    };
 
     expect(turnSnapshotResponseSchema.parse(snapshot)).toEqual(snapshot);
+    expect(turnSnapshotResponseSchema.parse(pendingSnapshot)).toEqual(pendingSnapshot);
     expect(
       turnSnapshotResponseSchema.safeParse({
         ...snapshot,
@@ -150,7 +162,7 @@ describe('frontend conversation contracts', () => {
         ...snapshot,
         turn: {
           ...turn,
-          responses: [{ ...response('base-1'), attemptNo: 0 }, ...turn.responses.slice(1)],
+          responses: [{ ...pendingResponse, attemptNo: -1 }, ...turn.responses.slice(1)],
         },
       }).success
     ).toBe(false);
