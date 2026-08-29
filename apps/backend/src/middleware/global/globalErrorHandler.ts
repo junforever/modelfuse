@@ -51,6 +51,7 @@ export function globalErrorHandler(
   const log = req.log || logger;
 
   log.error({
+    err,
     message: 'Unhandled error in request',
     operation: 'global_error_handler',
     method: req.method,
