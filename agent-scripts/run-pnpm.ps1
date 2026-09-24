@@ -51,13 +51,13 @@ if ($missingProperties.Count -gt 0) {
 if (-not (Test-Path -LiteralPath $runtime.nodeExe) -or
     -not (Test-Path -LiteralPath $runtime.pnpmCmd) -or
     -not (Test-Path -LiteralPath (Join-Path $runtime.nodeDir 'node.exe'))) {
-    throw "Las rutas del runtime ya no existen.`nNode: $($runtime.nodeExe)`nPnpm: $($runtime.pnpmCmd)`nNodeDir: $($runtime.nodeDir)`nAcción: ejecutar initialize-runtime.ps1 -Force."
+    throw "Las rutas del runtime ya no existen.`nNode: $($runtime.nodeExe)`nPnpm: $($runtime.pnpmCmd)`nNodeDir: $($runtime.nodeDir)`nAcción: ejecutar initialize-runtime.ps1. Usar -Force solo ante un reemplazo externo confirmado del runtime."
 }
 
 $actualNodeVersion = (& $runtime.nodeExe --version 2>$null).Trim()
 $actualPnpmVersion = (& $runtime.pnpmCmd --version 2>$null).Trim()
 if ($actualNodeVersion -ne $runtime.nodeVersion -or $actualPnpmVersion -ne $runtime.pnpmVersion) {
-    throw "Las versiones del runtime cambiaron.`nNode esperado/actual: $($runtime.nodeVersion) / $actualNodeVersion`nPnpm esperado/actual: $($runtime.pnpmVersion) / $actualPnpmVersion`nAcción: ejecutar initialize-runtime.ps1 -Force."
+    throw "Las versiones del runtime cambiaron.`nNode esperado/actual: $($runtime.nodeVersion) / $actualNodeVersion`nPnpm esperado/actual: $($runtime.pnpmVersion) / $actualPnpmVersion`nAcción: restaurar el runtime esperado; ejecutar initialize-runtime.ps1 -Force solo después de confirmar un reemplazo externo del runtime."
 }
 if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
     throw 'Faltan argumentos de pnpm.`nUso: .\agent-scripts\run-pnpm.ps1 [opciones] -- <argumentos de pnpm>.'

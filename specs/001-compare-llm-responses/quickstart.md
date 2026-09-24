@@ -1,5 +1,7 @@
 # Quickstart: ModelFuse Conversation Comparison
 
+> Historical feature delivery guide. Its shell commands describe the manual human workflow captured for this feature; they are not agent runtime instructions. Agent-executed commands follow the current selective policy in `AGENTS.md`: classify only the profiles used, invoke Node/pnpm through `run-pnpm.ps1`, and run the integration preflight only before a real integration-dependent block.
+
 ## Prerequisites
 
 - Node.js 22+

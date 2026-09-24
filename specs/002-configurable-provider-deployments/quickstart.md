@@ -10,7 +10,7 @@ This guide defines the delivery order and minimum verification for the plan. It 
 - Database services: existing PostgreSQL 16 and Liquibase 4.30 workflow
 - Authoritative inputs: `requirements-brief.md`, `spec.md`, `plan.md`, `research.md`, `data-model.md`, and `contracts/`
 
-Before implementation, resolve the exact Node and pnpm executable once. Reuse those resolved executables in all delegated JavaScript/TypeScript validations.
+Run every Node/pnpm command from the repository root through `& .\agent-scripts\run-pnpm.ps1 -- [literal pnpm args]`; the wrapper validates the cached paths and exact versions on every invocation. Run `initialize-runtime.ps1` only when the cache is missing, invalid, or stale, when the wrapper reports a runtime mismatch, or when an external runtime change is confirmed, and reuse valid runtime evidence between commands.
 
 ## Environment setup
 
@@ -40,6 +40,12 @@ Generate dependency-ordered task IDs with Spec Kit before delegating. Use the ow
 
 ## Database application
 
+Before the first Docker/Compose, PostgreSQL/Liquibase, integration, or E2E command in a block, run the integration preflight once. Reuse that evidence until Compose, `apps/backend/.env.integration`, the services, or the machine changes.
+
+```powershell
+& .\agent-scripts\preflight-integration.ps1 -EnvFile apps/backend/.env.integration
+```
+
 Apply migrations through the existing Docker Compose/Liquibase workflow from the repository root:
 
 ```powershell
@@ -54,15 +60,22 @@ The supported target is a clean database. The migration must create `conversatio
 Use the workspace scripts from the repository root. Replace the placeholders with repository-relative test paths.
 
 ```powershell
-pnpm --filter backend run test --run <backend-test-path>
-pnpm --filter frontend run test --run <frontend-test-path>
-pnpm --filter backend run build
-pnpm --filter frontend run typecheck
-pnpm --filter frontend run lint
-pnpm --filter @workspace/ui run typecheck
+& .\agent-scripts\run-pnpm.ps1 -- --filter backend run test --run <backend-test-path>
+& .\agent-scripts\run-pnpm.ps1 -- --filter frontend run test --run <frontend-test-path>
+& .\agent-scripts\run-pnpm.ps1 -- --filter backend run build
+& .\agent-scripts\run-pnpm.ps1 -- --filter frontend run typecheck
+& .\agent-scripts\run-pnpm.ps1 -- --filter frontend run lint
+& .\agent-scripts\run-pnpm.ps1 -- --filter @workspace/ui run typecheck
 ```
 
-Use the existing Playwright script for the single focused E2E workflow after the disposable database and fake providers are configured. No automated test may call a paid provider.
+Use the existing Playwright script for the single focused E2E workflow after the disposable database and fake providers are configured. Run the integration preflight once before its command block, then pass `-EnvFile apps/backend/.env.integration` to every dependent wrapper invocation because process environments do not persist:
+
+```powershell
+& .\agent-scripts\preflight-integration.ps1 -EnvFile apps/backend/.env.integration
+& .\agent-scripts\run-pnpm.ps1 -EnvFile apps/backend/.env.integration -- --filter frontend test:e2e -- <e2e-test-path>
+```
+
+No automated test may call a paid provider.
 
 ## Acceptance walkthrough
 

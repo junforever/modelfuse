@@ -169,30 +169,39 @@ La interfaz queda disponible normalmente en `http://localhost:5173` y el backend
 
 ## Desarrollo con agentes
 
-Esta sección aplica al trabajo ejecutado por Codex u otros agentes del repositorio. `initialize-runtime.ps1` prepara el runtime de herramientas para el agente; no es necesario para la ejecución normal de la aplicación si Node.js y pnpm ya están instalados y disponibles.
+Esta sección aplica al trabajo ejecutado por Codex u otros agentes del repositorio. La ruta rápida es clasificar qué usa el bloque y no validar perfiles ajenos:
 
-Inicializa el runtime una vez por entorno:
+| Necesidad del bloque | Acción previa | Cuándo repetir |
+| --- | --- | --- |
+| Node/pnpm normal | Ejecutar el comando mediante `run-pnpm.ps1`; el wrapper valida rutas cacheadas y versiones exactas en cada invocación. | Ejecutar `initialize-runtime.ps1` solo si `runtime.local.json` falta, es inválido o está stale, el wrapper reporta un mismatch, o se confirmó un cambio externo. Usar `-Force` solo para un reemplazo confirmado. |
+| Python | Ejecutar `preflight-python.ps1` antes del primer comando Python, con la versión y los módulos realmente requeridos. | Solo si cambian los requisitos o el runtime Python. |
+| Integración real | Ejecutar `preflight-integration.ps1 -EnvFile apps/backend/.env.integration` antes del primer uso real de Docker/Compose, PostgreSQL/Liquibase, Testcontainers o E2E con el backend de integración. | Solo tras cambios de Compose, env, servicios o máquina, invalidación previa o corrección externa confirmada. |
+| Perfil no usado | Nada. | No aplica. |
+
+Para un comando Node/pnpm normal, ejecutá directamente desde una sesión PowerShell:
 
 ```powershell
-.\agent-scripts\initialize-runtime.ps1
+& .\agent-scripts\run-pnpm.ps1 -- run build
+& .\agent-scripts\run-pnpm.ps1 -- --filter backend run typecheck
 ```
 
-Los comandos de Node y pnpm del agente se ejecutan desde la raíz mediante `run-pnpm.ps1`:
+Para un comando que usa la integración real:
 
 ```powershell
-.\agent-scripts\run-pnpm.ps1 -- run build
-.\agent-scripts\run-pnpm.ps1 -- run test
-.\agent-scripts\run-pnpm.ps1 -- run lint
-.\agent-scripts\run-pnpm.ps1 -- run typecheck
-.\agent-scripts\run-pnpm.ps1 -- run format
+& .\agent-scripts\preflight-integration.ps1 -EnvFile apps/backend/.env.integration
+& .\agent-scripts\run-pnpm.ps1 -EnvFile apps/backend/.env.integration -- --filter frontend run test:e2e
 ```
+
+El preflight se ejecuta una vez y su evidencia se reutiliza mientras siga vigente. El entorno que carga un preflight no persiste en procesos posteriores: cada comando que necesite variables de integración debe volver a pasar `-EnvFile apps/backend/.env.integration` al wrapper.
+
+La forma canónica del wrapper es `& .\agent-scripts\run-pnpm.ps1 [opciones del wrapper] -- [argumentos literales de pnpm]`. La frontera `--` del wrapper aparece una sola vez; cualquier `--` posterior pertenece a pnpm o al script y debe conservarse. No envuelvas esta invocación en `powershell -File` cuando necesites tokens `--` literales, porque PowerShell puede enlazarlos antes de que el script los reciba.
 
 Herramientas y preflights del agente:
 
-- `initialize-runtime.ps1`: valida Node.js y pnpm y guarda la configuración local del runtime.
-- `run-pnpm.ps1`: ejecuta pnpm con el runtime inicializado y conserva el código de salida.
-- `preflight-python.ps1`: valida la versión y los módulos Python requeridos.
-- `preflight-integration.ps1`: valida el entorno PostgreSQL/Liquibase de integración.
+- `run-pnpm.ps1`: valida el cache y las versiones de Node.js/pnpm en cada invocación, ejecuta pnpm y conserva su código de salida.
+- `initialize-runtime.ps1`: crea o actualiza la configuración local cuando el cache falta, es inválido o está stale; `-Force` queda reservado para un reemplazo de runtime confirmado.
+- `preflight-python.ps1`: valida únicamente la versión y los módulos Python requeridos por el bloque.
+- `preflight-integration.ps1`: valida el entorno PostgreSQL/Liquibase de integración sin iniciarlo ni repararlo.
 
 El entorno de integración de los agentes usa `docker-compose.integration.yml` y `apps/backend/.env.integration`:
 
@@ -200,13 +209,11 @@ El entorno de integración de los agentes usa `docker-compose.integration.yml` y
 Copy-Item apps/backend/.env.integration.sample apps/backend/.env.integration
 ```
 
-Antes de usarlo, cambia `MODELFUSE_TEST_DATABASE_PASSWORD` por una contraseña local. Antes de ejecutar comandos que dependan de un runtime o servicio, el agente debe ejecutar el preflight correspondiente. Para el entorno de integración:
+Antes de usarlo, cambia `MODELFUSE_TEST_DATABASE_PASSWORD` por una contraseña local. No ejecutes el preflight de integración para unit, build, typecheck, lint ni integraciones con infraestructura totalmente mockeada.
 
-```powershell
-.\agent-scripts\preflight-integration.ps1 -EnvFile apps/backend/.env.integration
-```
+Los permisos normales del host son el valor predeterminado. Solicitá elevación solo después de conservar un error concreto de permiso denegado que demuestre que hace falta; no eleves checks o comandos de forma especulativa.
 
-Los preflights de Node/pnpm, Python y Docker/Compose deben ejecutarse con la elevación real del host indicada en `AGENTS.md`. El preflight de integración no inicia ni repara servicios: valida que el entorno ya esté disponible.
+Los preflights solo validan disponibilidad y configuración: no demuestran que la aplicación o los tests pasen, y no inician, instalan ni reparan runtimes o servicios. Reutilizá la evidencia y no dupliques una validación ya ejecutada por su owner mientras no cambien el código, los requisitos o el estado relevante.
 
 La configuración generada en `agent-scripts/runtime.local.json` es local, no contiene secretos y está excluida de Git.
 
