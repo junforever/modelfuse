@@ -32,7 +32,7 @@ Backend-only immutable configuration, not persisted as a catalog table.
 | `providerId`         | ProviderId                     | Adapter key                                                        |
 | `modelId`            | string                         | Exact upstream model value                                         |
 | `contextLimitTokens` | positive integer               | Input limit used by `ContextBuilder`                               |
-| `maxOutputTokens`    | positive integer               | Exact operational output limit sent on every attempt               |
+| `maxOutputTokens`    | optional positive integer      | Exact output limit when present; provider default when absent       |
 | `inputModalities`    | non-empty readonly string list | Exact normative metadata                                           |
 | `outputModalities`   | non-empty readonly string list | Exact normative metadata; all initial entries are text-only output |
 | `credentialEnv`      | credential-name enum           | Backend-only availability selector; never serialized               |
@@ -44,17 +44,17 @@ Availability is derived from whether the corresponding adapter was created from 
 The static constant contains these ten rows and no variants, aliases, or discovered entries:
 
 | deploymentId                        | displayName            | providerId   | modelId                           | contextLimitTokens | maxOutputTokens | credentialEnv        |
-| ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------: | -------------------- |
-| `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 |          512000 | `OPENROUTER_API_KEY` |
-| `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 |          204800 | `OPENROUTER_API_KEY` |
-| `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 |          131072 | `OPENROUTER_API_KEY` |
-| `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 |         1048576 | `OPENROUTER_API_KEY` |
-| `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 |         1048576 | `OPENROUTER_API_KEY` |
-| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 |          393216 | `OPENROUTER_API_KEY` |
-| `gemini-3.7-flash`                  | Gemini 3.7 Flash       | `google`     | `gemini-3.7-flash`                |            1048576 |           65536 | `GOOGLE_API_KEY`     |
-| `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 |          128000 | `OPENAI_API_KEY`     |
-| `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 |          128000 | `OPENAI_API_KEY`     |
-| `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 |          128000 | `OPENAI_API_KEY`     |
+| ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------- | -------------------- |
+| `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 | absent          | `OPENROUTER_API_KEY` |
+| `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 | absent          | `OPENROUTER_API_KEY` |
+| `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 | absent          | `OPENROUTER_API_KEY` |
+| `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 | absent          | `OPENROUTER_API_KEY` |
+| `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 | absent          | `OPENROUTER_API_KEY` |
+| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 | absent          | `OPENROUTER_API_KEY` |
+| `gemini-3.7-flash`                  | Gemini 3.7 Flash       | `google`     | `gemini-3.7-flash`                |            1048576 | absent          | `GOOGLE_API_KEY`     |
+| `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 | absent          | `OPENAI_API_KEY`     |
+| `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 | absent          | `OPENAI_API_KEY`     |
+| `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 | absent          | `OPENAI_API_KEY`     |
 
 | deploymentId                        | inputModalities                          | outputModalities |
 | ----------------------------------- | ---------------------------------------- | ---------------- |
@@ -69,7 +69,9 @@ The static constant contains these ten rows and no variants, aliases, or discove
 | `openai-5.6-terra`                  | `text`, `image`                          | `text`           |
 | `openai-5.6-luna`                   | `text`, `image`                          | `text`           |
 
-The approved `maxOutputTokens` values above are initial normative values. They are copied unchanged into the conversation snapshot and sent unchanged by the selected adapter; they are not input limits and are never adjusted dynamically.
+`maxOutputTokens` is absent from every initial row. API and application objects omit the property rather than emitting `null`, `undefined`, or `0`. The snapshot stores absence as PostgreSQL `NULL`, and the adapter omits the provider-native output-limit field so the provider chooses its default. A future present value must be a positive integer, is copied into the snapshot and sent unchanged, and is never clamped, negotiated, discovered, substituted, or retried. It never affects input admission.
+
+The immutable snapshot preserves the decision to delegate the output limit, not the provider's external default. That default may change, so an absent value does not guarantee exact output-limit reproducibility.
 
 ## Deployment assignment
 
@@ -97,7 +99,7 @@ One immutable snapshot row per conversation slot.
 | `model_id`             | `varchar(256)`  |   no | Non-blank exact upstream model copied at creation      |
 | `display_name`         | `varchar(128)`  |   no | Non-blank user-visible name copied at creation         |
 | `context_limit_tokens` | `integer`       |   no | Greater than zero                                      |
-| `max_output_tokens`    | `integer`       |   no | Greater than zero                                      |
+| `max_output_tokens`    | `integer`       |  yes | SQL `NULL` when absent; greater than zero when present |
 | `input_modalities`     | `text[]`        |   no | Cardinality greater than zero                          |
 | `output_modalities`    | `text[]`        |   no | Cardinality greater than zero                          |
 | `created_at`           | `timestamptz`   |   no | `now()` on insert                                      |
@@ -109,7 +111,7 @@ One immutable snapshot row per conversation slot.
 - Unique constraint: `(conversation_id, deployment_id)`.
 - Check: slot belongs to `base-1`, `base-2`, `base-3`, `consolidator`.
 - Checks: identifier/name/provider/model strings are non-blank.
-- Checks: both token limits are positive.
+- Checks: `context_limit_tokens` is positive; `max_output_tokens` is `NULL` or positive.
 - Checks: both modality arrays are non-empty.
 - Trigger: every `UPDATE` raises an exception; deletion remains possible only directly or through conversation cascade.
 
@@ -131,7 +133,7 @@ No existing row is updated. Applying the constraint migration with old-slot rows
 
 ### `DeploymentCatalogItem`
 
-Contains all safe definition metadata except `credentialEnv`: `deploymentId`, `displayName`, `providerId`, `modelId`, `contextLimitTokens`, `maxOutputTokens`, `inputModalities`, `outputModalities`.
+Contains all safe definition metadata except `credentialEnv`: `deploymentId`, `displayName`, `providerId`, `modelId`, `contextLimitTokens`, optional `maxOutputTokens`, `inputModalities`, `outputModalities`. The projection omits `maxOutputTokens` when absent.
 
 ### `ConversationDeploymentSummary`
 
@@ -172,7 +174,7 @@ Any insert or constraint failure rolls back steps 5–8. Replays return their ex
 
 - Later turn creation locks the conversation, reads its four snapshots, inserts four response rows, and commits before orchestration.
 - Orchestration selects a snapshot by canonical slot, then an adapter by its stored `providerId`.
-- Context uses stored `contextLimitTokens`; request output uses stored `maxOutputTokens`.
+- Context uses stored `contextLimitTokens`; request output omits the native limit field for stored `NULL` and uses the unchanged stored positive `maxOutputTokens` otherwise.
 - Retry uses the same stored snapshot and existing recoverability rules.
 - Recovery preserves current state transitions and changes only canonical slot literals.
 - Catalog/configuration changes never update snapshot rows and never affect existing conversations.

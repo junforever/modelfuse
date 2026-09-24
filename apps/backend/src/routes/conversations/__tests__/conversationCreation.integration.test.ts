@@ -501,7 +501,7 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
         modelId: string;
         displayName: string;
         contextLimitTokens: number;
-        maxOutputTokens: number;
+        maxOutputTokens: number | null;
         inputModalities: string[];
         outputModalities: string[];
         createdAt: Date;
@@ -574,7 +574,7 @@ function expectCompleteCommittedState(
         modelId: selected.modelId,
         displayName: selected.displayName,
         contextLimitTokens: selected.contextLimitTokens,
-        maxOutputTokens: selected.maxOutputTokens,
+        maxOutputTokens: selected.maxOutputTokens ?? null,
         inputModalities: [...selected.inputModalities],
         outputModalities: [...selected.outputModalities],
       };

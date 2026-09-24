@@ -176,7 +176,7 @@ async function deploymentRows(pool: Pool, conversationId: string) {
       modelId: string;
       displayName: string;
       contextLimitTokens: number;
-      maxOutputTokens: number;
+      maxOutputTokens: number | null;
       createdAt: Date;
       updatedAt: Date;
     }>(

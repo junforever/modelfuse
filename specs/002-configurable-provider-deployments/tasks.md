@@ -408,3 +408,9 @@ coordinator: G1, G2, and final shutdown gate after T069/T070
 - The supported migration target is a clean database. Failure against old-slot rows is expected; no compatibility work is authorized.
 - The composer remains text-only; catalog modalities are display metadata only.
 - Commit behavior remains user-controlled; task completion does not imply an automatic commit.
+
+## Contract Amendment: Optional `maxOutputTokens`
+
+T001–T070 remain a historical record of completed work; their checked wording is not retroactively rewritten. The approved contract now supersedes their required-output-limit semantics: `maxOutputTokens` is optional and positive when present; absence omits the property at API/application boundaries, stores SQL `NULL`, omits the provider-native output-limit field, and delegates the default to the provider. A present value is snapshotted and sent unchanged, with no clamp, negotiation, discovery, substitution, or retry, and never affects input context admission. All ten initial catalog rows omit the value. The immutable snapshot preserves the delegation decision, but the external provider default may change and therefore limits exact reproducibility.
+
+This amendment is documentation/contract alignment only. Validation is limited to targeted searches and readback across the approved feature artifacts plus `git diff --check`; it does not reopen T001–T070 or claim new production, test, migration, or runtime validation.

@@ -62,7 +62,6 @@ describe('GET /api/v1/model-catalog', () => {
           'deploymentId',
           'displayName',
           'inputModalities',
-          'maxOutputTokens',
           'modelId',
           'outputModalities',
           'providerId',

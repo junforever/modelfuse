@@ -68,8 +68,9 @@ Un deployment es una configuración estática e identificable que contiene:
 - `providerId`: adapter que ejecuta la llamada.
 - `modelId`: identificador exacto enviado al provider.
 - `contextLimitTokens`: límite técnico de entrada usado por `ContextBuilder`.
-- `maxOutputTokens`: límite operativo de salida enviado al provider en cada
-  intento.
+- `maxOutputTokens`: límite operativo de salida opcional; cuando está presente
+  se envía al provider sin cambios y, cuando está ausente, el provider elige su
+  valor por defecto.
 - `inputModalities` y `outputModalities`: capacidades declaradas por el modelo.
 - credencial requerida para determinar disponibilidad.
 
@@ -84,26 +85,31 @@ Los `deploymentId` son exactamente los siguientes y deben conservarse como
 identificadores estables:
 
 | deploymentId                        | displayName            | providerId   | modelId enviado al provider       | contextLimitTokens | maxOutputTokens |
-| ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------: |
-| `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 |          512000 |
-| `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 |          204800 |
-| `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 |          131072 |
-| `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 |         1048576 |
-| `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 |         1048576 |
-| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 |          393216 |
-| `gemini-3.7-flash`                  | Gemini 3.7 Flash       | `google`     | `gemini-3.7-flash`                |            1048576 |           65536 |
-| `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 |          128000 |
-| `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 |          128000 |
-| `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 |          128000 |
+| ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------- |
+| `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 | ausente         |
+| `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 | ausente         |
+| `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 | ausente         |
+| `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 | ausente         |
+| `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 | ausente         |
+| `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 | ausente         |
+| `gemini-3.7-flash`                  | Gemini 3.7 Flash       | `google`     | `gemini-3.7-flash`                |            1048576 | ausente         |
+| `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 | ausente         |
+| `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 | ausente         |
+| `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 | ausente         |
 
-Los valores de `maxOutputTokens` de la tabla son los límites operativos
-iniciales normativos, incluidos los valores aprobados para MiniMax M2.7, Kimi K3
-y GLM 5.2. Cada adapter debe enviarlos mediante el parámetro nativo equivalente
-del provider; OpenRouter usa `max_tokens`. El campo no participa en el cálculo
-del límite de entrada, no causa truncamiento local de una respuesta y no se
-negocia ni ajusta dinámicamente. Si un provider rechaza el valor, el intento se
-normaliza como `provider_error`, sin retry ni reducción automática, y cualquier
-ajuste posterior se realiza modificando explícitamente el catálogo estático.
+`maxOutputTokens` es opcional y debe ser un entero positivo cuando está
+presente. En las diez filas iniciales está ausente: el adapter omite el parámetro
+nativo de límite de salida y cada provider elige su valor por defecto. Cuando el
+campo está presente, el adapter lo envía sin cambios mediante el parámetro nativo
+equivalente; OpenRouter usa `max_tokens`. No se permite clamp, negociación,
+discovery, sustitución ni retry del valor. El campo nunca participa en el cálculo
+del límite de entrada ni causa truncamiento local de una respuesta.
+
+Los límites de API y aplicación representan la ausencia omitiendo la propiedad,
+nunca mediante `null`, `undefined` o `0`; PostgreSQL la representa con `NULL`.
+La instantánea inmutable conserva la decisión de delegar el límite al provider,
+pero ese valor por defecto puede cambiar externamente, por lo que esa decisión no
+garantiza reproducibilidad exacta del límite de salida.
 
 Las capacidades iniciales exactas son:
 
@@ -229,7 +235,7 @@ provider, una fila por slot con:
 - `modelId`;
 - `displayName`;
 - `contextLimitTokens`;
-- `maxOutputTokens`;
+- `maxOutputTokens` opcional, persistido como `NULL` cuando está ausente;
 - `inputModalities`;
 - `outputModalities`;
 - timestamps de creación y actualización.
@@ -261,7 +267,8 @@ deployment resuelto por slot. Para OpenRouter:
 - se usa `POST https://openrouter.ai/api/v1/chat/completions`;
 - se envía `Authorization: Bearer $OPENROUTER_API_KEY`;
 - `model` es el `modelId` exacto del catálogo;
-- `max_tokens` es el `maxOutputTokens` exacto del deployment;
+- `max_tokens` se omite cuando `maxOutputTokens` está ausente y recibe su valor
+  exacto cuando está presente;
 - se conserva el contrato normalizado de mensajes, cancelación, timeout y una
   sola llamada externa por intento;
 - no se usan fallbacks automáticos, variantes `:free` ni reintentos automáticos.
@@ -313,11 +320,12 @@ La feature solo está completa cuando se demuestra todo lo siguiente:
    errores con los mismos contract tests que los adapters existentes.
 9. Las pruebas verifican que no se registran ni persisten precios, créditos,
    billing o presupuesto.
-10. Las pruebas de contexto usan los límites exactos de la tabla y comprueban que
-    no se llama al provider cuando el payload mínimo excede el umbral.
-11. Los contract tests verifican que cada intento envía el
-    `maxOutputTokens` exacto y que un rechazo upstream no provoca ajuste ni retry
-    automático.
+10. Las pruebas de contexto usan los `contextLimitTokens` exactos de la tabla y
+    comprueban que no se llama al provider cuando el payload mínimo excede el
+    umbral.
+11. Los contract tests verifican que la ausencia de `maxOutputTokens` omite el
+    campo nativo y delega el default al provider, y que un valor positivo presente
+    se envía sin cambios sin ajuste, negociación, discovery, sustitución ni retry.
 12. El catálogo expone exactamente las modalidades declaradas y la UI continúa
     aceptando únicamente texto.
 13. API, persistencia, SSE y UI rechazan los identificadores de slot anteriores

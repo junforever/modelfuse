@@ -37,4 +37,5 @@
   modalities, replacement of legacy slot identifiers, and the distinction
   between schema migration and production-data backfill. All items remain pass.
 - The exact endpoint, request shape, identifiers, environment-variable names, persistence constraints and OpenRouter protocol details are normative product and integration contracts from `requirements-brief.md`; they are retained without selecting a language, framework, database product or implementation structure.
+- Validation iteration 3 aligns the approved optional `maxOutputTokens` contract: all initial rows delegate to provider defaults, absence is omitted at API/application boundaries and stored as SQL `NULL`, present values are positive and forwarded unchanged, input admission is unaffected, and the external-default reproducibility tradeoff is explicit. All items remain pass.
 - No clarification markers were required because the normative brief resolves the feature scope and behavior.

@@ -21,13 +21,13 @@ interface ConversationDeploymentSnapshot {
   readonly modelId: string;
   readonly displayName: string;
   readonly contextLimitTokens: number;
-  readonly maxOutputTokens: number;
+  readonly maxOutputTokens?: number;
   readonly inputModalities: readonly string[];
   readonly outputModalities: readonly string[];
 }
 ```
 
-The snapshot is resolved and persisted before provider execution. An adapter must use the snapshot it receives and must not read the current catalog to replace any field.
+The snapshot is resolved and persisted before provider execution. `maxOutputTokens` must be a positive integer when present. API and application objects omit the property when absent instead of emitting `null`, `undefined`, or `0`; PostgreSQL stores absence as `NULL`. An adapter must use the snapshot it receives and must not read the current catalog to replace any field.
 
 ## Provider interface
 
@@ -65,7 +65,7 @@ type ProviderRegistry = Readonly<Partial<Record<ProviderId, LlmProvider>>>;
 
 ## Exact output limit mapping
 
-Every request sends `deployment.maxOutputTokens` unchanged. No adapter clamps, negotiates, reduces, or retries the value.
+When `deployment.maxOutputTokens` is absent, the adapter omits the provider-native output-limit field and the provider chooses its default. When present, every request sends the positive integer unchanged. No adapter clamps, negotiates, discovers, substitutes, reduces, or retries the value.
 
 | Provider   | Native request field               |
 | ---------- | ---------------------------------- |
@@ -75,7 +75,9 @@ Every request sends `deployment.maxOutputTokens` unchanged. No adapter clamps, n
 | Qwen       | `parameters.max_tokens`            |
 | OpenRouter | `max_tokens`                       |
 
-If a provider rejects the value, the attempt is normalized as non-recoverable `provider_error` using the adapter's normal structured status/error mapping. The orchestrator must not retry automatically.
+If a provider rejects a present value, the attempt is normalized as non-recoverable `provider_error` using the adapter's normal structured status/error mapping. The orchestrator must not retry automatically.
+
+The immutable snapshot preserves whether the output limit was delegated. It does not freeze the provider's default, which may change externally, so absent `maxOutputTokens` limits exact reproducibility.
 
 ## OpenRouter request
 
@@ -88,12 +90,11 @@ Content-Type: application/json
 ```json
 {
   "model": "<snapshot.modelId>",
-  "messages": [],
-  "max_tokens": 32768
+  "messages": []
 }
 ```
 
-The numeric example represents the exact selected snapshot value, not a default enforced by the adapter. One provider request is allowed per generation attempt.
+This is the initial-catalog shape: `max_tokens` is omitted and OpenRouter chooses its default. If a future snapshot contains `maxOutputTokens: 32768`, the request includes `"max_tokens": 32768` unchanged. One provider request is allowed per generation attempt.
 
 ## OpenRouter error normalization
 
@@ -118,9 +119,9 @@ Free-text message, detail, description, code text, headers, or serialized-body m
 Provider contract tests must prove:
 
 1. each adapter receives an arbitrary canonical slot without changing provider selection;
-2. the snapshot `modelId` and exact normative output-limit value reach the native request field;
+2. the snapshot `modelId` reaches the request, absent `maxOutputTokens` omits the native field, and a present positive value reaches it unchanged;
 3. normalized token metrics preserve current names and meanings;
-4. an output-limit rejection produces one `provider_error` and one upstream call;
+4. a present output-limit rejection produces one `provider_error` and one upstream call;
 5. the complete OpenRouter error table, including negative cases where free text resembles a policy error;
 6. cancellation and timeouts preserve the existing normalized recovery semantics;
 7. catalog and upstream-only metadata never appear in normalized results.

@@ -18,7 +18,7 @@ The implementation refactors the existing provider registry from `Record<Respons
 **Target Platform**: Browser frontend plus Node.js web service on the current local/container deployment model
 **Project Type**: pnpm 11 workspace monorepo web application
 **Performance Goals**: Catalog reads perform no external I/O; conversation execution preserves three concurrent base attempts followed by one consolidator attempt; every adapter performs exactly one external call per attempt
-**Constraints**: Exactly four canonical slots and ten initial deployments; assignments immutable after creation; static catalog; optional provider credentials; text-only composer; exact context and output limits; no aliases, backfill, provider discovery, fallback, automatic retry, economic fields, or new dependency
+**Constraints**: Exactly four canonical slots and ten initial deployments; assignments immutable after creation; static catalog; optional provider credentials and optional positive output limits; text-only composer; exact context limits; absent output limits delegate to provider defaults; no aliases, backfill, provider discovery, fallback, automatic retry, economic fields, or new dependency
 **Scale/Scope**: One catalog endpoint, one extended creation contract, one snapshot table, two slot-constraint migrations, five adapter registrations, four UI selectors, and the existing conversation/recovery/SSE flows migrated to canonical slots
 
 ## Constitution Check
@@ -45,13 +45,13 @@ Phase 1 preserves every gate: the data model uses PostgreSQL and Liquibase; REST
 
 ### 1. Shared backend contracts and canonical slots
 
-Refactor `apps/backend/src/types/conversations.ts` so `RESPONSE_SLOTS` is exactly `['base-1', 'base-2', 'base-3', 'consolidator']`, `BaseResponseSlot` excludes `consolidator`, response tuples use that stable order, and role typing maps only `consolidator` to `consolidator`. Add deployment catalog, assignment, public summary, and stored snapshot types. Update `apps/backend/src/types/sse.ts` through the shared `ResponseSlot` type; no event alias or translation layer is allowed.
+Refactor `apps/backend/src/types/conversations.ts` so `RESPONSE_SLOTS` is exactly `['base-1', 'base-2', 'base-3', 'consolidator']`, `BaseResponseSlot` excludes `consolidator`, response tuples use that stable order, and role typing maps only `consolidator` to `consolidator`. Add deployment catalog, assignment, public summary, and stored snapshot types. Model `maxOutputTokens` as an optional positive integer and omit the property at API/application boundaries when absent; never materialize absence as `null`, `undefined`, or `0`. Update `apps/backend/src/types/sse.ts` through the shared `ResponseSlot` type; no event alias or translation layer is allowed.
 
 Refactor `apps/backend/src/types/llm.ts` so `LlmProvider` represents one adapter keyed by `providerId`, not one slot/model instance. `LlmRequest` carries the canonical slot and resolved immutable deployment snapshot. Adapter input measurement receives the resolved model and messages; `contextLimitTokens` comes from the snapshot. Keep only the existing normalized content, timestamps, `inputTokens`, `outputTokens`, and `totalTokens` behavior. Existing optional cost fields remain unused and OpenRouter must never populate or persist them.
 
 ### 2. Static catalog and optional availability
 
-Add `apps/backend/src/infrastructure/llm/deploymentCatalog.ts` as a readonly typed constant containing exactly the ten normative rows, exact limits, exact modalities, and required credential name. It performs no startup or request-time network call.
+Add `apps/backend/src/infrastructure/llm/deploymentCatalog.ts` as a readonly typed constant containing exactly the ten normative rows, exact context limits, absent `maxOutputTokens`, exact modalities, and required credential name. It performs no startup or request-time network call.
 
 Add `apps/backend/src/services/llm/ModelCatalogService.ts` to:
 
@@ -76,22 +76,24 @@ Refactor `apps/backend/src/infrastructure/llm/providerRegistry.ts` into a pure `
 
 ### 4. Provider adapter contract and OpenRouter
 
-Refactor the four existing adapters to consume the resolved deployment per call and send its exact `modelId` and `maxOutputTokens` through the provider-native field:
+Refactor the four existing adapters to consume the resolved deployment per call and send its exact `modelId`. When optional `maxOutputTokens` is absent, omit the provider-native output-limit field; when present, send the positive integer unchanged through:
 
 - OpenAI Chat Completions: `max_completion_tokens`;
 - Google GenerateContent: `generationConfig.maxOutputTokens`;
 - MiniMax Chat Completion v2: `max_completion_tokens`;
 - Qwen DashScope native request: `parameters.max_tokens`.
 
-Add `apps/backend/src/infrastructure/llm/providers/OpenRouterProvider.ts`. It uses the fixed `POST https://openrouter.ai/api/v1/chat/completions` endpoint, Bearer `OPENROUTER_API_KEY`, exact catalog `modelId`, exact `max_tokens`, normalized messages, the existing Axios timeout/abort behavior, and exactly one request per attempt. It maps usage to the three existing normalized token metrics and discards all other upstream metadata.
+No adapter clamps, negotiates, discovers, substitutes, or retries a present value, and the output limit never participates in input context admission.
 
-OpenRouter error classification is closed and structural: 401 → `authentication`; 429 → `rate_limited`; 408/502/503 → `provider_transient_error`; 402 → `provider_error`; `content_blocked` only when `error.metadata.error_type` is `content_policy_violation` or `refusal`, or when a 403 has a non-empty `error.metadata.reasons` or `error.metadata.patterns` array. Every other 403 is `provider_error`. No message-text matching, upstream metadata retention, header/body exposure, negotiation, fallback, or automatic retry is permitted. Any provider rejection of the exact output limit becomes non-recoverable `provider_error` through its normal status classification.
+Add `apps/backend/src/infrastructure/llm/providers/OpenRouterProvider.ts`. It uses the fixed `POST https://openrouter.ai/api/v1/chat/completions` endpoint, Bearer `OPENROUTER_API_KEY`, exact catalog `modelId`, conditional `max_tokens`, normalized messages, the existing Axios timeout/abort behavior, and exactly one request per attempt. It omits `max_tokens` when `maxOutputTokens` is absent and sends the value unchanged when present. It maps usage to the three existing normalized token metrics and discards all other upstream metadata.
+
+OpenRouter error classification is closed and structural: 401 → `authentication`; 429 → `rate_limited`; 408/502/503 → `provider_transient_error`; 402 → `provider_error`; `content_blocked` only when `error.metadata.error_type` is `content_policy_violation` or `refusal`, or when a 403 has a non-empty `error.metadata.reasons` or `error.metadata.patterns` array. Every other 403 is `provider_error`. No message-text matching, upstream metadata retention, header/body exposure, negotiation, fallback, or automatic retry is permitted. Any provider rejection of a present output limit becomes non-recoverable `provider_error` through its normal status classification.
 
 The internal adapter contract is fixed in [contracts/provider-adapter.md](./contracts/provider-adapter.md).
 
 ### 5. Persistence and migration
 
-Add `db/changelogs/conversations/002-create-conversation-deployments.sql` and include it from `db.changelog-conversations.xml`. It creates `conversation_deployments` with one immutable row per conversation/slot, primary key `(conversation_id, slot)`, unique `(conversation_id, deployment_id)`, positive limit checks, non-empty modality arrays, a cascade foreign key to `conversations`, and a `BEFORE UPDATE` trigger that rejects updates. Deletes occur only through conversation cascade; `created_at` and `updated_at` are equal at insertion because rows never update.
+Add `db/changelogs/conversations/002-create-conversation-deployments.sql` and include it from `db.changelog-conversations.xml`. It creates `conversation_deployments` with one immutable row per conversation/slot, primary key `(conversation_id, slot)`, unique `(conversation_id, deployment_id)`, a required positive context limit, a nullable output limit constrained positive when present, non-empty modality arrays, a cascade foreign key to `conversations`, and a `BEFORE UPDATE` trigger that rejects updates. PostgreSQL `NULL` represents an absent `maxOutputTokens`. Deletes occur only through conversation cascade; `created_at` and `updated_at` are equal at insertion because rows never update.
 
 Add `db/changelogs/messages/002-replace-response-slots.sql` and include it from `db.changelog-messages.xml`. It replaces `model_responses` slot, slot/role, and stale-consolidator checks with the four canonical identifiers. It performs no row conversion or backfill; application on a non-clean database containing old slot values is intentionally unsupported by this feature.
 
@@ -109,7 +111,7 @@ Extend the strict creation Zod schema with optional `deploymentIds`, requiring e
 
 Refactor `TurnOrchestrator` to keep `BASE_SLOTS = ['base-1', 'base-2', 'base-3']`, run them concurrently, then run `consolidator`. For each slot it selects the stored deployment snapshot, resolves its adapter by `providerId`, builds context using snapshot limits plus adapter measurement, and invokes the adapter once. It must not branch by provider name or query the catalog. Consolidation receives only current normalized base responses and its existing isolated history.
 
-Refactor `ContextBuilder`, `ContextRepository`, `turnState`, mappers, publisher/recovery paths, fakes, and acceptance utilities to canonical slots. Preserve the current threshold ratio, bounded historical window, truncation marker, no-persisted-prompt rule, recovery matrix, event ordering, and normalized observability fields. `maxOutputTokens` never participates in input admission or local truncation.
+Refactor `ContextBuilder`, `ContextRepository`, `turnState`, mappers, publisher/recovery paths, fakes, and acceptance utilities to canonical slots. Preserve the current threshold ratio, bounded historical window, truncation marker, no-persisted-prompt rule, recovery matrix, event ordering, and normalized observability fields. `maxOutputTokens` never participates in input admission or local truncation. The immutable snapshot preserves whether the limit was delegated, but a provider default can change externally, so an absent value does not guarantee exact output-limit reproducibility.
 
 ### 7. REST and SSE contracts
 
@@ -134,10 +136,10 @@ Keep `PromptComposer` text-only. It receives `deploymentIds` only when creating 
 
 **Unit and adapter contract tests — `unit-test-runner`**
 
-- catalog exactness: ten definitions, exact model/limit/modality values, stable sort, availability filter, defaults, duplicates, and unavailable IDs;
+- catalog exactness: ten definitions, exact models/context limits/modalities, absent initial output limits, stable sort, availability filter, defaults, duplicates, and unavailable IDs;
 - strict backend/frontend schemas and rejection of all old slot names;
 - canonical tuple ordering, slot/role state calculation, mapper behavior, ContextBuilder snapshot limits, and no provider call on oversized minimum payload;
-- contract suite for all five adapters covering exact model/output parameter, one request, abort/timeout, normalized content and three metrics, safe error shape, no retries, and output-limit rejection;
+- contract suite for all five adapters covering exact model, omission of the native output-limit field when absent, unchanged forwarding when present, one request, abort/timeout, normalized content and three metrics, safe error shape, no retries, and output-limit rejection;
 - OpenRouter 403 table using only the specified structured fields, including negative free-text cases;
 - frontend selector/default/duplicate/read-only states and catalog/detail response validation.
 
