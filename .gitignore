@@ -44,3 +44,5 @@ blob-report/
 
 # Local agent runtime discovery
 agent-scripts/runtime.local.json
+# Local Pi runtime state
+.atl/
