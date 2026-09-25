@@ -40,7 +40,11 @@ export function ResponsePanel({
         {response.isStale && (
           <p className="text-sm text-muted-foreground">Consolidación pendiente</p>
         )}
-        <CollapsibleHistoryMessage content={response.content} threshold={collapseThreshold} />
+        <CollapsibleHistoryMessage
+          content={response.content}
+          threshold={collapseThreshold}
+          renderMarkdown
+        />
       </div>
     );
   }
