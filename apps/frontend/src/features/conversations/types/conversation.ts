@@ -1,5 +1,5 @@
 export const RESPONSE_SLOTS = ['base-1', 'base-2', 'base-3', 'consolidator'] as const;
-export const PROVIDER_IDS = ['openai', 'google', 'minimax', 'qwen', 'openrouter'] as const;
+export const PROVIDER_IDS = ['openai', 'google', 'minimax', 'qwen', 'kimi', 'openrouter'] as const;
 export const MODALITIES = ['text', 'image', 'video', 'audio', 'pdf'] as const;
 
 export type ResponseSlot = (typeof RESPONSE_SLOTS)[number];

@@ -5,7 +5,7 @@
 
 ## Summary
 
-Replace provider-named response slots with the four canonical logical slots (`base-1`, `base-2`, `base-3`, `consolidator`) and resolve each slot from an immutable per-conversation deployment snapshot. Maintain a backend-owned static catalog of exactly fifteen deployments, limited to text-output chat models and exposing only entries whose adapter credential is configured, extend conversation creation with an optional complete assignment, and add an OpenRouter adapter behind the existing normalized LLM boundary.
+Replace provider-named response slots with the four canonical logical slots (`base-1`, `base-2`, `base-3`, `consolidator`) and resolve each slot from an immutable per-conversation deployment snapshot. Maintain a backend-owned static catalog of exactly sixteen deployments, limited to text-output chat models and exposing only entries whose adapter credential is configured, extend conversation creation with an optional complete assignment, and add direct Kimi plus OpenRouter adapters behind the existing normalized LLM boundary.
 
 The implementation refactors the existing provider registry from `Record<ResponseSlot, LlmProvider>` to a registry keyed by `providerId`, retains the current orchestration sequence (three base calls followed by one consolidator call), and passes a resolved snapshot into each adapter and `ContextBuilder`. PostgreSQL stores one immutable snapshot row per slot; Liquibase changes the slot constraints without aliases or backfill. The frontend adds four catalog-driven selectors only for new conversations and renders stored assignments read-only for existing conversations. No provider discovery, automatic fallback, retry negotiation, economic metrics, or non-text composer input is added.
 
@@ -18,8 +18,8 @@ The implementation refactors the existing provider registry from `Record<Respons
 **Target Platform**: Browser frontend plus Node.js web service on the current local/container deployment model
 **Project Type**: pnpm 11 workspace monorepo web application
 **Performance Goals**: Catalog reads perform no external I/O; conversation execution preserves three concurrent base attempts followed by one consolidator attempt; every adapter performs exactly one external call per attempt
-**Constraints**: Exactly four canonical slots and fifteen current deployments; assignments immutable after creation; static catalog limited to text-output chat models; optional provider credentials and optional positive output limits; text-only composer; exact context limits; absent output limits delegate to provider defaults; exactly five listed `:free` model IDs allowed; no `:batch`, `latest`, unlisted free variants, other aliases, backfill, provider discovery, fallback, substitution, automatic retry, economic fields, embeddings support, or new dependency
-**Scale/Scope**: One catalog endpoint, one extended creation contract, one snapshot table, two slot-constraint migrations, five adapter registrations, four UI selectors, and the existing conversation/recovery/SSE flows migrated to canonical slots
+**Constraints**: Exactly four canonical slots and sixteen current deployments; assignments immutable after creation; static catalog limited to text-output chat models; optional provider credentials and optional positive output limits; text-only composer; exact context limits; absent output limits delegate to provider defaults; exactly five listed `:free` model IDs allowed; no `:batch`, `latest`, unlisted free variants, other aliases, backfill, provider discovery, fallback, substitution, automatic retry, economic fields, embeddings support, or new dependency
+**Scale/Scope**: One catalog endpoint, one extended creation contract, one snapshot table, two slot-constraint migrations, six adapter registrations, four UI selectors, and the existing conversation/recovery/SSE flows migrated to canonical slots
 
 ## Constitution Check
 
@@ -51,7 +51,7 @@ Refactor `apps/backend/src/types/llm.ts` so `LlmProvider` represents one adapter
 
 ### 2. Static catalog and optional availability
 
-Maintain `apps/backend/src/infrastructure/llm/deploymentCatalog.ts` as a readonly typed constant containing exactly the fifteen normative rows, exact context limits, absent `maxOutputTokens`, exact modalities, and required credential name. Catalog eligibility is limited to chat models with `text` output; embedding-only models are excluded. The constant performs no startup or request-time network call.
+Maintain `apps/backend/src/infrastructure/llm/deploymentCatalog.ts` as a readonly typed constant containing exactly the sixteen normative rows, exact context limits, absent `maxOutputTokens`, exact modalities, and required credential name. Catalog eligibility is limited to chat models with `text` output; embedding-only models are excluded. The constant performs no startup or request-time network call.
 
 Add `apps/backend/src/services/llm/ModelCatalogService.ts` to:
 
@@ -67,23 +67,26 @@ Add a thin `modelCatalogController` and `modelCatalogRoutes` for `GET /api/v1/mo
 
 Refactor `apps/backend/src/infrastructure/config/env.ts` and `apps/backend/.env.sample`:
 
-- make `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MINIMAX_API_KEY`, `QWEN_API_KEY`, and new `OPENROUTER_API_KEY` optional trimmed values;
+- make `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MINIMAX_API_KEY`, `QWEN_API_KEY`, `MOONSHOT_API_KEY`, and `OPENROUTER_API_KEY` optional trimmed values;
 - remove model and per-provider context-limit variables because the static deployment catalog owns those values;
 - retain the shared timeout and the existing optional direct-provider base URLs;
-- do not add an OpenRouter URL override because its endpoint is normative.
+- do not add Kimi or OpenRouter URL overrides because both endpoints are normative.
 
-Refactor `apps/backend/src/infrastructure/llm/providerRegistry.ts` into a pure `createProviderRegistry(environment)` factory returning `Partial<Record<ProviderId, LlmProvider>>`. Register an adapter only when its credential is configured. MiniMax and Qwen direct adapters remain registrable extensions but have no initial catalog deployment. `server.ts` constructs the registry and catalog service once from the already parsed environment and injects both into orchestration/API dependencies.
+Refactor `apps/backend/src/infrastructure/llm/providerRegistry.ts` into a pure `createProviderRegistry(environment)` factory returning `Partial<Record<ProviderId, LlmProvider>>`. Register an adapter only when its credential is configured, including Kimi only when `MOONSHOT_API_KEY` is non-empty. MiniMax and Qwen direct adapters remain registrable extensions but have no initial catalog deployment. `server.ts` constructs the registry and catalog service once from the already parsed environment and injects both into orchestration/API dependencies.
 
-### 4. Provider adapter contract and OpenRouter
+### 4. Provider adapter contract, Kimi, and OpenRouter
 
 Refactor the four existing adapters to consume the resolved deployment per call and send its exact `modelId`. When optional `maxOutputTokens` is absent, omit the provider-native output-limit field; when present, send the positive integer unchanged through:
 
 - OpenAI Chat Completions: `max_completion_tokens`;
 - Google GenerateContent: `generationConfig.maxOutputTokens`;
 - MiniMax Chat Completion v2: `max_completion_tokens`;
-- Qwen DashScope native request: `parameters.max_tokens`.
+- Qwen DashScope native request: `parameters.max_tokens`;
+- Kimi OpenAI-compatible Chat Completions: `max_completion_tokens`.
 
 No adapter clamps, negotiates, discovers, substitutes, or retries a present value, and the output limit never participates in input context admission.
+
+Add `apps/backend/src/infrastructure/llm/providers/KimiProvider.ts`. It uses one OpenAI-compatible Chat Completions request to the fixed `POST https://api.moonshot.ai/v1/chat/completions` endpoint, Bearer `MOONSHOT_API_KEY`, exact `model: "kimi-k3"`, conditional `max_completion_tokens`, normalized messages, and the existing Axios timeout/abort behavior. It omits `max_completion_tokens` when `maxOutputTokens` is absent and sends the value unchanged when present. The direct `kimi-k3` deployment remains independent from `openrouter-kimi-k3`.
 
 Add `apps/backend/src/infrastructure/llm/providers/OpenRouterProvider.ts`. It uses the fixed `POST https://openrouter.ai/api/v1/chat/completions` endpoint, Bearer `OPENROUTER_API_KEY`, the exact catalog `modelId` forwarded unchanged including a normative `:free` suffix, conditional `max_tokens`, normalized messages, the existing Axios timeout/abort behavior, and exactly one request per attempt. It omits `max_tokens` when `maxOutputTokens` is absent and sends the value unchanged when present. It maps usage to the three existing normalized token metrics and discards all other upstream metadata.
 
@@ -136,10 +139,10 @@ Keep `PromptComposer` text-only. It receives `deploymentIds` only when creating 
 
 **Unit and adapter contract tests — `unit-test-runner`**
 
-- catalog exactness: fifteen definitions, exact models/context limits/modalities, absent current output limits, stable sort, availability filter, defaults, duplicates, unavailable IDs, and absence of non-chat or non-text-output entries;
+- catalog exactness: sixteen definitions, exact models/context limits/modalities, absent current output limits, stable sort, availability filter, defaults, duplicates, unavailable IDs, and absence of non-chat or non-text-output entries;
 - strict backend/frontend schemas and rejection of all old slot names;
 - canonical tuple ordering, slot/role state calculation, mapper behavior, ContextBuilder snapshot limits, and no provider call on oversized minimum payload;
-- contract suite for all five adapters covering exact model, omission of the native output-limit field when absent, unchanged forwarding when present, one request, abort/timeout, normalized content and three metrics, safe error shape, no retries, and output-limit rejection;
+- contract suite for all six adapters covering exact model, omission of the native output-limit field when absent, unchanged forwarding when present, one request, abort/timeout, normalized content and three metrics, safe error shape, no retries, and output-limit rejection;
 - OpenRouter 403 table using only the specified structured fields, including negative free-text cases;
 - frontend selector/default/duplicate/read-only states and catalog/detail response validation.
 
@@ -161,7 +164,7 @@ Keep `PromptComposer` text-only. It receives `deploymentIds` only when creating 
 - reload/reopen shows the immutable assignment, canonical tab labels, and no replacement control;
 - existing retry, continuation, history, and SSE journeys run with canonical slots through deterministic fake adapters and the disposable test database.
 
-No performance test task is required: the catalog is a fixed fifteen-row in-memory read and the execution call count is already a functional contract. No real provider or paid API is called by any test.
+No performance test task is required: the catalog is a fixed sixteen-row in-memory read and the execution call count is already a functional contract. No real provider or paid API is called by any test.
 
 ## AI Sub-agent Delivery Workflow
 
@@ -213,7 +216,7 @@ apps/
 │       ├── services/llm/{ModelCatalogService,llmErrors}.ts
 │       ├── infrastructure/config/env.ts
 │       ├── infrastructure/llm/{deploymentCatalog,providerRegistry}.ts
-│       ├── infrastructure/llm/providers/{OpenAi,Google,MiniMax,Qwen,OpenRouter}Provider.ts
+│       ├── infrastructure/llm/providers/{OpenAi,Google,MiniMax,Qwen,Kimi,OpenRouter}Provider.ts
 │       ├── infrastructure/postgres/mappers/conversationMapper.ts
 │       ├── infrastructure/postgres/repositories/{conversation,context,turn}Repository.ts
 │       └── types/{conversations,llm,sse,apiError}.ts
@@ -231,8 +234,10 @@ db/changelogs/
 └── messages/{db.changelog-messages.xml,002-replace-response-slots.sql}
 ```
 
-**Structure Decision**: Extend the existing conversations feature, LLM infrastructure, and two owning Liquibase modules. Add only the catalog service/route/controller, deployment catalog, OpenRouter adapter, two focused UI components, one shared select primitive, and two migrations. Do not add a new package, ORM, repository abstraction, discovery service, compatibility layer, or state framework.
+**Structure Decision**: Extend the existing conversations feature, LLM infrastructure, and two owning Liquibase modules. Add only the catalog service/route/controller, deployment catalog, Kimi and OpenRouter adapters, two focused UI components, one shared select primitive, and two migrations. Do not add a new package, ORM, repository abstraction, discovery service, compatibility layer, or state framework.
 
 ## Complexity Tracking
 
-No constitutional violations or approved complexity exceptions.
+| Exception | Why required | Rejected simpler alternative | Approval and containment |
+| --- | --- | --- | --- |
+| For the direct Kimi K3 amendment, global runtime workers replace the repository-defined builder and test-runner profiles required by Principle IX. | The user explicitly directed the coordinator not to use project-defined subagents after the required `unit-test-runner` profile was unavailable to the active Pi runtime. | Stopping until `.codex/agents/*` profiles become dispatchable would leave the authorized requirement incomplete. | Explicitly approved by the user for this and future work. Test and production edits remain separate delegated tasks, Strict TDD remains RED-first, and each worker receives narrow edit surfaces and verification commands. |

@@ -18,6 +18,7 @@ const validEnv = {
   GOOGLE_API_KEY: 'google-secret',
   MINIMAX_API_KEY: 'minimax-secret',
   QWEN_API_KEY: 'qwen-secret',
+  MOONSHOT_API_KEY: 'moonshot-secret',
   OPENROUTER_API_KEY: 'openrouter-secret',
   LLM_PROVIDER_TIMEOUT_MS: '30000',
   CONVERSATION_CONTEXT_MAX_TURNS: '8',
@@ -45,6 +46,7 @@ describe('parseEnv', () => {
       GOOGLE_API_KEY: 'google-secret',
       MINIMAX_API_KEY: 'minimax-secret',
       QWEN_API_KEY: 'qwen-secret',
+      MOONSHOT_API_KEY: 'moonshot-secret',
       OPENROUTER_API_KEY: 'openrouter-secret',
       LLM_PROVIDER_TIMEOUT_MS: 30000,
       CONVERSATION_CONTEXT_MAX_TURNS: 8,
@@ -123,11 +125,13 @@ describe('parseEnv', () => {
       GOOGLE_API_KEY: '',
       MINIMAX_API_KEY: '   ',
       QWEN_API_KEY: undefined,
+      MOONSHOT_API_KEY: '  moonshot-trimmed  ',
       OPENROUTER_API_KEY: '  openrouter-trimmed  ',
     });
 
     expect(parsed).toMatchObject({
       OPENAI_API_KEY: 'openai-trimmed',
+      MOONSHOT_API_KEY: 'moonshot-trimmed',
       OPENROUTER_API_KEY: 'openrouter-trimmed',
     });
     expect(parsed.GOOGLE_API_KEY).toBeUndefined();
@@ -140,6 +144,7 @@ describe('parseEnv', () => {
       GOOGLE_API_KEY: undefined,
       MINIMAX_API_KEY: undefined,
       QWEN_API_KEY: undefined,
+      MOONSHOT_API_KEY: undefined,
       OPENROUTER_API_KEY: undefined,
     });
 
@@ -148,12 +153,14 @@ describe('parseEnv', () => {
       GOOGLE_API_KEY: withoutProviderCredentials.GOOGLE_API_KEY,
       MINIMAX_API_KEY: withoutProviderCredentials.MINIMAX_API_KEY,
       QWEN_API_KEY: withoutProviderCredentials.QWEN_API_KEY,
+      MOONSHOT_API_KEY: withoutProviderCredentials.MOONSHOT_API_KEY,
       OPENROUTER_API_KEY: withoutProviderCredentials.OPENROUTER_API_KEY,
     }).toEqual({
       OPENAI_API_KEY: undefined,
       GOOGLE_API_KEY: undefined,
       MINIMAX_API_KEY: undefined,
       QWEN_API_KEY: undefined,
+      MOONSHOT_API_KEY: undefined,
       OPENROUTER_API_KEY: undefined,
     });
   });

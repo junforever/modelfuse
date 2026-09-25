@@ -58,8 +58,8 @@ describe('ModelCatalogService', () => {
     ]);
   });
 
-  it('derives provider availability from credentials without catalog rows for direct MiniMax or Qwen', () => {
-    const providers = createProviderRegistry({
+  it('derives catalog availability from credentials while direct MiniMax and Qwen remain registry-only', () => {
+    const environment = {
       OPENAI_API_KEY: 'openai-test-key',
       OPENAI_BASE_URL: undefined,
       GOOGLE_API_KEY: 'google-test-key',
@@ -68,21 +68,32 @@ describe('ModelCatalogService', () => {
       MINIMAX_BASE_URL: undefined,
       QWEN_API_KEY: 'qwen-test-key',
       QWEN_BASE_URL: undefined,
+      MOONSHOT_API_KEY: 'moonshot-test-key',
       OPENROUTER_API_KEY: undefined,
       LLM_PROVIDER_TIMEOUT_MS: 1_000,
-    });
+    };
+    const providers = createProviderRegistry(environment);
 
-    expect(Object.keys(providers)).toEqual(['openai', 'google', 'minimax', 'qwen']);
+    expect(Object.keys(providers)).toEqual(['openai', 'google', 'minimax', 'qwen', 'kimi']);
     expect(providers.minimax?.providerId).toBe('minimax');
     expect(providers.qwen?.providerId).toBe('qwen');
     expect(
       new ModelCatalogService(DEPLOYMENT_CATALOG, providers).listAvailableDeployments()
     ).toEqual([
-      publicDefinition(DEPLOYMENT_CATALOG[6]),
-      publicDefinition(DEPLOYMENT_CATALOG[9]),
       publicDefinition(DEPLOYMENT_CATALOG[7]),
+      publicDefinition(DEPLOYMENT_CATALOG[10]),
       publicDefinition(DEPLOYMENT_CATALOG[8]),
+      publicDefinition(DEPLOYMENT_CATALOG[9]),
+      publicDefinition(DEPLOYMENT_CATALOG[3]),
     ]);
+
+    const withoutKimi = createProviderRegistry({ ...environment, MOONSHOT_API_KEY: undefined });
+    expect(Object.keys(withoutKimi)).toEqual(['openai', 'google', 'minimax', 'qwen']);
+    expect(
+      new ModelCatalogService(DEPLOYMENT_CATALOG, withoutKimi)
+        .listAvailableDeployments()
+        .map(({ deploymentId }) => deploymentId)
+    ).not.toContain('kimi-k3');
   });
 
   it('accepts distinct IDs from the same provider and for the same underlying model', () => {

@@ -17,6 +17,7 @@ const environment = {
   MINIMAX_BASE_URL: undefined,
   QWEN_API_KEY: 'qwen-test-key',
   QWEN_BASE_URL: undefined,
+  MOONSHOT_API_KEY: 'moonshot-test-key',
   OPENROUTER_API_KEY: 'openrouter-test-key',
   LLM_PROVIDER_TIMEOUT_MS: 1_000,
 };
@@ -26,17 +27,26 @@ describe('createProviderRegistry', () => {
     const registry = createProviderRegistry(environment);
 
     expect(RESPONSE_SLOTS).toEqual(['base-1', 'base-2', 'base-3', 'consolidator']);
-    expect(Object.keys(registry)).toEqual(['openai', 'google', 'minimax', 'qwen', 'openrouter']);
+    expect(Object.keys(registry)).toEqual([
+      'openai',
+      'google',
+      'minimax',
+      'qwen',
+      'kimi',
+      'openrouter',
+    ]);
     expect(registry.openai).toBeInstanceOf(OpenAiProvider);
     expect(registry.google).toBeInstanceOf(GoogleProvider);
     expect(registry.minimax).toBeInstanceOf(MiniMaxProvider);
     expect(registry.qwen).toBeInstanceOf(QwenProvider);
+    expect(registry.kimi?.providerId).toBe('kimi');
     expect(registry.openrouter).toBeInstanceOf(OpenRouterProvider);
     expect(Object.values(registry).map(provider => provider.providerId)).toEqual([
       'openai',
       'google',
       'minimax',
       'qwen',
+      'kimi',
       'openrouter',
     ]);
 
@@ -47,6 +57,7 @@ describe('createProviderRegistry', () => {
         GOOGLE_API_KEY: undefined,
         MINIMAX_API_KEY: undefined,
         QWEN_API_KEY: undefined,
+        MOONSHOT_API_KEY: undefined,
         OPENROUTER_API_KEY: undefined,
       })
     ).toEqual({});

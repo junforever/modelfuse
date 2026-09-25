@@ -1,6 +1,7 @@
 import type { Environment } from '../config/env.js';
 import type { ProviderRegistry } from '../../types/llm.js';
 import { GoogleProvider } from './providers/GoogleProvider.js';
+import { KimiProvider } from './providers/KimiProvider.js';
 import { MiniMaxProvider } from './providers/MiniMaxProvider.js';
 import { OpenAiProvider } from './providers/OpenAiProvider.js';
 import { OpenRouterProvider } from './providers/OpenRouterProvider.js';
@@ -16,6 +17,7 @@ type ProviderEnvironment = Pick<
   | 'MINIMAX_BASE_URL'
   | 'QWEN_API_KEY'
   | 'QWEN_BASE_URL'
+  | 'MOONSHOT_API_KEY'
   | 'OPENROUTER_API_KEY'
   | 'LLM_PROVIDER_TIMEOUT_MS'
 >;
@@ -60,6 +62,11 @@ export function createProviderRegistry(environment: ProviderEnvironment): Provid
               'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
             timeoutMs,
           }),
+        }
+      : {}),
+    ...(environment.MOONSHOT_API_KEY
+      ? {
+          kimi: new KimiProvider({ apiKey: environment.MOONSHOT_API_KEY, timeoutMs }),
         }
       : {}),
     ...(environment.OPENROUTER_API_KEY

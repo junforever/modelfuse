@@ -21,11 +21,21 @@ type ErrorCase = {
   successfulResponse?: unknown;
 };
 
+type ProviderRequest = {
+  method: 'POST';
+  url: string;
+  timeout: number;
+  signal: AbortSignal;
+  headers?: Record<string, string>;
+  params?: Record<string, unknown>;
+  data: unknown;
+};
+
 type ContractOptions = {
   name: string;
   providerId: ProviderId;
   createProvider: (config: LlmProviderConfig) => LlmProvider;
-  requestMock: Mock;
+  requestMock: Mock<(request: ProviderRequest) => Promise<{ data: unknown }>>;
   successfulResponse: unknown;
   successfulResponseWithoutMetrics: unknown;
   assertMappedRequest: (
@@ -130,10 +140,7 @@ export function runProviderContract(options: ContractOptions): void {
       expect(request.slot).toBe(REQUEST_SLOT);
       expect(request.deployment.slot).toBe(REQUEST_SLOT);
       expect(options.requestMock).toHaveBeenCalledTimes(1);
-      options.assertMappedRequest(
-        options.requestMock.mock.calls[0]?.[0] as Record<string, unknown>,
-        request.deployment
-      );
+      options.assertMappedRequest(options.requestMock.mock.calls[0][0], request.deployment);
       expect(result).toMatchObject({
         content: 'Normalized answer',
         provider: options.providerId,
@@ -165,9 +172,7 @@ export function runProviderContract(options: ContractOptions): void {
       });
 
       expect(options.requestMock).toHaveBeenCalledTimes(2);
-      options.assertOutputLimitOmitted(
-        options.requestMock.mock.calls[1]?.[0] as Record<string, unknown>
-      );
+      options.assertOutputLimitOmitted(options.requestMock.mock.calls[1][0]);
     });
 
     it('omits metrics when the upstream does not report usage', async () => {
@@ -185,8 +190,8 @@ export function runProviderContract(options: ContractOptions): void {
 
     it('forwards cancellation and normalizes both abort and timeout with one call per attempt', async () => {
       options.requestMock.mockImplementationOnce(
-        ({ signal }: { signal: AbortSignal }) =>
-          new Promise((_resolve, reject) => {
+        ({ signal }) =>
+          new Promise<never>((_resolve, reject) => {
             signal.addEventListener(
               'abort',
               () => reject(axiosError(undefined, { code: 'ERR_CANCELED' })),
@@ -268,10 +273,7 @@ export function runProviderContract(options: ContractOptions): void {
       });
 
       expect(options.requestMock).toHaveBeenCalledTimes(1);
-      options.assertMappedRequest(
-        options.requestMock.mock.calls[0]?.[0] as Record<string, unknown>,
-        request.deployment
-      );
+      options.assertMappedRequest(options.requestMock.mock.calls[0][0], request.deployment);
     });
   });
 }

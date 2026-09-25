@@ -15,7 +15,7 @@ Closed ordered set:
 
 ### ProviderId
 
-Closed initial adapter set: `openai`, `google`, `minimax`, `qwen`, `openrouter`. The registry is keyed by this value. A provider can be registered without having an initial catalog deployment.
+Closed adapter set: `openai`, `google`, `minimax`, `qwen`, `kimi`, `openrouter`. The registry is keyed by this value. A provider can be registered without having an initial catalog deployment.
 
 ### Modality
 
@@ -41,13 +41,14 @@ Availability is derived from whether the corresponding adapter was created from 
 
 ### Exact current catalog
 
-The static constant contains these fifteen rows. Only the five listed `:free` model IDs are permitted; `:batch`, `latest`, unlisted free variants, other aliases, fallback, substitution, and runtime discovery remain prohibited:
+The static constant contains these sixteen rows. Only the five listed `:free` model IDs are permitted; `:batch`, `latest`, unlisted free variants, other aliases, fallback, substitution, and runtime discovery remain prohibited:
 
 | deploymentId                        | displayName            | providerId   | modelId                           | contextLimitTokens | maxOutputTokens | credentialEnv        |
 | ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------- | -------------------- |
 | `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 | absent          | `OPENROUTER_API_KEY` |
 | `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 | absent          | `OPENROUTER_API_KEY` |
 | `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 | absent          | `OPENROUTER_API_KEY` |
+| `kimi-k3`                           | Kimi K3                | `kimi`       | `kimi-k3`                         |            1048576 | absent          | `MOONSHOT_API_KEY`   |
 | `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 | absent          | `OPENROUTER_API_KEY` |
 | `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 | absent          | `OPENROUTER_API_KEY` |
 | `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 | absent          | `OPENROUTER_API_KEY` |
@@ -66,6 +67,7 @@ The static constant contains these fifteen rows. Only the five listed `:free` mo
 | `openrouter-minimax-m3`             | `text`, `image`, `video`                 | `text`           |
 | `openrouter-minimax-m2.7`           | `text`                                   | `text`           |
 | `openrouter-qwen-3.8-max`           | `text`, `image`, `video`                 | `text`           |
+| `kimi-k3`                           | `text`, `image`, `video`                 | `text`           |
 | `openrouter-kimi-k3`                | `text`, `image`, `video`                 | `text`           |
 | `openrouter-glm-5.2`                | `text`                                   | `text`           |
 | `openrouter-deepseek-v4-flash-0731` | `text`                                   | `text`           |
@@ -79,7 +81,7 @@ The static constant contains these fifteen rows. Only the five listed `:free` mo
 | `openrouter-gemma-4-26b-a4b-it-free` | `text`, `image`, `video`                | `text`           |
 | `openrouter-gemma-4-31b-it-free`    | `text`, `image`, `video`                 | `text`           |
 
-`maxOutputTokens` is absent from all fifteen current rows. API and application objects omit the property rather than emitting `null`, `undefined`, or `0`. The snapshot stores absence as PostgreSQL `NULL`, and the adapter omits the provider-native output-limit field so the provider chooses its default. A future present value must be a positive integer, is copied into the snapshot and sent unchanged, and is never clamped, negotiated, discovered, substituted, or retried. It never affects input admission.
+`maxOutputTokens` is absent from all sixteen current rows. API and application objects omit the property rather than emitting `null`, `undefined`, or `0`. The snapshot stores absence as PostgreSQL `NULL`, and the adapter omits the provider-native output-limit field so the provider chooses its default. A future present value must be a positive integer, is copied into the snapshot and sent unchanged, and is never clamped, negotiated, discovered, substituted, or retried. It never affects input admission.
 
 The immutable snapshot preserves the decision to delegate the output limit, not the provider's external default. That default may change, so an absent value does not guarantee exact output-limit reproducibility.
 
