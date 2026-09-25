@@ -36,3 +36,22 @@ Render safe CommonMark formatting for completed model responses in all four resp
 ## Applicable Architecture Summary
 - `.specify/memory/constitution.md`: frontend owns presentation; product-specific composition stays in `apps/frontend`; accessibility and deterministic observable tests are mandatory; strict TypeScript and smallest sufficient tests apply.
 - `specs/002-configurable-provider-deployments/plan.md`: the canonical slots are `base-1`, `base-2`, `base-3`, and `consolidator`; all flow through `ResponseTabs` → `ResponsePanel`; Node/pnpm commands must use `agent-scripts/run-pnpm.ps1`.
+
+## GFM Amendment
+
+The user expanded the response format from CommonMark to GitHub Flavored Markdown while requiring raw HTML, including `div` and `script`, to remain inert text.
+
+- [x] T6 — Add and observe focused RED coverage for tables, strikethrough, task lists, bare URL/email autolinks, footnotes, and raw HTML safety.
+  - Evidence: focused Vitest exited 1 with four consistent slot failures; first failure at `ResponsePanel.test.tsx:70` received no semantic `<table>`.
+- [x] T7 — Add `remark-gfm`, enable it only for response Markdown, and provide minimal responsive table/task-list styling.
+  - Evidence: added `remark-gfm` 4.0.1 to the opt-in renderer, preserved footnote accessibility props, kept raw HTML inert, and passed frontend typecheck.
+- [x] T8 — Independently verify focused tests and strict frontend typecheck.
+  - Evidence: independent focused Vitest passed 5/5 tests across all four slots; strict frontend typecheck evidence remained valid with no later TypeScript edits.
+- [x] T9 — Complete native review and report the candidate outcome.
+  - Evidence: native reliability review `review-e007ed472eeba25e` approved and acknowledged; one informational warning remains about duplicate footnote IDs when multiple rendered responses use the same footnote number.
+
+### GFM Acceptance
+1. The shared response renderer supports tables, strikethrough, task lists, bare URL/email autolinks, and footnotes in all four slots.
+2. Tables remain usable on narrow panels through horizontal overflow rather than page expansion.
+3. Raw HTML remains unparsed and non-executable.
+4. Focused frontend tests and strict frontend typecheck pass.

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Markdown, { type Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import { Button } from '@workspace/ui/components/button';
 
@@ -10,35 +11,82 @@ interface CollapsibleHistoryMessageProps {
 }
 
 const markdownComponents = {
-  h1: ({ children }) => <h1 className="mb-3 mt-5 text-2xl font-semibold">{children}</h1>,
-  h2: ({ children }) => <h2 className="mb-2 mt-4 text-xl font-semibold">{children}</h2>,
-  h3: ({ children }) => <h3 className="mb-2 mt-4 text-lg font-semibold">{children}</h3>,
-  h4: ({ children }) => <h4 className="mb-2 mt-3 font-semibold">{children}</h4>,
-  h5: ({ children }) => <h5 className="mb-2 mt-3 text-sm font-semibold">{children}</h5>,
-  h6: ({ children }) => <h6 className="mb-2 mt-3 text-sm font-medium">{children}</h6>,
-  p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
-  ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-6">{children}</ul>,
-  ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-6">{children}</ol>,
-  li: ({ children }) => <li>{children}</li>,
-  a: ({ children, href }) => (
-    <a className="underline underline-offset-2" href={href}>
-      {children}
-    </a>
+  h1: ({ className, node: _node, ...props }) => (
+    <h1 {...props} className={`mb-3 mt-5 text-2xl font-semibold ${className ?? ''}`} />
   ),
-  blockquote: ({ children }) => (
-    <blockquote className="my-3 border-l-4 border-border pl-4 text-muted-foreground">
-      {children}
-    </blockquote>
+  h2: ({ className, node: _node, ...props }) => (
+    <h2 {...props} className={`mb-2 mt-4 text-xl font-semibold ${className ?? ''}`} />
   ),
-  code: ({ children, className }) => (
-    <code className={`rounded bg-muted px-1 py-0.5 font-mono text-sm ${className ?? ''}`}>
-      {children}
-    </code>
+  h3: ({ className, node: _node, ...props }) => (
+    <h3 {...props} className={`mb-2 mt-4 text-lg font-semibold ${className ?? ''}`} />
   ),
-  pre: ({ children }) => (
-    <pre className="my-3 overflow-x-auto rounded-md bg-muted p-3 text-sm [&>code]:bg-transparent [&>code]:p-0">
-      {children}
-    </pre>
+  h4: ({ className, node: _node, ...props }) => (
+    <h4 {...props} className={`mb-2 mt-3 font-semibold ${className ?? ''}`} />
+  ),
+  h5: ({ className, node: _node, ...props }) => (
+    <h5 {...props} className={`mb-2 mt-3 text-sm font-semibold ${className ?? ''}`} />
+  ),
+  h6: ({ className, node: _node, ...props }) => (
+    <h6 {...props} className={`mb-2 mt-3 text-sm font-medium ${className ?? ''}`} />
+  ),
+  p: ({ className, node: _node, ...props }) => (
+    <p {...props} className={`my-2 first:mt-0 last:mb-0 ${className ?? ''}`} />
+  ),
+  ul: ({ className, node: _node, ...props }) => (
+    <ul
+      {...props}
+      className={`my-2 list-disc space-y-1 pl-6 [&.contains-task-list]:list-none [&.contains-task-list]:pl-1 ${className ?? ''}`}
+    />
+  ),
+  ol: ({ className, node: _node, ...props }) => (
+    <ol {...props} className={`my-2 list-decimal space-y-1 pl-6 ${className ?? ''}`} />
+  ),
+  li: ({ className, node: _node, ...props }) => (
+    <li {...props} className={`[&.task-list-item]:list-none ${className ?? ''}`} />
+  ),
+  a: ({ className, node: _node, ...props }) => (
+    <a {...props} className={`underline underline-offset-2 ${className ?? ''}`} />
+  ),
+  blockquote: ({ className, node: _node, ...props }) => (
+    <blockquote
+      {...props}
+      className={`my-3 border-l-4 border-border pl-4 text-muted-foreground ${className ?? ''}`}
+    />
+  ),
+  code: ({ className, node: _node, ...props }) => (
+    <code
+      {...props}
+      className={`rounded bg-muted px-1 py-0.5 font-mono text-sm ${className ?? ''}`}
+    />
+  ),
+  pre: ({ className, node: _node, ...props }) => (
+    <pre
+      {...props}
+      className={`my-3 overflow-x-auto rounded-md bg-muted p-3 text-sm [&>code]:bg-transparent [&>code]:p-0 ${className ?? ''}`}
+    />
+  ),
+  table: ({ className, node: _node, ...props }) => (
+    <div className="my-3 max-w-full overflow-x-auto">
+      <table
+        {...props}
+        className={`w-full min-w-max border-collapse text-left ${className ?? ''}`}
+      />
+    </div>
+  ),
+  th: ({ className, node: _node, ...props }) => (
+    <th
+      {...props}
+      className={`border border-border bg-muted px-3 py-2 font-semibold ${className ?? ''}`}
+    />
+  ),
+  td: ({ className, node: _node, ...props }) => (
+    <td {...props} className={`border border-border px-3 py-2 ${className ?? ''}`} />
+  ),
+  del: ({ className, node: _node, ...props }) => (
+    <del {...props} className={`line-through ${className ?? ''}`} />
+  ),
+  input: ({ className, node: _node, ...props }) => (
+    <input {...props} className={`mr-2 align-middle ${className ?? ''}`} disabled />
   ),
 } satisfies Components;
 
@@ -47,7 +95,11 @@ function MessageContent({
   renderMarkdown,
 }: Pick<CollapsibleHistoryMessageProps, 'content' | 'renderMarkdown'>) {
   if (renderMarkdown) {
-    return <Markdown components={markdownComponents}>{content}</Markdown>;
+    return (
+      <Markdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
+        {content}
+      </Markdown>
+    );
   }
 
   return <p className="whitespace-pre-wrap">{content}</p>;

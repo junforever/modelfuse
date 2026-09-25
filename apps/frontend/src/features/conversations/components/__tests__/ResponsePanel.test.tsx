@@ -7,7 +7,7 @@ import { ResponsePanel } from '../ResponsePanel';
 
 describe('ResponsePanel completed responses', () => {
   it.each(['base-1', 'base-2', 'base-3', 'consolidator'] as const)(
-    'renders safe CommonMark semantics for %s',
+    'renders safe GFM semantics for %s',
     (slot) => {
       const content = [
         '## Heading',
@@ -26,7 +26,24 @@ describe('ResponsePanel completed responses', () => {
         'const value = 1;',
         '```',
         '',
-        '<aside>Raw HTML</aside>',
+        '| Column A | Column B |',
+        '| --- | --- |',
+        '| Cell A | Cell B |',
+        '',
+        '~~Removed~~',
+        '',
+        '- [x] Done',
+        '- [ ] Pending',
+        '',
+        'https://example.org user@example.com',
+        '',
+        'Footnote reference[^1]',
+        '',
+        '[^1]: Footnote body',
+        '',
+        '<div id="raw-div">Raw div</div>',
+        '',
+        '<script id="raw-script">window.evil = true</script>',
       ].join('\n');
       const { container } = render(
         <ResponsePanel
@@ -48,8 +65,38 @@ describe('ResponsePanel completed responses', () => {
       expect(container.querySelector('blockquote')).toHaveTextContent('Quote');
       expect(container.querySelector('code:not(pre code)')).toHaveTextContent('inline code');
       expect(container.querySelector('pre code')).toHaveTextContent('const value = 1;');
-      expect(container.querySelector('aside')).not.toBeInTheDocument();
-      expect(container).toHaveTextContent('<aside>Raw HTML</aside>');
+
+      const table = container.querySelector('table');
+      expect(table).toBeInTheDocument();
+      expect(table?.querySelector('thead')).toBeInTheDocument();
+      expect(table?.querySelector('tbody')).toBeInTheDocument();
+      expect(screen.getByText('Column A').tagName).toBe('TH');
+      expect(screen.getByText('Cell A').tagName).toBe('TD');
+      expect(screen.getByText('Removed').tagName).toBe('DEL');
+
+      const taskItems = screen.getAllByRole('checkbox');
+      expect(taskItems).toHaveLength(2);
+      expect(taskItems[0]).toBeDisabled();
+      expect(taskItems[0]).toBeChecked();
+      expect(taskItems[1]).toBeDisabled();
+      expect(taskItems[1]).not.toBeChecked();
+      expect(screen.getByRole('link', { name: 'https://example.org' })).toHaveAttribute(
+        'href',
+        'https://example.org'
+      );
+      expect(screen.getByRole('link', { name: 'user@example.com' })).toHaveAttribute(
+        'href',
+        'mailto:user@example.com'
+      );
+      expect(container.querySelector('sup a')).toHaveTextContent('1');
+      expect(container.querySelector('section')).toHaveTextContent('Footnote body');
+
+      expect(container.querySelector('div#raw-div')).not.toBeInTheDocument();
+      expect(container).toHaveTextContent('<div id="raw-div">Raw div</div>');
+      expect(container.querySelector('script#raw-script')).not.toBeInTheDocument();
+      expect(container).toHaveTextContent(
+        '<script id="raw-script">window.evil = true</script>'
+      );
     }
   );
 });

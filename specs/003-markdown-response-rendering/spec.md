@@ -1,12 +1,14 @@
 # Markdown Response Rendering
 
 ## Purpose
-Display model responses as formatted CommonMark in the three base response slots and the consolidator slot.
+Display model responses as safe GitHub Flavored Markdown in the three base response slots and the consolidator slot.
 
 ## Requirements
 - Render completed response content through the existing shared response-panel path.
 - Support standard Markdown: headings, emphasis, lists, links, blockquotes, inline code, and fenced code blocks.
-- Do not interpret raw HTML from model output.
+- Support GFM tables, strikethrough, task lists, bare URL and email autolinks, and footnotes.
+- Render tables responsively without expanding the surrounding response panel.
+- Do not interpret raw HTML from model output, including `div` and `script` elements.
 - Preserve plain-text rendering for non-response uses of shared history components.
 - Preserve existing response states, actions, slot isolation, and collapsible history behavior.
 
@@ -17,7 +19,6 @@ Display model responses as formatted CommonMark in the three base response slots
 4. Focused frontend tests and strict frontend typecheck pass.
 
 ## Non-goals
-- GitHub Flavored Markdown extensions.
 - Syntax highlighting.
 - Markdown editing or preview controls.
 - Backend or persistence changes.
