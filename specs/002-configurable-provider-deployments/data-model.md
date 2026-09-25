@@ -34,14 +34,14 @@ Backend-only immutable configuration, not persisted as a catalog table.
 | `contextLimitTokens` | positive integer               | Input limit used by `ContextBuilder`                               |
 | `maxOutputTokens`    | optional positive integer      | Exact output limit when present; provider default when absent       |
 | `inputModalities`    | non-empty readonly string list | Exact normative metadata                                           |
-| `outputModalities`   | non-empty readonly string list | Exact normative metadata; all initial entries are text-only output |
+| `outputModalities`   | non-empty readonly string list | Exact normative metadata; all current entries are text-only output |
 | `credentialEnv`      | credential-name enum           | Backend-only availability selector; never serialized               |
 
 Availability is derived from whether the corresponding adapter was created from a configured credential. Definitions are never mutated or discovered from providers.
 
-### Exact initial catalog
+### Exact current catalog
 
-The static constant contains these ten rows and no variants, aliases, or discovered entries:
+The static constant contains these fifteen rows. Only the five listed `:free` model IDs are permitted; `:batch`, `latest`, unlisted free variants, other aliases, fallback, substitution, and runtime discovery remain prohibited:
 
 | deploymentId                        | displayName            | providerId   | modelId                           | contextLimitTokens | maxOutputTokens | credentialEnv        |
 | ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------- | -------------------- |
@@ -55,6 +55,11 @@ The static constant contains these ten rows and no variants, aliases, or discove
 | `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 | absent          | `OPENAI_API_KEY`     |
 | `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 | absent          | `OPENAI_API_KEY`     |
 | `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 | absent          | `OPENAI_API_KEY`     |
+| `openrouter-nemotron-3-ultra-550b-a55b-free` | Nemotron 3 Ultra (Free) | `openrouter` | `nvidia/nemotron-3-ultra-550b-a55b:free` | 1000000 | absent | `OPENROUTER_API_KEY` |
+| `openrouter-nemotron-3.5-lightning-free` | Nemotron 3.5 Lightning (Free) | `openrouter` | `nvidia/nemotron-3.5-lightning:free` | 1000000 | absent | `OPENROUTER_API_KEY` |
+| `openrouter-qwen-3.8-27b-free`      | Qwen 3.8 27B (Free)   | `openrouter` | `qwen/qwen3.8-27b:free`           |             262144 | absent          | `OPENROUTER_API_KEY` |
+| `openrouter-gemma-4-26b-a4b-it-free` | Gemma 4 26B A4B (Free) | `openrouter` | `google/gemma-4-26b-a4b-it:free` |             262144 | absent          | `OPENROUTER_API_KEY` |
+| `openrouter-gemma-4-31b-it-free`    | Gemma 4 31B (Free)    | `openrouter` | `google/gemma-4-31b-it:free`      |             262144 | absent          | `OPENROUTER_API_KEY` |
 
 | deploymentId                        | inputModalities                          | outputModalities |
 | ----------------------------------- | ---------------------------------------- | ---------------- |
@@ -68,8 +73,13 @@ The static constant contains these ten rows and no variants, aliases, or discove
 | `openai-5.6-sol`                    | `text`, `image`                          | `text`           |
 | `openai-5.6-terra`                  | `text`, `image`                          | `text`           |
 | `openai-5.6-luna`                   | `text`, `image`                          | `text`           |
+| `openrouter-nemotron-3-ultra-550b-a55b-free` | `text` | `text` |
+| `openrouter-nemotron-3.5-lightning-free` | `text` | `text` |
+| `openrouter-qwen-3.8-27b-free`      | `text`, `image`, `video`                 | `text`           |
+| `openrouter-gemma-4-26b-a4b-it-free` | `text`, `image`, `video`                | `text`           |
+| `openrouter-gemma-4-31b-it-free`    | `text`, `image`, `video`                 | `text`           |
 
-`maxOutputTokens` is absent from every initial row. API and application objects omit the property rather than emitting `null`, `undefined`, or `0`. The snapshot stores absence as PostgreSQL `NULL`, and the adapter omits the provider-native output-limit field so the provider chooses its default. A future present value must be a positive integer, is copied into the snapshot and sent unchanged, and is never clamped, negotiated, discovered, substituted, or retried. It never affects input admission.
+`maxOutputTokens` is absent from all fifteen current rows. API and application objects omit the property rather than emitting `null`, `undefined`, or `0`. The snapshot stores absence as PostgreSQL `NULL`, and the adapter omits the provider-native output-limit field so the provider chooses its default. A future present value must be a positive integer, is copied into the snapshot and sent unchanged, and is never clamped, negotiated, discovered, substituted, or retried. It never affects input admission.
 
 The immutable snapshot preserves the decision to delegate the output limit, not the provider's external default. That default may change, so an absent value does not guarantee exact output-limit reproducibility.
 

@@ -418,3 +418,17 @@ coordinator: G1, G2, and final shutdown gate after T069/T070
 T001–T070 remain a historical record of completed work; their checked wording is not retroactively rewritten. The approved contract now supersedes their required-output-limit semantics: `maxOutputTokens` is optional and positive when present; absence omits the property at API/application boundaries, stores SQL `NULL`, omits the provider-native output-limit field, and delegates the default to the provider. A present value is snapshotted and sent unchanged, with no clamp, negotiation, discovery, substitution, or retry, and never affects input context admission. All ten initial catalog rows omit the value. The immutable snapshot preserves the delegation decision, but the external provider default may change and therefore limits exact reproducibility.
 
 This amendment is documentation/contract alignment only. Validation is limited to targeted searches and readback across the approved feature artifacts plus `git diff --check`; it does not reopen T001–T070 or claim new production, test, migration, or runtime validation.
+
+## Contract Amendment: Fifteen-row static catalog
+
+T001–T070 remain a historical record of completed work; their checked wording is not retroactively rewritten. This amendment supersedes only their ten-row catalog assumption and blanket prohibition on `:free` variants. The current static catalog contains the original ten rows unchanged plus these five exact OpenRouter chat deployments:
+
+- `openrouter-nemotron-3-ultra-550b-a55b-free` → `nvidia/nemotron-3-ultra-550b-a55b:free`
+- `openrouter-nemotron-3.5-lightning-free` → `nvidia/nemotron-3.5-lightning:free`
+- `openrouter-qwen-3.8-27b-free` → `qwen/qwen3.8-27b:free`
+- `openrouter-gemma-4-26b-a4b-it-free` → `google/gemma-4-26b-a4b-it:free`
+- `openrouter-gemma-4-31b-it-free` → `google/gemma-4-31b-it:free`
+
+Only those five listed `:free` model IDs are allowed. `:batch`, `latest`, unlisted free variants, other aliases, fallback, substitution, and runtime discovery remain prohibited. The exact catalog `modelId`, including a normative `:free` suffix, is forwarded unchanged; no automatic free routing is allowed. All fifteen rows omit `maxOutputTokens`, preserving the separate optional-`maxOutputTokens` amendment above. Defaults, credentials, adapter/UI/persistence/API shape, and slot behavior remain unchanged, and every available catalog item remains valid in every slot.
+
+OpenRouter declares `nvidia/nemotron-3-embed-1b:free` as `text -> embeddings`; it remains excluded because current slots and `/chat/completions` require text output. No embeddings support is introduced. The focused exact-catalog behavior test is `apps/backend/src/infrastructure/llm/__tests__/deploymentCatalog.test.ts`; its existing production RED→GREEN evidence covers the implemented extension. This documentation-only amendment uses the strict-TDD exception and requires only targeted searches/readback plus `git diff --check` on the six approved artifacts.

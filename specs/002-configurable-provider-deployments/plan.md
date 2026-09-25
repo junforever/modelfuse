@@ -5,7 +5,7 @@
 
 ## Summary
 
-Replace provider-named response slots with the four canonical logical slots (`base-1`, `base-2`, `base-3`, `consolidator`) and resolve each slot from an immutable per-conversation deployment snapshot. Add a backend-owned static catalog of exactly ten deployments, expose only entries whose adapter credential is configured, extend conversation creation with an optional complete assignment, and add an OpenRouter adapter behind the existing normalized LLM boundary.
+Replace provider-named response slots with the four canonical logical slots (`base-1`, `base-2`, `base-3`, `consolidator`) and resolve each slot from an immutable per-conversation deployment snapshot. Maintain a backend-owned static catalog of exactly fifteen deployments, limited to text-output chat models and exposing only entries whose adapter credential is configured, extend conversation creation with an optional complete assignment, and add an OpenRouter adapter behind the existing normalized LLM boundary.
 
 The implementation refactors the existing provider registry from `Record<ResponseSlot, LlmProvider>` to a registry keyed by `providerId`, retains the current orchestration sequence (three base calls followed by one consolidator call), and passes a resolved snapshot into each adapter and `ContextBuilder`. PostgreSQL stores one immutable snapshot row per slot; Liquibase changes the slot constraints without aliases or backfill. The frontend adds four catalog-driven selectors only for new conversations and renders stored assignments read-only for existing conversations. No provider discovery, automatic fallback, retry negotiation, economic metrics, or non-text composer input is added.
 
@@ -18,7 +18,7 @@ The implementation refactors the existing provider registry from `Record<Respons
 **Target Platform**: Browser frontend plus Node.js web service on the current local/container deployment model
 **Project Type**: pnpm 11 workspace monorepo web application
 **Performance Goals**: Catalog reads perform no external I/O; conversation execution preserves three concurrent base attempts followed by one consolidator attempt; every adapter performs exactly one external call per attempt
-**Constraints**: Exactly four canonical slots and ten initial deployments; assignments immutable after creation; static catalog; optional provider credentials and optional positive output limits; text-only composer; exact context limits; absent output limits delegate to provider defaults; no aliases, backfill, provider discovery, fallback, automatic retry, economic fields, or new dependency
+**Constraints**: Exactly four canonical slots and fifteen current deployments; assignments immutable after creation; static catalog limited to text-output chat models; optional provider credentials and optional positive output limits; text-only composer; exact context limits; absent output limits delegate to provider defaults; exactly five listed `:free` model IDs allowed; no `:batch`, `latest`, unlisted free variants, other aliases, backfill, provider discovery, fallback, substitution, automatic retry, economic fields, embeddings support, or new dependency
 **Scale/Scope**: One catalog endpoint, one extended creation contract, one snapshot table, two slot-constraint migrations, five adapter registrations, four UI selectors, and the existing conversation/recovery/SSE flows migrated to canonical slots
 
 ## Constitution Check
@@ -51,7 +51,7 @@ Refactor `apps/backend/src/types/llm.ts` so `LlmProvider` represents one adapter
 
 ### 2. Static catalog and optional availability
 
-Add `apps/backend/src/infrastructure/llm/deploymentCatalog.ts` as a readonly typed constant containing exactly the ten normative rows, exact context limits, absent `maxOutputTokens`, exact modalities, and required credential name. It performs no startup or request-time network call.
+Maintain `apps/backend/src/infrastructure/llm/deploymentCatalog.ts` as a readonly typed constant containing exactly the fifteen normative rows, exact context limits, absent `maxOutputTokens`, exact modalities, and required credential name. Catalog eligibility is limited to chat models with `text` output; embedding-only models are excluded. The constant performs no startup or request-time network call.
 
 Add `apps/backend/src/services/llm/ModelCatalogService.ts` to:
 
@@ -85,7 +85,7 @@ Refactor the four existing adapters to consume the resolved deployment per call 
 
 No adapter clamps, negotiates, discovers, substitutes, or retries a present value, and the output limit never participates in input context admission.
 
-Add `apps/backend/src/infrastructure/llm/providers/OpenRouterProvider.ts`. It uses the fixed `POST https://openrouter.ai/api/v1/chat/completions` endpoint, Bearer `OPENROUTER_API_KEY`, exact catalog `modelId`, conditional `max_tokens`, normalized messages, the existing Axios timeout/abort behavior, and exactly one request per attempt. It omits `max_tokens` when `maxOutputTokens` is absent and sends the value unchanged when present. It maps usage to the three existing normalized token metrics and discards all other upstream metadata.
+Add `apps/backend/src/infrastructure/llm/providers/OpenRouterProvider.ts`. It uses the fixed `POST https://openrouter.ai/api/v1/chat/completions` endpoint, Bearer `OPENROUTER_API_KEY`, the exact catalog `modelId` forwarded unchanged including a normative `:free` suffix, conditional `max_tokens`, normalized messages, the existing Axios timeout/abort behavior, and exactly one request per attempt. It omits `max_tokens` when `maxOutputTokens` is absent and sends the value unchanged when present. It maps usage to the three existing normalized token metrics and discards all other upstream metadata.
 
 OpenRouter error classification is closed and structural: 401 → `authentication`; 429 → `rate_limited`; 408/502/503 → `provider_transient_error`; 402 → `provider_error`; `content_blocked` only when `error.metadata.error_type` is `content_policy_violation` or `refusal`, or when a 403 has a non-empty `error.metadata.reasons` or `error.metadata.patterns` array. Every other 403 is `provider_error`. No message-text matching, upstream metadata retention, header/body exposure, negotiation, fallback, or automatic retry is permitted. Any provider rejection of a present output limit becomes non-recoverable `provider_error` through its normal status classification.
 
@@ -136,7 +136,7 @@ Keep `PromptComposer` text-only. It receives `deploymentIds` only when creating 
 
 **Unit and adapter contract tests — `unit-test-runner`**
 
-- catalog exactness: ten definitions, exact models/context limits/modalities, absent initial output limits, stable sort, availability filter, defaults, duplicates, and unavailable IDs;
+- catalog exactness: fifteen definitions, exact models/context limits/modalities, absent current output limits, stable sort, availability filter, defaults, duplicates, unavailable IDs, and absence of non-chat or non-text-output entries;
 - strict backend/frontend schemas and rejection of all old slot names;
 - canonical tuple ordering, slot/role state calculation, mapper behavior, ContextBuilder snapshot limits, and no provider call on oversized minimum payload;
 - contract suite for all five adapters covering exact model, omission of the native output-limit field when absent, unchanged forwarding when present, one request, abort/timeout, normalized content and three metrics, safe error shape, no retries, and output-limit rejection;
@@ -161,7 +161,7 @@ Keep `PromptComposer` text-only. It receives `deploymentIds` only when creating 
 - reload/reopen shows the immutable assignment, canonical tab labels, and no replacement control;
 - existing retry, continuation, history, and SSE journeys run with canonical slots through deterministic fake adapters and the disposable test database.
 
-No performance test task is required: the catalog is a fixed ten-row in-memory read and the execution call count is already a functional contract. No real provider or paid API is called by any test.
+No performance test task is required: the catalog is a fixed fifteen-row in-memory read and the execution call count is already a functional contract. No real provider or paid API is called by any test.
 
 ## AI Sub-agent Delivery Workflow
 

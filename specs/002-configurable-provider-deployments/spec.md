@@ -17,7 +17,7 @@ Como usuario, quiero asignar un deployment disponible a cada uno de los cuatro s
 
 **Acceptance Scenarios**:
 
-1. **Given** diez deployments disponibles, **When** el usuario asigna cuatro `deploymentId` distintos a `base-1`, `base-2`, `base-3` y `consolidator`, **Then** la conversación se crea con exactamente esas cuatro asignaciones.
+1. **Given** quince deployments disponibles, **When** el usuario asigna cuatro `deploymentId` distintos a `base-1`, `base-2`, `base-3` y `consolidator`, **Then** la conversación se crea con exactamente esas cuatro asignaciones.
 2. **Given** deployments de API directa y de OpenRouter disponibles, **When** el usuario los combina en los cuatro slots, **Then** cada slot puede usar cualquier entrada disponible sin restricciones por provider.
 3. **Given** una selección válida, **When** se completa la creación, **Then** la respuesta y el detalle de la conversación muestran por slot el `deploymentId`, `providerId`, `modelId` y `displayName` persistidos.
 4. **Given** el formulario de nueva conversación, **When** se muestran los selectores, **Then** cada selector presenta `displayName` y `providerId` y solo incluye entradas devueltas por el catálogo.
@@ -50,7 +50,7 @@ Como usuario, quiero ver únicamente deployments que la instalación puede ejecu
 
 **Acceptance Scenarios**:
 
-1. **Given** las credenciales de OpenAI, Google y OpenRouter configuradas, **When** se consulta `GET /api/v1/model-catalog`, **Then** se devuelven exactamente los diez deployments iniciales disponibles ordenados por `displayName`.
+1. **Given** las credenciales de OpenAI, Google y OpenRouter configuradas, **When** se consulta `GET /api/v1/model-catalog`, **Then** se devuelven exactamente los quince deployments actuales disponibles ordenados por `displayName`.
 2. **Given** que falta la credencial de un provider, **When** se consulta el catálogo, **Then** se omiten todos sus deployments y no se devuelve una entrada marcada como no disponible ni una razón interna.
 3. **Given** un `deploymentId` cuya credencial no está configurada, **When** se solicita directamente al crear una conversación, **Then** la creación se rechaza con `422 DEPLOYMENT_UNAVAILABLE`.
 4. **Given** una instalación sin alguna credencial opcional, **When** el backend arranca, **Then** la ausencia de esa credencial no impide el arranque.
@@ -101,7 +101,7 @@ Como operador de la aplicación, quiero que cada deployment se ejecute mediante 
 
 **Acceptance Scenarios**:
 
-1. **Given** un deployment de OpenRouter resuelto para un slot, **When** se ejecuta un intento, **Then** se realiza una sola llamada a `POST https://openrouter.ai/api/v1/chat/completions`, con autenticación Bearer basada en `OPENROUTER_API_KEY` y el `modelId` exacto del catálogo.
+1. **Given** un deployment de OpenRouter resuelto para un slot, **When** se ejecuta un intento, **Then** se realiza una sola llamada a `POST https://openrouter.ai/api/v1/chat/completions`, con autenticación Bearer basada en `OPENROUTER_API_KEY` y el `modelId` exacto del catálogo reenviado sin cambios, incluido su sufijo normativo `:free` cuando corresponde.
 2. **Given** una respuesta de OpenRouter con métricas de tokens, **When** se normaliza, **Then** se producen `inputTokens`, `outputTokens` y `totalTokens` con la misma semántica que los providers existentes.
 3. **Given** una cancelación, timeout o error de OpenRouter, **When** se procesa el resultado, **Then** se conserva el contrato normalizado sin fallback ni reintento automático.
 4. **Given** un adapter directo, **When** ejecuta su deployment, **Then** conserva su protocolo propio y no comparte el payload externo de otro provider.
@@ -162,7 +162,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - **FR-011**: El catálogo MUST ser estático en el backend y MUST NOT consultarse ni actualizarse desde un endpoint externo durante el arranque o una conversación.
 - **FR-012**: Cada deployment MUST contener un `deploymentId` público, estable y único; `displayName`; `providerId`; `modelId`; `contextLimitTokens`; `inputModalities`; `outputModalities`; y la credencial requerida para determinar disponibilidad. `maxOutputTokens` MUST ser opcional y, cuando esté presente, MUST ser un entero positivo.
 - **FR-013**: El catálogo MUST NOT contener claves, endpoints secretos, prompts ni precios.
-- **FR-014**: El catálogo inicial MUST contener exactamente estas definiciones:
+- **FR-014**: El catálogo actual MUST contener exactamente estas definiciones:
 
 | deploymentId                        | displayName            | providerId   | modelId enviado al provider       | contextLimitTokens | maxOutputTokens |
 | ----------------------------------- | ---------------------- | ------------ | --------------------------------- | -----------------: | --------------- |
@@ -176,15 +176,20 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 | `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 | ausente         |
 | `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 | ausente         |
 | `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 | ausente         |
+| `openrouter-nemotron-3-ultra-550b-a55b-free` | Nemotron 3 Ultra (Free) | `openrouter` | `nvidia/nemotron-3-ultra-550b-a55b:free` | 1000000 | ausente |
+| `openrouter-nemotron-3.5-lightning-free` | Nemotron 3.5 Lightning (Free) | `openrouter` | `nvidia/nemotron-3.5-lightning:free` | 1000000 | ausente |
+| `openrouter-qwen-3.8-27b-free`      | Qwen 3.8 27B (Free)   | `openrouter` | `qwen/qwen3.8-27b:free`           |             262144 | ausente         |
+| `openrouter-gemma-4-26b-a4b-it-free` | Gemma 4 26B A4B (Free) | `openrouter` | `google/gemma-4-26b-a4b-it:free` |             262144 | ausente         |
+| `openrouter-gemma-4-31b-it-free`    | Gemma 4 31B (Free)    | `openrouter` | `google/gemma-4-31b-it:free`      |             262144 | ausente         |
 
-En las diez filas iniciales `maxOutputTokens` está ausente y cada provider elige
+En las quince filas actuales `maxOutputTokens` está ausente y cada provider elige
 su valor por defecto. La ausencia se representa omitiendo la propiedad en API y
 aplicación, y con `NULL` en PostgreSQL; nunca se emite `null`, `undefined` ni `0`.
 La instantánea conserva la decisión de delegar, aunque el default del provider
 puede cambiar externamente y limitar la reproducibilidad exacta. El campo nunca
 es un límite de entrada.
 
-Las capacidades iniciales exactas son:
+Las capacidades actuales exactas son:
 
 | deploymentId                        | inputModalities                          | outputModalities |
 | ----------------------------------- | ---------------------------------------- | ---------------- |
@@ -198,9 +203,14 @@ Las capacidades iniciales exactas son:
 | `openai-5.6-sol`                    | `text`, `image`                          | `text`           |
 | `openai-5.6-terra`                  | `text`, `image`                          | `text`           |
 | `openai-5.6-luna`                   | `text`, `image`                          | `text`           |
+| `openrouter-nemotron-3-ultra-550b-a55b-free` | `text` | `text` |
+| `openrouter-nemotron-3.5-lightning-free` | `text` | `text` |
+| `openrouter-qwen-3.8-27b-free`      | `text`, `image`, `video`                 | `text`           |
+| `openrouter-gemma-4-26b-a4b-it-free` | `text`, `image`, `video`                | `text`           |
+| `openrouter-gemma-4-31b-it-free`    | `text`, `image`, `video`                 | `text`           |
 
 - **FR-015**: Para deployments de OpenRouter, `contextLimitTokens` MUST representar `top_provider.context_length`, la cota efectiva de la ruta seleccionada.
-- **FR-016**: El catálogo inicial MUST NOT incluir variantes `:batch`, `:free`, aliases `latest` ni modelos distintos de los diez definidos; GLM MUST usar `z-ai/glm-5.2` y DeepSeek MUST usar `deepseek/deepseek-v4-flash-0731`.
+- **FR-016**: El catálogo MUST permitir `:free` únicamente en los cinco `modelId` normativos que lo incluyen y MUST NOT incluir variantes `:batch`, aliases `latest`, variantes gratuitas no listadas, otros aliases, fallback, sustitución, discovery en runtime ni modelos distintos de los quince definidos; GLM MUST usar `z-ai/glm-5.2` y DeepSeek MUST usar `deepseek/deepseek-v4-flash-0731`.
 - **FR-017**: Los adapters soportados por la arquitectura MUST ser `openai`, `google`, `minimax`, `qwen` y `openrouter`; MiniMax y Qwen directos MUST permanecer disponibles como extensiones del registro, sin deployments iniciales en el catálogo.
 - **FR-018**: Cada adapter MUST declarar exactamente su credencial requerida: `openai` = `OPENAI_API_KEY`, `google` = `GOOGLE_API_KEY`, `minimax` = `MINIMAX_API_KEY`, `qwen` = `QWEN_API_KEY`, `openrouter` = `OPENROUTER_API_KEY`.
 - **FR-019**: Las credenciales MUST ser opcionales a nivel de instalación y la ausencia de una credencial opcional MUST NOT impedir el arranque del backend.
@@ -231,9 +241,9 @@ Las capacidades iniciales exactas son:
 - **FR-035**: La orquestación MUST conocer únicamente el contrato normalizado `LlmProvider`; MUST NOT ramificar por nombre de provider ni construir payloads externos.
 - **FR-036**: El registro de adapters MUST estar indexado por `providerId` y el orquestador MUST recibir un deployment resuelto por slot.
 - **FR-037**: Agregar un provider futuro MUST requerir solamente implementar el contrato del adapter, declarar su credencial y registrar sus deployments; MUST NOT requerir un slot nuevo ni cambios al orquestador.
-- **FR-038**: OpenRouter MUST usar `POST https://openrouter.ai/api/v1/chat/completions`, `Authorization: Bearer $OPENROUTER_API_KEY` y el `modelId` exacto del catálogo.
+- **FR-038**: OpenRouter MUST usar `POST https://openrouter.ai/api/v1/chat/completions`, `Authorization: Bearer $OPENROUTER_API_KEY` y MUST reenviar sin cambios el `modelId` exacto del catálogo, incluido su sufijo normativo `:free` cuando corresponda.
 - **FR-039**: OpenRouter MUST conservar el contrato normalizado de mensajes, cancelación y timeout, y MUST realizar una sola llamada externa por intento.
-- **FR-040**: OpenRouter MUST NOT usar fallbacks automáticos, variantes `:free` ni reintentos automáticos.
+- **FR-040**: OpenRouter MUST NOT usar routing gratuito automático, fallbacks, sustituciones ni reintentos automáticos.
 - **FR-041**: Los adapters directos MUST conservar sus protocolos propios y ningún adapter MUST compartir payloads externos con otro provider por compatibilidad de formato.
 - **FR-042**: OpenRouter MUST normalizar `inputTokens`, `outputTokens` y `totalTokens` con la misma semántica de los providers existentes cuando el upstream informe esas métricas.
 
@@ -260,7 +270,7 @@ Las capacidades iniciales exactas son:
 
 - **Deployment**: Configuración estática e identificable disponible para asignación. Contiene el identificador público estable, datos visibles, adapter y modelo exactos, límite de entrada, límite operativo de salida opcional, modalidades exactas y la credencial que determina disponibilidad; no contiene secretos, prompts, endpoints secretos ni precios.
 - **Provider adapter**: Encapsula el protocolo externo y la credencial de un provider bajo el contrato normalizado `LlmProvider`. Se identifica por `providerId`.
-- **Catálogo de deployments**: Conjunto estático de los diez deployments iniciales. La vista disponible se obtiene filtrando por credenciales configuradas y ordenando por `displayName`.
+- **Catálogo de deployments**: Conjunto estático de los quince deployments actuales. La vista disponible se obtiene filtrando por credenciales configuradas y ordenando por `displayName`.
 - **Asignación de deployments de conversación**: Objeto de creación que relaciona exactamente los cuatro slots lógicos con cuatro `deploymentId` distintos.
 - **Instantánea de deployment por slot**: Registro inmutable asociado a una conversación y un slot, con los datos necesarios para ejecutar todos sus turnos sin volver a consultar el catálogo mutable.
 - **Conversación**: Agregado que posee exactamente cuatro instantáneas, una por slot, y conserva esa asignación durante toda su vida.
@@ -269,7 +279,7 @@ Las capacidades iniciales exactas son:
 
 ### Measurable Outcomes
 
-- **SC-001**: Con `OPENAI_API_KEY`, `GOOGLE_API_KEY` y `OPENROUTER_API_KEY` configuradas, el catálogo devuelve exactamente 10 deployments disponibles y sus identificadores, nombres, providers, modelos, límites de contexto y ausencia de `maxOutputTokens` coinciden al 100% con la tabla normativa.
+- **SC-001**: Con `OPENAI_API_KEY`, `GOOGLE_API_KEY` y `OPENROUTER_API_KEY` configuradas, el catálogo devuelve exactamente 15 deployments disponibles y sus identificadores, nombres, providers, modelos, límites de contexto y ausencia de `maxOutputTokens` coinciden al 100% con la tabla normativa.
 - **SC-002**: El 100% de las creaciones sin selección y con las credenciales requeridas persiste las cuatro asignaciones exactas del perfil por defecto antes de iniciar llamadas externas.
 - **SC-003**: Los usuarios pueden asignar cualquiera de los deployments disponibles a cualquiera de los cuatro slots, con una tasa de aceptación del 100% para combinaciones de cuatro `deploymentId` distintos.
 - **SC-004**: El 100% de las selecciones con un `deploymentId` duplicado se rechaza atómicamente con `422 DUPLICATE_DEPLOYMENT_ASSIGNMENT`, sin filas creadas ni llamadas a providers.
@@ -278,7 +288,7 @@ Las capacidades iniciales exactas son:
 - **SC-007**: El 100% de los deployments sin credencial queda fuera del catálogo, y toda selección directa de uno de ellos se rechaza con `422 DEPLOYMENT_UNAVAILABLE`.
 - **SC-008**: OpenRouter supera los mismos contract tests aplicables a los adapters existentes para contenido, métricas, cancelación, timeout y errores, manteniendo una sola llamada externa por intento.
 - **SC-009**: Ninguna prueba de registros o persistencia encuentra precios, créditos, billing, presupuesto, moneda, costos o consumo económico de OpenRouter.
-- **SC-010**: Para cada uno de los 10 `contextLimitTokens` exactos del catálogo, un payload mínimo sobre el umbral se rechaza antes de llamar al provider.
+- **SC-010**: Para cada uno de los 15 `contextLimitTokens` exactos del catálogo, un payload mínimo sobre el umbral se rechaza antes de llamar al provider.
 - **SC-011**: El 100% de las respuestas de creación y detalle presenta por slot los cuatro datos visibles persistidos: `deploymentId`, `providerId`, `modelId` y `displayName`.
 - **SC-012**: El 100% de los contract tests de deployments verifica ambos casos: la ausencia de `maxOutputTokens` omite el campo nativo, y un entero positivo presente se envía sin cambios, sin clamp, negociación, discovery, sustitución ni retry.
 - **SC-013**: El catálogo devuelve al 100% las modalidades exactas de la tabla normativa y ningún flujo de esta feature permite adjuntar contenido distinto de texto.
@@ -290,5 +300,5 @@ Las capacidades iniciales exactas son:
 - El entorno actual todavía no contiene conversaciones de usuario; la validación de esta feature se realiza sobre una base limpia y no requiere migración de conversaciones de producción.
 - Las credenciales de provider se configuran por instalación y son opcionales; la disponibilidad observable deriva exclusivamente de si está configurada la credencial declarada por cada adapter.
 - La semántica de cuatro slots, la semántica de conversación, el ratio técnico de contexto, el medidor exacto o cota superior y la matriz normalizada de providers ya existentes se conservan. Los identificadores anteriores de slot se reemplazan por los cuatro identificadores lógicos definidos en esta especificación.
-- El catálogo inicial es la tabla cerrada de diez deployments de esta especificación; MiniMax y Qwen directos se conservan solo como extensiones del registro, sin entradas iniciales.
-- `maxOutputTokens` está ausente en los diez deployments iniciales; la instantánea preserva esa decisión de delegar, aunque el default del provider puede cambiar externamente y limitar la reproducibilidad exacta.
+- El catálogo actual es la tabla cerrada de quince deployments de esta especificación; MiniMax y Qwen directos se conservan solo como extensiones del registro, sin entradas del catálogo.
+- `maxOutputTokens` está ausente en los quince deployments actuales; la instantánea preserva esa decisión de delegar, aunque el default del provider puede cambiar externamente y limitar la reproducibilidad exacta.

@@ -76,7 +76,7 @@ Un deployment es una configuración estática e identificable que contiene:
 
 El catálogo no contiene claves, endpoints secretos, prompts ni precios.
 
-## Catálogo inicial exacto
+## Catálogo actual exacto
 
 El catálogo es estático en el backend. No se consulta ni se actualiza desde un
 endpoint externo durante el arranque o durante una conversación.
@@ -96,9 +96,14 @@ identificadores estables:
 | `openai-5.6-sol`                    | GPT-5.6 Sol            | `openai`     | `gpt-5.6-sol`                     |            1050000 | ausente         |
 | `openai-5.6-terra`                  | GPT-5.6 Terra          | `openai`     | `gpt-5.6-terra`                   |            1050000 | ausente         |
 | `openai-5.6-luna`                   | GPT-5.6 Luna           | `openai`     | `gpt-5.6-luna`                    |            1050000 | ausente         |
+| `openrouter-nemotron-3-ultra-550b-a55b-free` | Nemotron 3 Ultra (Free) | `openrouter` | `nvidia/nemotron-3-ultra-550b-a55b:free` | 1000000 | ausente |
+| `openrouter-nemotron-3.5-lightning-free` | Nemotron 3.5 Lightning (Free) | `openrouter` | `nvidia/nemotron-3.5-lightning:free` | 1000000 | ausente |
+| `openrouter-qwen-3.8-27b-free`      | Qwen 3.8 27B (Free)   | `openrouter` | `qwen/qwen3.8-27b:free`           |             262144 | ausente         |
+| `openrouter-gemma-4-26b-a4b-it-free` | Gemma 4 26B A4B (Free) | `openrouter` | `google/gemma-4-26b-a4b-it:free` |             262144 | ausente         |
+| `openrouter-gemma-4-31b-it-free`    | Gemma 4 31B (Free)    | `openrouter` | `google/gemma-4-31b-it:free`      |             262144 | ausente         |
 
 `maxOutputTokens` es opcional y debe ser un entero positivo cuando está
-presente. En las diez filas iniciales está ausente: el adapter omite el parámetro
+presente. En las quince filas actuales está ausente: el adapter omite el parámetro
 nativo de límite de salida y cada provider elige su valor por defecto. Cuando el
 campo está presente, el adapter lo envía sin cambios mediante el parámetro nativo
 equivalente; OpenRouter usa `max_tokens`. No se permite clamp, negociación,
@@ -111,7 +116,7 @@ La instantánea inmutable conserva la decisión de delegar el límite al provide
 pero ese valor por defecto puede cambiar externamente, por lo que esa decisión no
 garantiza reproducibilidad exacta del límite de salida.
 
-Las capacidades iniciales exactas son:
+Las capacidades actuales exactas son:
 
 | deploymentId                        | inputModalities                          | outputModalities |
 | ----------------------------------- | ---------------------------------------- | ---------------- |
@@ -125,6 +130,11 @@ Las capacidades iniciales exactas son:
 | `openai-5.6-sol`                    | `text`, `image`                          | `text`           |
 | `openai-5.6-terra`                  | `text`, `image`                          | `text`           |
 | `openai-5.6-luna`                   | `text`, `image`                          | `text`           |
+| `openrouter-nemotron-3-ultra-550b-a55b-free` | `text` | `text` |
+| `openrouter-nemotron-3.5-lightning-free` | `text` | `text` |
+| `openrouter-qwen-3.8-27b-free`      | `text`, `image`, `video`                 | `text`           |
+| `openrouter-gemma-4-26b-a4b-it-free` | `text`, `image`, `video`                | `text`           |
+| `openrouter-gemma-4-31b-it-free`    | `text`, `image`, `video`                 | `text`           |
 
 Estas capacidades se exponen como metadata del catálogo. Esta feature conserva
 el composer de texto actual y no incorpora carga de imágenes, audio, video o
@@ -134,7 +144,9 @@ Para los deployments de OpenRouter, `contextLimitTokens` usa el límite de
 `top_provider.context_length`, que es la cota efectiva de la ruta seleccionada,
 no el límite máximo agregado que OpenRouter publica para el modelo.
 
-La lista no incluye variantes `:batch`, `:free`, aliases `latest` ni otros
+La lista admite `:free` únicamente en los cinco `modelId` normativos que lo
+incluyen. No admite variantes `:batch`, aliases `latest`, variantes gratuitas no
+listadas, otros aliases, fallback, sustitución, discovery en runtime ni otros
 modelos. Para GLM se usa exactamente `z-ai/glm-5.2`; para DeepSeek se usa
 exactamente la versión fechada `deepseek/deepseek-v4-flash-0731`.
 
@@ -266,12 +278,14 @@ deployment resuelto por slot. Para OpenRouter:
 
 - se usa `POST https://openrouter.ai/api/v1/chat/completions`;
 - se envía `Authorization: Bearer $OPENROUTER_API_KEY`;
-- `model` es el `modelId` exacto del catálogo;
+- `model` es el `modelId` exacto del catálogo y se reenvía sin cambios,
+  incluido el sufijo normativo `:free` cuando corresponde;
 - `max_tokens` se omite cuando `maxOutputTokens` está ausente y recibe su valor
   exacto cuando está presente;
 - se conserva el contrato normalizado de mensajes, cancelación, timeout y una
   sola llamada externa por intento;
-- no se usan fallbacks automáticos, variantes `:free` ni reintentos automáticos.
+- no se usan routing gratuito automático, fallbacks, sustituciones ni reintentos
+  automáticos.
 
 Los adapters directos conservan sus protocolos propios. Ningún adapter comparte
 payloads externos con otro provider por el solo hecho de que OpenRouter sea
@@ -302,7 +316,7 @@ compatible con el formato de OpenAI.
 
 La feature solo está completa cuando se demuestra todo lo siguiente:
 
-1. El catálogo devuelve exactamente los diez deployments iniciales disponibles
+1. El catálogo devuelve exactamente los quince deployments actuales disponibles
    cuando están configuradas sus tres credenciales (`OPENAI_API_KEY`,
    `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`).
 2. El perfil por defecto crea la asignación exacta indicada y la persiste como

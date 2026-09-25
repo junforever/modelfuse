@@ -4,11 +4,13 @@ All implementation unknowns are resolved and no open decision remains.
 
 ## Decision 1: Keep one static typed deployment catalog in backend infrastructure
 
-**Decision**: Store exactly ten readonly deployment definitions in `apps/backend/src/infrastructure/llm/deploymentCatalog.ts`. A service filters them by adapters present in the provider registry and sorts the safe DTOs by `displayName`.
+**Decision**: Store exactly fifteen readonly deployment definitions in `apps/backend/src/infrastructure/llm/deploymentCatalog.ts`. The original ten definitions remain unchanged and the five approved OpenRouter `:free` chat deployments are appended. A service filters them by adapters present in the provider registry and sorts the safe DTOs by `displayName`.
 
-**Rationale**: The feature explicitly forbids dynamic discovery. A typed constant is the smallest implementation, makes exact values reviewable, and keeps credentials outside catalog responses.
+**Rationale**: The feature explicitly forbids dynamic discovery. A typed constant is the smallest implementation, makes exact values reviewable, and keeps credentials outside catalog responses. Catalog eligibility remains limited to chat models whose declared output modality is `text`, because every slot executes through `/chat/completions` and expects normalized text output.
 
-**Alternatives considered**: Database-managed catalog and provider startup discovery were rejected because they add mutable state or external I/O contrary to the normative brief. Frontend-owned definitions were rejected because availability and trust-boundary validation belong to the backend.
+**Evidence**: OpenRouter official endpoint evidence was retrieved on 2026-09-24 from `https://openrouter.ai/api/v1/models/<model-id>/endpoints` for the five added model IDs. OpenRouter declares `nvidia/nemotron-3-embed-1b:free` as `text -> embeddings`; it is explicitly excluded because the current slots and `/chat/completions` require text output. This amendment does not introduce embeddings support.
+
+**Alternatives considered**: Database-managed catalog and provider startup discovery were rejected because they add mutable state or external I/O contrary to the normative brief. Frontend-owned definitions were rejected because availability and trust-boundary validation belong to the backend. Runtime OpenRouter discovery and automatic free routing were rejected because the catalog uses exact static IDs. Adding the embedding model was rejected because its output contract is incompatible with chat slots.
 
 ## Decision 2: Make `LlmProvider` a provider adapter, not a slot-bound model instance
 
