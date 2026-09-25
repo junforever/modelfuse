@@ -96,13 +96,12 @@ const deployments: DeploymentSummaryTuple = [
 describe('frontend conversation contracts', () => {
   it('strictly validates catalog, detail, and creation response contracts', () => {
     const catalogItem = {
-      deploymentId: 'openrouter-model',
-      providerId: 'openrouter',
-      modelId: 'vendor/model',
-      displayName: 'Vendor Model',
-      contextLimitTokens: 100_000,
-      maxOutputTokens: 8_000,
-      inputModalities: ['text'],
+      deploymentId: 'kimi-k3',
+      providerId: 'kimi',
+      modelId: 'kimi-k3',
+      displayName: 'Kimi K3',
+      contextLimitTokens: 1_048_576,
+      inputModalities: ['text', 'image', 'video'],
       outputModalities: ['text'],
     };
     const catalog = { items: [catalogItem] };

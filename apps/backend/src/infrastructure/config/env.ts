@@ -73,6 +73,7 @@ const envSchema = z
     MINIMAX_BASE_URL: optionalHttpUrl,
     QWEN_API_KEY: optionalSetting,
     QWEN_BASE_URL: optionalHttpUrl,
+    MOONSHOT_API_KEY: optionalSetting,
     OPENROUTER_API_KEY: optionalSetting,
     LLM_PROVIDER_TIMEOUT_MS: positiveInteger,
     CONVERSATION_CONTEXT_MAX_TURNS: positiveInteger,

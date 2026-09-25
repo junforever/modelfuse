@@ -32,6 +32,16 @@ export const DEPLOYMENT_CATALOG = [
     credentialEnv: 'OPENROUTER_API_KEY',
   },
   {
+    deploymentId: 'kimi-k3',
+    displayName: 'Kimi K3',
+    providerId: 'kimi',
+    modelId: 'kimi-k3',
+    contextLimitTokens: 1048576,
+    inputModalities: ['text', 'image', 'video'],
+    outputModalities: ['text'],
+    credentialEnv: 'MOONSHOT_API_KEY',
+  },
+  {
     deploymentId: 'openrouter-kimi-k3',
     displayName: 'Kimi K3',
     providerId: 'openrouter',

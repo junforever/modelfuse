@@ -17,7 +17,7 @@ Como usuario, quiero asignar un deployment disponible a cada uno de los cuatro s
 
 **Acceptance Scenarios**:
 
-1. **Given** quince deployments disponibles, **When** el usuario asigna cuatro `deploymentId` distintos a `base-1`, `base-2`, `base-3` y `consolidator`, **Then** la conversación se crea con exactamente esas cuatro asignaciones.
+1. **Given** dieciséis deployments disponibles, **When** el usuario asigna cuatro `deploymentId` distintos a `base-1`, `base-2`, `base-3` y `consolidator`, **Then** la conversación se crea con exactamente esas cuatro asignaciones.
 2. **Given** deployments de API directa y de OpenRouter disponibles, **When** el usuario los combina en los cuatro slots, **Then** cada slot puede usar cualquier entrada disponible sin restricciones por provider.
 3. **Given** una selección válida, **When** se completa la creación, **Then** la respuesta y el detalle de la conversación muestran por slot el `deploymentId`, `providerId`, `modelId` y `displayName` persistidos.
 4. **Given** el formulario de nueva conversación, **When** se muestran los selectores, **Then** cada selector presenta `displayName` y `providerId` y solo incluye entradas devueltas por el catálogo.
@@ -50,7 +50,7 @@ Como usuario, quiero ver únicamente deployments que la instalación puede ejecu
 
 **Acceptance Scenarios**:
 
-1. **Given** las credenciales de OpenAI, Google y OpenRouter configuradas, **When** se consulta `GET /api/v1/model-catalog`, **Then** se devuelven exactamente los quince deployments actuales disponibles ordenados por `displayName`.
+1. **Given** las credenciales de OpenAI, Google, Kimi y OpenRouter configuradas, **When** se consulta `GET /api/v1/model-catalog`, **Then** se devuelven exactamente los dieciséis deployments actuales disponibles ordenados por `displayName`.
 2. **Given** que falta la credencial de un provider, **When** se consulta el catálogo, **Then** se omiten todos sus deployments y no se devuelve una entrada marcada como no disponible ni una razón interna.
 3. **Given** un `deploymentId` cuya credencial no está configurada, **When** se solicita directamente al crear una conversación, **Then** la creación se rechaza con `422 DEPLOYMENT_UNAVAILABLE`.
 4. **Given** una instalación sin alguna credencial opcional, **When** el backend arranca, **Then** la ausencia de esa credencial no impide el arranque.
@@ -102,11 +102,12 @@ Como operador de la aplicación, quiero que cada deployment se ejecute mediante 
 **Acceptance Scenarios**:
 
 1. **Given** un deployment de OpenRouter resuelto para un slot, **When** se ejecuta un intento, **Then** se realiza una sola llamada a `POST https://openrouter.ai/api/v1/chat/completions`, con autenticación Bearer basada en `OPENROUTER_API_KEY` y el `modelId` exacto del catálogo reenviado sin cambios, incluido su sufijo normativo `:free` cuando corresponde.
-2. **Given** una respuesta de OpenRouter con métricas de tokens, **When** se normaliza, **Then** se producen `inputTokens`, `outputTokens` y `totalTokens` con la misma semántica que los providers existentes.
-3. **Given** una cancelación, timeout o error de OpenRouter, **When** se procesa el resultado, **Then** se conserva el contrato normalizado sin fallback ni reintento automático.
-4. **Given** un adapter directo, **When** ejecuta su deployment, **Then** conserva su protocolo propio y no comparte el payload externo de otro provider.
-5. **Given** un deployment resuelto sin `maxOutputTokens`, **When** el adapter construye el intento, **Then** omite el parámetro nativo de límite de salida y delega el valor por defecto al provider.
-6. **Given** un deployment resuelto con `maxOutputTokens`, **When** el adapter construye el intento, **Then** envía el entero positivo sin cambios mediante el parámetro nativo del provider; OpenRouter usa `max_tokens`.
+2. **Given** el deployment directo `kimi-k3` resuelto para un slot, **When** se ejecuta un intento, **Then** se realiza una sola llamada OpenAI-compatible Chat Completions a `POST https://api.moonshot.ai/v1/chat/completions`, con autenticación Bearer basada en `MOONSHOT_API_KEY`, `model: "kimi-k3"` y `max_completion_tokens` omitido cuando `maxOutputTokens` está ausente.
+3. **Given** una respuesta de Kimi u OpenRouter con métricas de tokens, **When** se normaliza, **Then** se producen `inputTokens`, `outputTokens` y `totalTokens` con la misma semántica que los providers existentes.
+4. **Given** una cancelación, timeout o error de Kimi u OpenRouter, **When** se procesa el resultado, **Then** se conserva el contrato normalizado sin fallback ni reintento automático.
+5. **Given** un adapter directo, **When** ejecuta su deployment, **Then** conserva su protocolo propio y no comparte el payload externo de otro provider.
+6. **Given** un deployment resuelto sin `maxOutputTokens`, **When** el adapter construye el intento, **Then** omite el parámetro nativo de límite de salida y delega el valor por defecto al provider.
+7. **Given** un deployment resuelto con `maxOutputTokens`, **When** el adapter construye el intento, **Then** envía el entero positivo sin cambios mediante el parámetro nativo del provider; Kimi usa `max_completion_tokens` y OpenRouter usa `max_tokens`.
 
 ---
 
@@ -130,7 +131,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 - Un `deploymentId` existe en el catálogo estático pero su credencial requerida no está configurada: no aparece en el catálogo disponible y una selección directa recibe `422 DEPLOYMENT_UNAVAILABLE`.
 - Falta cualquiera de las credenciales requeridas por los cuatro deployments por defecto: la creación sin selección recibe `503 DEFAULT_PROFILE_UNAVAILABLE` con únicamente `code`, `message`, `requestId` y `missingDeploymentIds`; el mensaje es seguro y no se exponen credenciales, detalles upstream ni otros datos sensibles.
 - El mismo `deploymentId` aparece en más de un slot: se aplica la unicidad al identificador completo, aunque los slots sean diferentes.
-- Dos deployments diferentes pertenecen al mismo provider o apuntan al mismo modelo por rutas distintas: la selección sigue siendo válida mientras sus `deploymentId` sean distintos.
+- Dos deployments diferentes pertenecen al mismo provider o apuntan al mismo modelo por rutas distintas: la selección sigue siendo válida mientras sus `deploymentId` sean distintos; por lo tanto, `kimi-k3` y `openrouter-kimi-k3` pueden coexistir en una conversación.
 - El catálogo o la configuración del proceso cambia después de crear una conversación: la conversación y sus turnos conservan la instantánea original.
 - Un error de OpenRouter contiene `error.metadata.error_type` igual a `content_policy_violation` o `refusal`, o un 403 contiene `error.metadata.reasons` o `error.metadata.patterns` como arrays no vacíos: se normaliza como `content_blocked`; cualquier otro 403 se normaliza como `provider_error`, sin inspeccionar texto libre.
 - OpenRouter devuelve 402: se normaliza como `provider_error` con mensaje seguro y sin modelar ni exponer créditos.
@@ -169,6 +170,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 | `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 | ausente         |
 | `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 | ausente         |
 | `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 | ausente         |
+| `kimi-k3`                           | Kimi K3                | `kimi`       | `kimi-k3`                         |            1048576 | ausente         |
 | `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 | ausente         |
 | `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 | ausente         |
 | `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 | ausente         |
@@ -182,7 +184,7 @@ Como usuario, quiero que cada turno respete el límite del deployment selecciona
 | `openrouter-gemma-4-26b-a4b-it-free` | Gemma 4 26B A4B (Free) | `openrouter` | `google/gemma-4-26b-a4b-it:free` |             262144 | ausente         |
 | `openrouter-gemma-4-31b-it-free`    | Gemma 4 31B (Free)    | `openrouter` | `google/gemma-4-31b-it:free`      |             262144 | ausente         |
 
-En las quince filas actuales `maxOutputTokens` está ausente y cada provider elige
+En las dieciséis filas actuales `maxOutputTokens` está ausente y cada provider elige
 su valor por defecto. La ausencia se representa omitiendo la propiedad en API y
 aplicación, y con `NULL` en PostgreSQL; nunca se emite `null`, `undefined` ni `0`.
 La instantánea conserva la decisión de delegar, aunque el default del provider
@@ -196,6 +198,7 @@ Las capacidades actuales exactas son:
 | `openrouter-minimax-m3`             | `text`, `image`, `video`                 | `text`           |
 | `openrouter-minimax-m2.7`           | `text`                                   | `text`           |
 | `openrouter-qwen-3.8-max`           | `text`, `image`, `video`                 | `text`           |
+| `kimi-k3`                           | `text`, `image`, `video`                 | `text`           |
 | `openrouter-kimi-k3`                | `text`, `image`, `video`                 | `text`           |
 | `openrouter-glm-5.2`                | `text`                                   | `text`           |
 | `openrouter-deepseek-v4-flash-0731` | `text`                                   | `text`           |
@@ -210,9 +213,9 @@ Las capacidades actuales exactas son:
 | `openrouter-gemma-4-31b-it-free`    | `text`, `image`, `video`                 | `text`           |
 
 - **FR-015**: Para deployments de OpenRouter, `contextLimitTokens` MUST representar `top_provider.context_length`, la cota efectiva de la ruta seleccionada.
-- **FR-016**: El catálogo MUST permitir `:free` únicamente en los cinco `modelId` normativos que lo incluyen y MUST NOT incluir variantes `:batch`, aliases `latest`, variantes gratuitas no listadas, otros aliases, fallback, sustitución, discovery en runtime ni modelos distintos de los quince definidos; GLM MUST usar `z-ai/glm-5.2` y DeepSeek MUST usar `deepseek/deepseek-v4-flash-0731`.
-- **FR-017**: Los adapters soportados por la arquitectura MUST ser `openai`, `google`, `minimax`, `qwen` y `openrouter`; MiniMax y Qwen directos MUST permanecer disponibles como extensiones del registro, sin deployments iniciales en el catálogo.
-- **FR-018**: Cada adapter MUST declarar exactamente su credencial requerida: `openai` = `OPENAI_API_KEY`, `google` = `GOOGLE_API_KEY`, `minimax` = `MINIMAX_API_KEY`, `qwen` = `QWEN_API_KEY`, `openrouter` = `OPENROUTER_API_KEY`.
+- **FR-016**: El catálogo MUST permitir `:free` únicamente en los cinco `modelId` normativos que lo incluyen y MUST NOT incluir variantes `:batch`, aliases `latest`, variantes gratuitas no listadas, otros aliases, fallback, sustitución, discovery en runtime ni modelos distintos de los dieciséis definidos; GLM MUST usar `z-ai/glm-5.2` y DeepSeek MUST usar `deepseek/deepseek-v4-flash-0731`.
+- **FR-017**: Los adapters soportados por la arquitectura MUST ser `openai`, `google`, `minimax`, `qwen`, `kimi` y `openrouter`; MiniMax y Qwen directos MUST permanecer disponibles como extensiones del registro, sin deployments iniciales en el catálogo.
+- **FR-018**: Cada adapter MUST declarar exactamente su credencial requerida: `openai` = `OPENAI_API_KEY`, `google` = `GOOGLE_API_KEY`, `minimax` = `MINIMAX_API_KEY`, `qwen` = `QWEN_API_KEY`, `kimi` = `MOONSHOT_API_KEY`, `openrouter` = `OPENROUTER_API_KEY`.
 - **FR-019**: Las credenciales MUST ser opcionales a nivel de instalación y la ausencia de una credencial opcional MUST NOT impedir el arranque del backend.
 - **FR-020**: `GET /api/v1/model-catalog` MUST devolver únicamente deployments cuya credencial requerida esté configurada, ordenados por `displayName`.
 - **FR-021**: La respuesta del catálogo MUST NOT incluir entradas no disponibles, razones internas de disponibilidad, secretos, precios, créditos ni información de billing.
@@ -265,12 +268,15 @@ Las capacidades actuales exactas son:
 - **FR-050**: Cuando `maxOutputTokens` esté ausente, cada adapter MUST omitir el parámetro nativo de límite de salida y delegar el default al provider. Cuando esté presente, MUST enviarlo sin cambios mediante el parámetro nativo equivalente; OpenRouter MUST usar `max_tokens`. Los límites de API y aplicación MUST omitir la propiedad ausente en vez de emitir `null`, `undefined` o `0`.
 - **FR-051**: `maxOutputTokens` MUST NOT participar en el cálculo del límite de entrada ni provocar truncamiento local de la respuesta. El adapter MUST NOT aplicar clamp, reducción, negociación, discovery, sustitución ni retry al valor; si el provider rechaza un valor presente, MUST normalizar el intento como `provider_error`.
 - **FR-052**: `GET /api/v1/model-catalog` MUST exponer las `inputModalities` y `outputModalities` exactas de la tabla normativa. Esta feature MUST conservar entradas de usuario exclusivamente de texto y MUST NOT añadir carga de imagen, audio, video o PDF.
+- **FR-053**: Kimi MUST usar una sola petición OpenAI-compatible Chat Completions a `POST https://api.moonshot.ai/v1/chat/completions`, autenticada con `Authorization: Bearer $MOONSHOT_API_KEY`, y MUST enviar exactamente `model: "kimi-k3"`.
+- **FR-054**: Kimi MUST omitir `max_completion_tokens` cuando `maxOutputTokens` esté ausente y MUST enviar el entero positivo sin cambios cuando esté presente. El adapter MUST conservar la normalización existente de contenido, métricas, cancelación, timeout y errores.
+- **FR-055**: El deployment directo `kimi-k3` MUST coexistir con `openrouter-kimi-k3`; ninguno MUST sustituir, ocultar ni modificar al otro.
 
 ### Key Entities
 
 - **Deployment**: Configuración estática e identificable disponible para asignación. Contiene el identificador público estable, datos visibles, adapter y modelo exactos, límite de entrada, límite operativo de salida opcional, modalidades exactas y la credencial que determina disponibilidad; no contiene secretos, prompts, endpoints secretos ni precios.
 - **Provider adapter**: Encapsula el protocolo externo y la credencial de un provider bajo el contrato normalizado `LlmProvider`. Se identifica por `providerId`.
-- **Catálogo de deployments**: Conjunto estático de los quince deployments actuales. La vista disponible se obtiene filtrando por credenciales configuradas y ordenando por `displayName`.
+- **Catálogo de deployments**: Conjunto estático de los dieciséis deployments actuales. La vista disponible se obtiene filtrando por credenciales configuradas y ordenando por `displayName`.
 - **Asignación de deployments de conversación**: Objeto de creación que relaciona exactamente los cuatro slots lógicos con cuatro `deploymentId` distintos.
 - **Instantánea de deployment por slot**: Registro inmutable asociado a una conversación y un slot, con los datos necesarios para ejecutar todos sus turnos sin volver a consultar el catálogo mutable.
 - **Conversación**: Agregado que posee exactamente cuatro instantáneas, una por slot, y conserva esa asignación durante toda su vida.
@@ -279,16 +285,16 @@ Las capacidades actuales exactas son:
 
 ### Measurable Outcomes
 
-- **SC-001**: Con `OPENAI_API_KEY`, `GOOGLE_API_KEY` y `OPENROUTER_API_KEY` configuradas, el catálogo devuelve exactamente 15 deployments disponibles y sus identificadores, nombres, providers, modelos, límites de contexto y ausencia de `maxOutputTokens` coinciden al 100% con la tabla normativa.
+- **SC-001**: Con `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MOONSHOT_API_KEY` y `OPENROUTER_API_KEY` configuradas, el catálogo devuelve exactamente 16 deployments disponibles y sus identificadores, nombres, providers, modelos, límites de contexto y ausencia de `maxOutputTokens` coinciden al 100% con la tabla normativa.
 - **SC-002**: El 100% de las creaciones sin selección y con las credenciales requeridas persiste las cuatro asignaciones exactas del perfil por defecto antes de iniciar llamadas externas.
 - **SC-003**: Los usuarios pueden asignar cualquiera de los deployments disponibles a cualquiera de los cuatro slots, con una tasa de aceptación del 100% para combinaciones de cuatro `deploymentId` distintos.
 - **SC-004**: El 100% de las selecciones con un `deploymentId` duplicado se rechaza atómicamente con `422 DUPLICATE_DEPLOYMENT_ASSIGNMENT`, sin filas creadas ni llamadas a providers.
 - **SC-005**: El 100% de los turnos posteriores usa la instantánea original de la conversación aunque cambien el catálogo o la configuración del proceso.
 - **SC-006**: Ninguna operación de UI o API permite reemplazar un deployment después de crear la conversación.
 - **SC-007**: El 100% de los deployments sin credencial queda fuera del catálogo, y toda selección directa de uno de ellos se rechaza con `422 DEPLOYMENT_UNAVAILABLE`.
-- **SC-008**: OpenRouter supera los mismos contract tests aplicables a los adapters existentes para contenido, métricas, cancelación, timeout y errores, manteniendo una sola llamada externa por intento.
+- **SC-008**: Kimi y OpenRouter superan los mismos contract tests aplicables a los adapters existentes para contenido, métricas, cancelación, timeout y errores, manteniendo una sola llamada externa por intento; Kimi usa el endpoint oficial con `model: "kimi-k3"` y omite `max_completion_tokens` cuando no existe `maxOutputTokens`.
 - **SC-009**: Ninguna prueba de registros o persistencia encuentra precios, créditos, billing, presupuesto, moneda, costos o consumo económico de OpenRouter.
-- **SC-010**: Para cada uno de los 15 `contextLimitTokens` exactos del catálogo, un payload mínimo sobre el umbral se rechaza antes de llamar al provider.
+- **SC-010**: Para cada uno de los 16 `contextLimitTokens` exactos del catálogo, un payload mínimo sobre el umbral se rechaza antes de llamar al provider.
 - **SC-011**: El 100% de las respuestas de creación y detalle presenta por slot los cuatro datos visibles persistidos: `deploymentId`, `providerId`, `modelId` y `displayName`.
 - **SC-012**: El 100% de los contract tests de deployments verifica ambos casos: la ausencia de `maxOutputTokens` omite el campo nativo, y un entero positivo presente se envía sin cambios, sin clamp, negociación, discovery, sustitución ni retry.
 - **SC-013**: El catálogo devuelve al 100% las modalidades exactas de la tabla normativa y ningún flujo de esta feature permite adjuntar contenido distinto de texto.
@@ -300,5 +306,5 @@ Las capacidades actuales exactas son:
 - El entorno actual todavía no contiene conversaciones de usuario; la validación de esta feature se realiza sobre una base limpia y no requiere migración de conversaciones de producción.
 - Las credenciales de provider se configuran por instalación y son opcionales; la disponibilidad observable deriva exclusivamente de si está configurada la credencial declarada por cada adapter.
 - La semántica de cuatro slots, la semántica de conversación, el ratio técnico de contexto, el medidor exacto o cota superior y la matriz normalizada de providers ya existentes se conservan. Los identificadores anteriores de slot se reemplazan por los cuatro identificadores lógicos definidos en esta especificación.
-- El catálogo actual es la tabla cerrada de quince deployments de esta especificación; MiniMax y Qwen directos se conservan solo como extensiones del registro, sin entradas del catálogo.
-- `maxOutputTokens` está ausente en los quince deployments actuales; la instantánea preserva esa decisión de delegar, aunque el default del provider puede cambiar externamente y limitar la reproducibilidad exacta.
+- El catálogo actual es la tabla cerrada de dieciséis deployments de esta especificación; MiniMax y Qwen directos se conservan solo como extensiones del registro, sin entradas del catálogo.
+- `maxOutputTokens` está ausente en los dieciséis deployments actuales; la instantánea preserva esa decisión de delegar, aunque el default del provider puede cambiar externamente y limitar la reproducibilidad exacta.

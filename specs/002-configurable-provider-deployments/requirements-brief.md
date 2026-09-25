@@ -48,6 +48,7 @@ Los adapters soportados por la arquitectura son:
 - `google`: API directa de Google Gemini.
 - `minimax`: API directa de MiniMax, conservada para extensibilidad.
 - `qwen`: API directa de Qwen, conservada para extensibilidad.
+- `kimi`: API directa de Kimi.
 - `openrouter`: gateway OpenRouter.
 
 La primera versión expone en el catálogo únicamente los deployments listados en
@@ -89,6 +90,7 @@ identificadores estables:
 | `openrouter-minimax-m3`             | MiniMax M3             | `openrouter` | `minimax/minimax-m3`              |             524288 | ausente         |
 | `openrouter-minimax-m2.7`           | MiniMax M2.7           | `openrouter` | `minimax/minimax-m2.7`            |             204800 | ausente         |
 | `openrouter-qwen-3.8-max`           | Qwen 3.8 Max           | `openrouter` | `qwen/qwen3.8-max`                |            1000000 | ausente         |
+| `kimi-k3`                           | Kimi K3                | `kimi`       | `kimi-k3`                         |            1048576 | ausente         |
 | `openrouter-kimi-k3`                | Kimi K3                | `openrouter` | `moonshotai/kimi-k3`              |            1048576 | ausente         |
 | `openrouter-glm-5.2`                | GLM 5.2                | `openrouter` | `z-ai/glm-5.2`                    |            1048576 | ausente         |
 | `openrouter-deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | `openrouter` | `deepseek/deepseek-v4-flash-0731` |            1048576 | ausente         |
@@ -103,10 +105,11 @@ identificadores estables:
 | `openrouter-gemma-4-31b-it-free`    | Gemma 4 31B (Free)    | `openrouter` | `google/gemma-4-31b-it:free`      |             262144 | ausente         |
 
 `maxOutputTokens` es opcional y debe ser un entero positivo cuando está
-presente. En las quince filas actuales está ausente: el adapter omite el parámetro
-nativo de límite de salida y cada provider elige su valor por defecto. Cuando el
-campo está presente, el adapter lo envía sin cambios mediante el parámetro nativo
-equivalente; OpenRouter usa `max_tokens`. No se permite clamp, negociación,
+presente. En las dieciséis filas actuales está ausente: el adapter omite el
+parámetro nativo de límite de salida y cada provider elige su valor por defecto.
+Cuando el campo está presente, el adapter lo envía sin cambios mediante el
+parámetro nativo equivalente; Kimi usa `max_completion_tokens` y OpenRouter usa
+`max_tokens`. No se permite clamp, negociación,
 discovery, sustitución ni retry del valor. El campo nunca participa en el cálculo
 del límite de entrada ni causa truncamiento local de una respuesta.
 
@@ -123,6 +126,7 @@ Las capacidades actuales exactas son:
 | `openrouter-minimax-m3`             | `text`, `image`, `video`                 | `text`           |
 | `openrouter-minimax-m2.7`           | `text`                                   | `text`           |
 | `openrouter-qwen-3.8-max`           | `text`, `image`, `video`                 | `text`           |
+| `kimi-k3`                           | `text`, `image`, `video`                 | `text`           |
 | `openrouter-kimi-k3`                | `text`, `image`, `video`                 | `text`           |
 | `openrouter-glm-5.2`                | `text`                                   | `text`           |
 | `openrouter-deepseek-v4-flash-0731` | `text`                                   | `text`           |
@@ -178,6 +182,7 @@ Cada adapter declara una credencial requerida:
 | `google`     | `GOOGLE_API_KEY`     |
 | `minimax`    | `MINIMAX_API_KEY`    |
 | `qwen`       | `QWEN_API_KEY`       |
+| `kimi`       | `MOONSHOT_API_KEY`   |
 | `openrouter` | `OPENROUTER_API_KEY` |
 
 Las credenciales son opcionales a nivel de instalación. El backend no debe
@@ -287,9 +292,19 @@ deployment resuelto por slot. Para OpenRouter:
 - no se usan routing gratuito automático, fallbacks, sustituciones ni reintentos
   automáticos.
 
+Para Kimi directo:
+
+- se usa `POST https://api.moonshot.ai/v1/chat/completions` con el contrato
+  OpenAI-compatible Chat Completions;
+- se envía `Authorization: Bearer $MOONSHOT_API_KEY`;
+- `model` es exactamente `kimi-k3`;
+- `max_completion_tokens` se omite cuando `maxOutputTokens` está ausente y
+  recibe su valor exacto cuando está presente;
+- se conserva el contrato normalizado de mensajes, contenido, métricas,
+  cancelación, timeout y una sola llamada externa por intento.
+
 Los adapters directos conservan sus protocolos propios. Ningún adapter comparte
-payloads externos con otro provider por el solo hecho de que OpenRouter sea
-compatible con el formato de OpenAI.
+payloads externos con otro provider por compatibilidad de formato.
 
 ## Métricas, contexto y errores
 
@@ -316,9 +331,10 @@ compatible con el formato de OpenAI.
 
 La feature solo está completa cuando se demuestra todo lo siguiente:
 
-1. El catálogo devuelve exactamente los quince deployments actuales disponibles
-   cuando están configuradas sus tres credenciales (`OPENAI_API_KEY`,
-   `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`).
+1. El catálogo devuelve exactamente los dieciséis deployments actuales
+   disponibles cuando están configuradas sus cuatro credenciales
+   (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MOONSHOT_API_KEY`,
+   `OPENROUTER_API_KEY`).
 2. El perfil por defecto crea la asignación exacta indicada y la persiste como
    instantánea.
 3. Una conversación puede asignar cualquier deployment disponible a cualquier
@@ -330,8 +346,10 @@ La feature solo está completa cuando se demuestra todo lo siguiente:
    conversación.
 7. Falta de credencial filtra el deployment del catálogo y rechaza una selección
    directa con el código definido.
-8. El adapter OpenRouter normaliza contenido, métricas, cancelación, timeout y
-   errores con los mismos contract tests que los adapters existentes.
+8. Los adapters Kimi y OpenRouter normalizan contenido, métricas, cancelación,
+   timeout y errores con los mismos contract tests que los adapters existentes;
+   Kimi usa una sola llamada al endpoint oficial y conserva
+   `openrouter-kimi-k3` como deployment independiente.
 9. Las pruebas verifican que no se registran ni persisten precios, créditos,
    billing o presupuesto.
 10. Las pruebas de contexto usan los `contextLimitTokens` exactos de la tabla y
@@ -353,6 +371,9 @@ La feature solo está completa cuando se demuestra todo lo siguiente:
 - [Catálogo actual de modelos de OpenRouter](https://openrouter.ai/api/v1/models)
 - [Endpoint Chat Completions de OpenRouter](https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request)
 - [Errores tipados y metadata de moderación de OpenRouter](https://openrouter.ai/docs/api/reference/errors-and-debugging)
+- [Modelos de Kimi](https://platform.kimi.ai/docs/models)
+- [Quickstart de Kimi K3](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart)
+- [Descripción general de Kimi API](https://platform.kimi.ai/docs/overview)
 - [Modelos de OpenAI](https://developers.openai.com/api/docs/models)
 - [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
 - [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)

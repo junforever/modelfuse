@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { DEPLOYMENT_CATALOG } from '../deploymentCatalog.js';
 
 describe('DEPLOYMENT_CATALOG', () => {
-  it('contains exactly the fifteen normative deployment definitions', () => {
-    expect(DEPLOYMENT_CATALOG).toHaveLength(15);
+  it('contains exactly the sixteen normative deployment definitions', () => {
+    expect(DEPLOYMENT_CATALOG).toHaveLength(16);
     expect(DEPLOYMENT_CATALOG).toEqual([
       {
         deploymentId: 'openrouter-minimax-m3',
@@ -35,6 +35,16 @@ describe('DEPLOYMENT_CATALOG', () => {
         inputModalities: ['text', 'image', 'video'],
         outputModalities: ['text'],
         credentialEnv: 'OPENROUTER_API_KEY',
+      },
+      {
+        deploymentId: 'kimi-k3',
+        displayName: 'Kimi K3',
+        providerId: 'kimi',
+        modelId: 'kimi-k3',
+        contextLimitTokens: 1048576,
+        inputModalities: ['text', 'image', 'video'],
+        outputModalities: ['text'],
+        credentialEnv: 'MOONSHOT_API_KEY',
       },
       {
         deploymentId: 'openrouter-kimi-k3',

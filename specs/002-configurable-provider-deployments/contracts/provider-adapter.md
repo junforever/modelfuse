@@ -1,11 +1,11 @@
 # Provider Adapter Contract
 
-This contract is normative for the provider registry and all five adapters. It refactors the existing provider-neutral boundary; it does not create a second orchestration path.
+This contract is normative for the provider registry and all six adapters. It refactors the existing provider-neutral boundary; it does not create a second orchestration path.
 
 ## Closed identifiers
 
 ```ts
-type ProviderId = 'openai' | 'google' | 'minimax' | 'qwen' | 'openrouter';
+type ProviderId = 'openai' | 'google' | 'minimax' | 'qwen' | 'kimi' | 'openrouter';
 type CanonicalSlot = 'base-1' | 'base-2' | 'base-3' | 'consolidator';
 ```
 
@@ -59,7 +59,7 @@ type ProviderRegistry = Readonly<Partial<Record<ProviderId, LlmProvider>>>;
 
 - The registry factory creates an adapter only when its optional credential is non-empty.
 - Existing base URLs and request timeouts remain infrastructure configuration where already supported.
-- OpenRouter always uses its normative fixed endpoint and has no URL override.
+- Kimi and OpenRouter always use their normative fixed endpoints and have no URL overrides.
 - Catalog availability is `registry[deployment.providerId] !== undefined`.
 - A missing adapter is a deployment-availability error, never a runtime fallback instruction.
 
@@ -73,11 +73,29 @@ When `deployment.maxOutputTokens` is absent, the adapter omits the provider-nati
 | Google     | `generationConfig.maxOutputTokens` |
 | MiniMax    | `max_completion_tokens`            |
 | Qwen       | `parameters.max_tokens`            |
+| Kimi       | `max_completion_tokens`            |
 | OpenRouter | `max_tokens`                       |
 
 If a provider rejects a present value, the attempt is normalized as non-recoverable `provider_error` using the adapter's normal structured status/error mapping. The orchestrator must not retry automatically.
 
 The immutable snapshot preserves whether the output limit was delegated. It does not freeze the provider's default, which may change externally, so absent `maxOutputTokens` limits exact reproducibility.
+
+## Kimi request
+
+```http
+POST https://api.moonshot.ai/v1/chat/completions
+Authorization: Bearer <MOONSHOT_API_KEY>
+Content-Type: application/json
+```
+
+```json
+{
+  "model": "kimi-k3",
+  "messages": []
+}
+```
+
+The direct catalog deployment has `deploymentId: "kimi-k3"`, `providerId: "kimi"`, `modelId: "kimi-k3"`, `contextLimitTokens: 1048576`, text/image/video input, and text output. `max_completion_tokens` is omitted when `maxOutputTokens` is absent and receives the unchanged positive value when present. The adapter performs one OpenAI-compatible Chat Completions request per generation attempt and preserves the normalized content, metrics, cancellation, timeout, and error contract. This direct route coexists with `openrouter-kimi-k3`.
 
 ## OpenRouter request
 
@@ -122,6 +140,7 @@ Provider contract tests must prove:
 2. the snapshot `modelId` reaches the request, absent `maxOutputTokens` omits the native field, and a present positive value reaches it unchanged;
 3. normalized token metrics preserve current names and meanings;
 4. a present output-limit rejection produces one `provider_error` and one upstream call;
-5. the complete OpenRouter error table, including negative cases where free text resembles a policy error;
-6. cancellation and timeouts preserve the existing normalized recovery semantics;
-7. catalog and upstream-only metadata never appear in normalized results.
+5. Kimi uses the exact direct endpoint, Bearer credential, `kimi-k3` model, and conditional `max_completion_tokens` while remaining independent from `openrouter-kimi-k3`;
+6. the complete OpenRouter error table, including negative cases where free text resembles a policy error;
+7. cancellation and timeouts preserve the existing normalized recovery semantics;
+8. catalog and upstream-only metadata never appear in normalized results.

@@ -94,6 +94,8 @@ function credentialEnvironment(
       return 'MINIMAX_API_KEY';
     case 'qwen':
       return 'QWEN_API_KEY';
+    case 'kimi':
+      return 'MOONSHOT_API_KEY';
     case 'openrouter':
       return 'OPENROUTER_API_KEY';
   }

@@ -17,6 +17,7 @@ const items = [
   deployment('deployment-2', 'Gemini', 'google'),
   deployment('deployment-3', 'MiniMax', 'openrouter'),
   deployment('deployment-4', 'Qwen', 'openrouter'),
+  deployment('kimi-k3', 'Kimi K3', 'kimi'),
 ] as const;
 const defaultItems = [
   deployment('openai-5.6-sol', 'GPT-5.6 Sol', 'openai'),
@@ -71,10 +72,10 @@ describe('DeploymentSelectors', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('labels four selectors and lets every canonical slot choose any catalog item', async () => {
+  it('lets every canonical slot choose direct Kimi without changing duplicate rules', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
+    const { rerender } = render(
       <DeploymentSelectors
         items={items}
         selection={emptySelection}
@@ -84,14 +85,14 @@ describe('DeploymentSelectors', () => {
       />
     );
     const choices = [
-      ['base-1', 'Base 1', 'deployment-4', 'Qwen · openrouter'],
-      ['base-2', 'Base 2', 'deployment-3', 'MiniMax · openrouter'],
-      ['base-3', 'Base 3', 'deployment-2', 'Gemini · google'],
-      ['consolidator', 'Consolidador', 'deployment-1', 'GPT · openai'],
+      ['base-1', 'Base 1'],
+      ['base-2', 'Base 2'],
+      ['base-3', 'Base 3'],
+      ['consolidator', 'Consolidador'],
     ] as const;
 
     expect(screen.getAllByRole('combobox')).toHaveLength(4);
-    for (const [slot, label, deploymentId, optionName] of choices) {
+    for (const [slot, label] of choices) {
       await user.click(screen.getByRole('combobox', { name: label }));
       const listbox = await screen.findByRole('listbox');
       expect(within(listbox).getAllByRole('option')).toHaveLength(items.length);
@@ -102,12 +103,25 @@ describe('DeploymentSelectors', () => {
           })
         ).toBeVisible();
       }
-      await user.click(within(listbox).getByRole('option', { name: optionName }));
+      await user.click(within(listbox).getByRole('option', { name: 'Kimi K3 · kimi' }));
       expect(onChange).toHaveBeenLastCalledWith({
         ...emptySelection,
-        [slot]: deploymentId,
+        [slot]: 'kimi-k3',
       });
     }
+
+    rerender(
+      <DeploymentSelectors
+        items={items}
+        selection={{ ...emptySelection, 'base-1': 'kimi-k3', 'base-2': 'kimi-k3' }}
+        isLoading={false}
+        disabled={false}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Cada slot debe usar un deployment distinto'
+    );
   });
 
   it('shows the exact four defaults when the complete profile is available', () => {

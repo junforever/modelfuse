@@ -4,11 +4,11 @@ All implementation unknowns are resolved and no open decision remains.
 
 ## Decision 1: Keep one static typed deployment catalog in backend infrastructure
 
-**Decision**: Store exactly fifteen readonly deployment definitions in `apps/backend/src/infrastructure/llm/deploymentCatalog.ts`. The original ten definitions remain unchanged and the five approved OpenRouter `:free` chat deployments are appended. A service filters them by adapters present in the provider registry and sorts the safe DTOs by `displayName`.
+**Decision**: Store exactly sixteen readonly deployment definitions in `apps/backend/src/infrastructure/llm/deploymentCatalog.ts`. The original ten definitions and five approved OpenRouter `:free` chat deployments remain unchanged; direct `kimi-k3` is appended as an independent deployment alongside `openrouter-kimi-k3`. A service filters them by adapters present in the provider registry and sorts the safe DTOs by `displayName`.
 
 **Rationale**: The feature explicitly forbids dynamic discovery. A typed constant is the smallest implementation, makes exact values reviewable, and keeps credentials outside catalog responses. Catalog eligibility remains limited to chat models whose declared output modality is `text`, because every slot executes through `/chat/completions` and expects normalized text output.
 
-**Evidence**: OpenRouter official endpoint evidence was retrieved on 2026-09-24 from `https://openrouter.ai/api/v1/models/<model-id>/endpoints` for the five added model IDs. OpenRouter declares `nvidia/nemotron-3-embed-1b:free` as `text -> embeddings`; it is explicitly excluded because the current slots and `/chat/completions` require text output. This amendment does not introduce embeddings support.
+**Evidence**: OpenRouter official endpoint evidence was retrieved on 2026-09-24 from `https://openrouter.ai/api/v1/models/<model-id>/endpoints` for the five added model IDs. OpenRouter declares `nvidia/nemotron-3-embed-1b:free` as `text -> embeddings`; it is explicitly excluded because the current slots and `/chat/completions` require text output. Kimi's official model, quickstart, and overview documentation identify model `kimi-k3`, the OpenAI-compatible endpoint `https://api.moonshot.ai/v1/chat/completions`, credential `MOONSHOT_API_KEY`, a 1,048,576-token context window, text/image/video input, and text output. This amendment does not introduce embeddings support or multimedia composer input.
 
 **Alternatives considered**: Database-managed catalog and provider startup discovery were rejected because they add mutable state or external I/O contrary to the normative brief. Frontend-owned definitions were rejected because availability and trust-boundary validation belong to the backend. Runtime OpenRouter discovery and automatic free routing were rejected because the catalog uses exact static IDs. Adding the embedding model was rejected because its output contract is incompatible with chat slots.
 
@@ -30,11 +30,12 @@ All implementation unknowns are resolved and no open decision remains.
 | Google GenerateContent      | `generationConfig.maxOutputTokens` |
 | MiniMax Chat Completion v2  | `max_completion_tokens`            |
 | Qwen DashScope native API   | `parameters.max_tokens`            |
+| Kimi Chat Completions       | `max_completion_tokens`            |
 | OpenRouter Chat Completions | `max_tokens`                       |
 
 `maxOutputTokens` is optional. When absent, the adapter omits the corresponding native field and the provider chooses its default. When present, it must be a positive integer and the native field receives the exact snapshot value. No adapter clamps, negotiates, discovers, substitutes, or retries the value.
 
-**Rationale**: Official OpenAI documentation marks `max_tokens` deprecated in favor of `max_completion_tokens`; Google defines `maxOutputTokens` under `generationConfig`; MiniMax marks `max_tokens` deprecated in favor of `max_completion_tokens`; Alibaba documents `max_tokens` inside the native HTTP `parameters` object. OpenRouter uses `max_tokens`. Sources: [OpenAI Chat Completions](https://developers.openai.com/api/reference/cli/resources/chat/subresources/completions/methods/create), [Google GenerateContent](https://ai.google.dev/api/generate-content), [MiniMax Text Generation](https://platform.minimax.io/docs/api-reference/text-post), [Qwen DashScope API](https://help.aliyun.com/en/model-studio/qwen-api-via-dashscope), and [OpenRouter Chat Completions](https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request). The immutable snapshot preserves the choice to delegate when the value is absent, but the provider default may change externally, so exact output-limit reproducibility is not guaranteed.
+**Rationale**: Official OpenAI documentation marks `max_tokens` deprecated in favor of `max_completion_tokens`; Google defines `maxOutputTokens` under `generationConfig`; MiniMax marks `max_tokens` deprecated in favor of `max_completion_tokens`; Alibaba documents `max_tokens` inside the native HTTP `parameters` object; Kimi's OpenAI-compatible Chat Completions contract uses `max_completion_tokens`; OpenRouter uses `max_tokens`. Sources: [OpenAI Chat Completions](https://developers.openai.com/api/reference/cli/resources/chat/subresources/completions/methods/create), [Google GenerateContent](https://ai.google.dev/api/generate-content), [MiniMax Text Generation](https://platform.minimax.io/docs/api-reference/text-post), [Qwen DashScope API](https://help.aliyun.com/en/model-studio/qwen-api-via-dashscope), [Kimi K3 quickstart](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart), and [OpenRouter Chat Completions](https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request). The immutable snapshot preserves the choice to delegate when the value is absent, but the provider default may change externally, so exact output-limit reproducibility is not guaranteed.
 
 **Alternatives considered**: A generic `max_tokens` payload shared by all adapters was rejected because direct adapters retain native protocols. Emitting `null`, `undefined`, or `0` for absence was rejected because omission is the cross-boundary contract. Context7 lookup was attempted, but its configured OAuth token was expired for part of the lookup; the decisions above were verified directly against official provider documentation instead.
 
@@ -93,3 +94,13 @@ All implementation unknowns are resolved and no open decision remains.
 **Rationale**: This follows constitution principles VIII/IX and avoids a second test framework or provider sandbox. No test calls a real paid provider.
 
 **Alternatives considered**: End-to-end coverage for every validation permutation was rejected as redundant; the detailed matrix belongs at unit/integration level. Builder-authored tests were rejected by the constitution.
+
+## Decision 11: Keep direct Kimi separate from OpenRouter Kimi
+
+**Decision**: Add provider `kimi` and deployment `kimi-k3` without changing or removing `openrouter-kimi-k3`. Register the direct adapter only when `MOONSHOT_API_KEY` is configured. It sends one Bearer-authenticated OpenAI-compatible Chat Completions request to `POST https://api.moonshot.ai/v1/chat/completions`, uses exact model `kimi-k3`, and conditionally forwards `max_completion_tokens`.
+
+**Rationale**: Distinct deployment IDs preserve explicit route selection while reusing the provider-neutral registry, catalog, snapshot, and orchestration contracts. The direct route therefore needs no new slot or provider branch.
+
+**Evidence**: [Kimi models](https://platform.kimi.ai/docs/models), [Kimi K3 quickstart](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart), and [Kimi API overview](https://platform.kimi.ai/docs/overview) define the direct model, endpoint, credential, compatibility, context window, and modalities.
+
+**Alternatives considered**: Replacing `openrouter-kimi-k3` was rejected because the routes are independently selectable deployments. Reusing the OpenRouter adapter was rejected because credentials and endpoints belong inside their own provider adapters. Adding a Kimi URL override or shared external payload abstraction was rejected as unnecessary for a fixed normative endpoint.

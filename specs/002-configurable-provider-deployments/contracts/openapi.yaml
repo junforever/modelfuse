@@ -102,6 +102,7 @@ components:
         - google
         - minimax
         - qwen
+        - kimi
         - openrouter
     Modality:
       type: string
