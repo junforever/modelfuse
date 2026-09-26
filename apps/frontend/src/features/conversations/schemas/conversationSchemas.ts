@@ -28,6 +28,19 @@ const eventSequenceSchema = z.number().int().nonnegative();
 const nonBlankStringSchema = z.string().refine(value => value.trim().length > 0);
 const turnStatusSchema = z.enum(['pending', 'running', 'partial', 'completed', 'failed']);
 
+function isSafeHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.username === '' &&
+      url.password === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const responseSlotSchema = z.enum(RESPONSE_SLOTS);
 export const providerIdSchema = z.enum(PROVIDER_IDS);
 export const modalitySchema = z.enum(MODALITIES);
@@ -44,6 +57,7 @@ export const deploymentCatalogItemSchema: z.ZodType<DeploymentCatalogItem> = z.s
   providerId: providerIdSchema,
   modelId: nonBlankStringSchema,
   displayName: nonBlankStringSchema,
+  supportsWebSearch: z.boolean(),
   contextLimitTokens: z.number().int().positive(),
   maxOutputTokens: z.number().int().positive().optional(),
   inputModalities: modalityListSchema,
@@ -68,6 +82,7 @@ function deploymentSummarySchema<Slot extends ResponseSlot>(slot: Slot) {
     providerId: providerIdSchema,
     modelId: nonBlankStringSchema,
     displayName: nonBlankStringSchema,
+    supportsWebSearch: z.boolean(),
   });
 }
 
@@ -102,10 +117,16 @@ const contextWindowMetadataSchema = z.strictObject({
   protectionApplied: z.string(),
 });
 
+const webCitationSchema = z.strictObject({
+  url: z.string().refine(isSafeHttpUrl),
+  title: z.string().optional(),
+});
+
 const responseMetadataSchema = z
   .strictObject({
     durationMs: z.number().nonnegative().optional(),
     contextWindow: contextWindowMetadataSchema.optional(),
+    citations: z.array(webCitationSchema).optional(),
   })
   .nullable();
 
@@ -221,6 +242,7 @@ const turnSchema = z.strictObject({
   clientRequestId: uuidSchema,
   ordinal: z.number().int().positive(),
   prompt: z.string(),
+  webSearchEnabled: z.boolean(),
   status: turnStatusSchema,
   responses: z.tuple([
     base1ResponseSchema,

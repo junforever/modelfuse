@@ -71,10 +71,16 @@ export function useConversationWorkspace(withHistory: boolean) {
   const [draftDeploymentSelection, setDraftDeploymentSelection] = useState<DeploymentIds | null>(
     null
   );
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [previousCanUseWebSearch, setPreviousCanUseWebSearch] = useState(false);
   const [draftGeneration, setDraftGeneration] = useState(0);
   const [streamGeneration, setStreamGeneration] = useState(0);
   const environment = parseFrontendEnv(import.meta.env);
-  const management = useConversationQueries(apiClient, selectedConversationId, withHistory);
+  const management = useConversationQueries(
+    apiClient,
+    selectedConversationId,
+    withHistory || selectedConversationId === null
+  );
   const latestHistoricalTurn = withHistory ? management.history.turns.at(-1) : undefined;
   const activeSelection =
     selection ??
@@ -199,6 +205,7 @@ export function useConversationWorkspace(withHistory: boolean) {
     setSelection(null);
     setTimeline(null);
     setDraftDeploymentSelection(null);
+    setWebSearchEnabled(false);
     setDraftGeneration(generation => generation + 1);
   }
 
@@ -248,6 +255,18 @@ export function useConversationWorkspace(withHistory: boolean) {
     Object.values(deploymentSelection).every(id => availableDeploymentIds.has(id))
       ? deploymentSelection
       : undefined;
+  const selectedDeploymentIds = new Set(Object.values(deploymentSelection));
+  const canUseWebSearch = isNewConversation
+    ? (management.catalog.data?.items.some(
+        item => selectedDeploymentIds.has(item.deploymentId) && item.supportsWebSearch
+      ) ?? false)
+    : (storedDeployments?.some(deployment => deployment.supportsWebSearch) ?? false);
+
+  if (canUseWebSearch !== previousCanUseWebSearch) {
+    setPreviousCanUseWebSearch(canUseWebSearch);
+    if (!canUseWebSearch) setWebSearchEnabled(false);
+  }
+
   const localTurns =
     timeline?.turnIds.flatMap(turnId => {
       const cached = queryClient.getQueryData<TurnEventSnapshot>(
@@ -309,6 +328,8 @@ export function useConversationWorkspace(withHistory: boolean) {
     isNewConversation,
     deploymentSelection,
     deploymentIds,
+    canUseWebSearch,
+    webSearchEnabled,
     turns,
     sidebarConversations,
     historyInitialError,
@@ -323,6 +344,7 @@ export function useConversationWorkspace(withHistory: boolean) {
     draftGeneration,
     activeSelection,
     setDraftDeploymentSelection,
+    setWebSearchEnabled,
     execute: execution.execute,
     retry: (turnId: string, slot: ResponseSlot) => retryMutation.mutate({ turnId, slot }),
     continueWithout: (turnId: string, slot: ResponseSlot) =>
@@ -332,6 +354,7 @@ export function useConversationWorkspace(withHistory: boolean) {
       setSelectedConversationId(conversationId);
       setSelection(null);
       setTimeline(null);
+      setWebSearchEnabled(false);
     },
   };
 }

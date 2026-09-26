@@ -65,6 +65,7 @@ describe('GET /api/v1/model-catalog', () => {
           'modelId',
           'outputModalities',
           'providerId',
+          'supportsWebSearch',
         ])
       );
       expect(JSON.stringify(response.body)).not.toMatch(

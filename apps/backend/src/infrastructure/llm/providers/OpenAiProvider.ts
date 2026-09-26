@@ -7,6 +7,7 @@ import {
   logProviderRequestFailed,
   logProviderRequestStarted,
 } from './providerDiagnostics.js';
+import type { WebCitation } from '../../../types/conversations.js';
 import type {
   LlmErrorCode,
   LlmMessage,
@@ -18,9 +19,84 @@ import type {
   LlmResult,
 } from '../../../types/llm.js';
 
-interface OpenAiResponse {
+interface OpenAiChatResponse {
   choices?: Array<{ message?: { content?: unknown } }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+}
+
+interface OpenAiResponsesResponse {
+  output?: unknown;
+  usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function responsesEndpoint(chatCompletionsEndpoint: string): string {
+  return chatCompletionsEndpoint.replace(
+    /\/chat\/completions(?=\/?(?:[?#]|$))/,
+    '/responses'
+  );
+}
+
+function isSafeHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.username === '' &&
+      url.password === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
+function normalizeResponsesOutput(
+  value: unknown
+): { readonly content: string; readonly citations?: readonly WebCitation[] } | undefined {
+  if (!Array.isArray(value)) return;
+
+  const textParts: string[] = [];
+  const citations: WebCitation[] = [];
+  for (const item of value) {
+    if (
+      !isRecord(item) ||
+      item.type !== 'message' ||
+      item.role !== 'assistant' ||
+      !Array.isArray(item.content)
+    ) {
+      continue;
+    }
+    for (const part of item.content) {
+      if (!isRecord(part) || part.type !== 'output_text' || typeof part.text !== 'string') {
+        continue;
+      }
+      textParts.push(part.text);
+      if (!Array.isArray(part.annotations)) continue;
+      for (const annotation of part.annotations) {
+        if (!isRecord(annotation) || annotation.type !== 'url_citation') continue;
+        const { url, title } = annotation;
+        if (
+          typeof url !== 'string' ||
+          !isSafeHttpUrl(url) ||
+          typeof title !== 'string' ||
+          title.trim() === ''
+        ) {
+          continue;
+        }
+        citations.push({ url, title: title.trim() });
+      }
+    }
+  }
+
+  const content = textParts.join('\n').trim();
+  if (content === '') return;
+  return {
+    content,
+    ...(citations.length === 0 ? {} : { citations }),
+  };
 }
 
 export class OpenAiProvider implements LlmProvider {
@@ -38,28 +114,41 @@ export class OpenAiProvider implements LlmProvider {
   async generate(request: LlmRequest): Promise<LlmResult> {
     const startedAt = new Date().toISOString();
     const requestStartedAt = Date.now();
+    const useWebSearch = request.webSearchEnabled && request.deployment.supportsWebSearch;
+    const endpoint = useWebSearch
+      ? responsesEndpoint(this.config.endpoint)
+      : this.config.endpoint;
     const trace = createProviderRequestTrace(
       this.providerId,
-      this.config.endpoint,
+      endpoint,
       this.config.timeoutMs,
       request
     );
     logProviderRequestStarted(trace);
-    let data: OpenAiResponse;
+    let data: OpenAiChatResponse | OpenAiResponsesResponse;
     try {
-      const response = await axios.request<OpenAiResponse>({
+      const response = await axios.request<OpenAiChatResponse | OpenAiResponsesResponse>({
         method: 'POST',
-        url: this.config.endpoint,
+        url: endpoint,
         timeout: this.config.timeoutMs,
         signal: request.signal,
         headers: { Authorization: `Bearer ${this.config.apiKey}` },
-        data: {
-          model: request.deployment.modelId,
-          messages: request.messages,
-          ...(request.deployment.maxOutputTokens === undefined
-            ? {}
-            : { max_completion_tokens: request.deployment.maxOutputTokens }),
-        },
+        data: useWebSearch
+          ? {
+              model: request.deployment.modelId,
+              input: request.messages,
+              tools: [{ type: 'web_search' }],
+              ...(request.deployment.maxOutputTokens === undefined
+                ? {}
+                : { max_output_tokens: request.deployment.maxOutputTokens }),
+            }
+          : {
+              model: request.deployment.modelId,
+              messages: request.messages,
+              ...(request.deployment.maxOutputTokens === undefined
+                ? {}
+                : { max_completion_tokens: request.deployment.maxOutputTokens }),
+            },
       });
       data = response.data;
       logProviderRequestCompleted(trace, Date.now() - requestStartedAt, response.status);
@@ -67,15 +156,41 @@ export class OpenAiProvider implements LlmProvider {
       logProviderRequestFailed(trace, Date.now() - requestStartedAt, error);
       throw this.failure(this.classify(error), request.deployment.modelId);
     }
-    const content = data.choices?.[0]?.message?.content;
+
+    if (useWebSearch) {
+      const responsesData = data as OpenAiResponsesResponse;
+      const normalized = normalizeResponsesOutput(responsesData.output);
+      if (normalized === undefined) {
+        throw this.failure('invalid_response', request.deployment.modelId);
+      }
+      const metrics: LlmMetrics | undefined = responsesData.usage
+        ? {
+            inputTokens: responsesData.usage.input_tokens,
+            outputTokens: responsesData.usage.output_tokens,
+            totalTokens: responsesData.usage.total_tokens,
+          }
+        : undefined;
+      return {
+        content: normalized.content,
+        provider: this.providerId,
+        model: request.deployment.modelId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        ...(metrics ? { metrics } : {}),
+        ...(normalized.citations === undefined ? {} : { citations: normalized.citations }),
+      };
+    }
+
+    const chatData = data as OpenAiChatResponse;
+    const content = chatData.choices?.[0]?.message?.content;
     if (typeof content !== 'string' || content.trim() === '') {
       throw this.failure('invalid_response', request.deployment.modelId);
     }
-    const metrics: LlmMetrics | undefined = data.usage
+    const metrics: LlmMetrics | undefined = chatData.usage
       ? {
-          inputTokens: data.usage.prompt_tokens,
-          outputTokens: data.usage.completion_tokens,
-          totalTokens: data.usage.total_tokens,
+          inputTokens: chatData.usage.prompt_tokens,
+          outputTokens: chatData.usage.completion_tokens,
+          totalTokens: chatData.usage.total_tokens,
         }
       : undefined;
     return {

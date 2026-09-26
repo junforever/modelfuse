@@ -49,9 +49,11 @@ export class ConversationService {
 
   async createConversation(input: CreateConversationRequest): Promise<ConversationTurnResponse> {
     const prompt = input.prompt.trim();
+    const webSearchEnabled = input.webSearchEnabled ?? false;
     const replay = await this.dependencies.conversationRepository.findCreateReplay(
       input.clientRequestId,
-      prompt
+      prompt,
+      webSearchEnabled
     );
     if (replay) {
       this.assertCreated(replay);
@@ -85,6 +87,7 @@ export class ConversationService {
     const created = await this.dependencies.conversationRepository.createConversation({
       clientRequestId: input.clientRequestId,
       prompt,
+      webSearchEnabled,
       title: truncateTitleGraphemes(prompt),
       deployments,
     });
@@ -105,6 +108,7 @@ export class ConversationService {
     const created = await this.dependencies.conversationRepository.createTurn(conversationId, {
       clientRequestId: input.clientRequestId,
       prompt: input.prompt.trim(),
+      webSearchEnabled: input.webSearchEnabled ?? false,
     });
     switch (created.kind) {
       case 'conversation_not_found':
@@ -357,6 +361,7 @@ export class ConversationService {
       conversationId: snapshot.response.conversation.id,
       turnId: snapshot.response.turn.id,
       prompt: snapshot.response.turn.prompt,
+      webSearchEnabled: snapshot.response.turn.webSearchEnabled,
       currentOrdinal: snapshot.response.turn.ordinal,
       deployments: snapshot.deployments,
       signal: new AbortController().signal,
@@ -417,6 +422,6 @@ export class ConversationService {
 function toPublicDeployment<Slot extends ConversationDeploymentSnapshot['slot']>(
   deployment: ConversationDeploymentSnapshot<Slot>
 ): ConversationDeploymentSummary<Slot> {
-  const { slot, deploymentId, providerId, modelId, displayName } = deployment;
-  return { slot, deploymentId, providerId, modelId, displayName };
+  const { slot, deploymentId, providerId, modelId, displayName, supportsWebSearch } = deployment;
+  return { slot, deploymentId, providerId, modelId, displayName, supportsWebSearch };
 }

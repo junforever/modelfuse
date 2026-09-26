@@ -11,12 +11,14 @@ const cursorSchema = z
 const promptSchema = z
   .string()
   .refine(prompt => prompt.trim().length > 0, { error: 'Prompt must not be empty.' });
+const webSearchEnabledSchema = z.boolean().default(false);
 
 export const emptyConversationOperationBodySchema = z.strictObject({}).optional();
 
 export const createTurnBodySchema = z.strictObject({
   clientRequestId: uuidSchema,
   prompt: promptSchema,
+  webSearchEnabled: webSearchEnabledSchema,
 });
 
 const deploymentIdsSchema = z.strictObject({
@@ -29,6 +31,7 @@ const deploymentIdsSchema = z.strictObject({
 export const createConversationBodySchema = z.strictObject({
   clientRequestId: uuidSchema,
   prompt: promptSchema,
+  webSearchEnabled: webSearchEnabledSchema,
   deploymentIds: deploymentIdsSchema.optional(),
 });
 

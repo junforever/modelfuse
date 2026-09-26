@@ -70,10 +70,11 @@ describe('TurnOrchestrator', () => {
       },
     });
 
-    const execution = orchestrator.executeTurn({
+    const execution = executeTurnWithWebSearch(orchestrator, {
       conversationId: 'conversation-1',
       turnId: 'turn-1',
       prompt: 'Compare this',
+      webSearchEnabled: false,
       deployments,
       signal: new AbortController().signal,
     });
@@ -117,6 +118,87 @@ describe('TurnOrchestrator', () => {
       );
     }
   });
+
+  it('requests web search only for capable deployments while all slots continue normally', async () => {
+    const generate = vi.fn<LlmProvider['generate']>(async request => ({
+      ...resultFor(request, `${request.slot} answer`),
+      ...(request.slot === 'base-1'
+        ? { citations: [{ url: 'https://example.com/source', title: 'Current source' }] }
+        : {}),
+    }));
+    const persistResponseAttempt = vi.fn(async () => undefined);
+    const orchestrator = new TurnOrchestrator({
+      providerRegistry: {
+        openrouter: provider('openrouter', generate),
+        qwen: provider('qwen', generate),
+        openai: provider('openai', generate),
+        google: provider('google', generate),
+      },
+      turnRepository: {
+        persistResponseAttempt,
+        recalculateTurn: vi.fn(async () => undefined),
+      },
+      publisher: { publish: vi.fn() },
+      contextBuilder: {
+        build: vi.fn<ContextBuilder['build']>(async input => ({
+          ok: true as const,
+          messages: [{ role: 'user' as const, content: input.prompt }],
+          contextWindow: {
+            truncated: false,
+            firstIncludedOrdinal: input.currentOrdinal,
+            lastIncludedOrdinal: input.currentOrdinal,
+            protectionApplied: 'none',
+          },
+        })),
+      },
+    });
+    const deployments = deploymentSnapshots();
+
+    await executeTurnWithWebSearch(orchestrator, {
+      conversationId: 'conversation-1',
+      turnId: 'turn-with-search',
+      prompt: 'Use current sources',
+      webSearchEnabled: true,
+      deployments,
+      signal: new AbortController().signal,
+    });
+
+    expect(generate).toHaveBeenCalledTimes(4);
+    expect(
+      generate.mock.calls.map(([request]) => [request.slot, requestedWebSearch(request)])
+    ).toEqual([
+      ['base-1', true],
+      ['base-2', false],
+      ['base-3', false],
+      ['consolidator', true],
+    ]);
+    expect(persistResponseAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slot: 'base-1',
+        metadata: expect.objectContaining({
+          citations: [{ url: 'https://example.com/source', title: 'Current source' }],
+        }),
+      })
+    );
+
+    generate.mockClear();
+    await executeTurnWithWebSearch(orchestrator, {
+      conversationId: 'conversation-1',
+      turnId: 'turn-without-search',
+      prompt: 'Use only model knowledge',
+      webSearchEnabled: false,
+      deployments,
+      signal: new AbortController().signal,
+    });
+
+    expect(generate).toHaveBeenCalledTimes(4);
+    expect(generate.mock.calls.map(([request]) => requestedWebSearch(request))).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
 });
 
 function deferred<T>() {
@@ -145,6 +227,22 @@ function resultFor(request: LlmRequest, content: string): LlmResult {
   };
 }
 
+type WebSearchExecutionInput = Parameters<TurnOrchestrator['executeTurn']>[0] & {
+  readonly webSearchEnabled: boolean;
+};
+
+function executeTurnWithWebSearch(
+  orchestrator: TurnOrchestrator,
+  input: WebSearchExecutionInput
+): Promise<void> {
+  const execute = orchestrator.executeTurn as (input: WebSearchExecutionInput) => Promise<void>;
+  return execute.call(orchestrator, input);
+}
+
+function requestedWebSearch(request: LlmRequest): unknown {
+  return (request as LlmRequest & { readonly webSearchEnabled?: unknown }).webSearchEnabled;
+}
+
 function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {
   const snapshot = <Slot extends ResponseSlot>(slot: Slot, providerId: ProviderId) => ({
     slot,
@@ -152,6 +250,7 @@ function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {
     providerId,
     modelId: `${slot}-model`,
     displayName: `${slot} display`,
+    supportsWebSearch: slot === 'base-1' || slot === 'consolidator',
     contextLimitTokens: 10_000,
     maxOutputTokens: 1_000,
     inputModalities: ['text'] as const,

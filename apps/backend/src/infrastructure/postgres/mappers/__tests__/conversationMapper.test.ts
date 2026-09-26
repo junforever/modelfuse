@@ -19,6 +19,7 @@ describe('conversationMapper', () => {
       client_request_id: '11111111-1111-4111-8111-111111111111',
       ordinal: 1,
       user_content: 'Compara estas respuestas',
+      web_search_enabled: true,
       status: 'completed' as const,
       created_at: createdAt,
       updated_at: updatedAt,
@@ -46,6 +47,17 @@ describe('conversationMapper', () => {
           lastIncludedOrdinal: 9,
           protectionApplied: 'turn-window-and-truncate',
         },
+        citations: [
+          { url: 'https://example.com/source', title: 'Verified source' },
+          {
+            url: 'https://embedded-user@example.com/private',
+            title: 'Username-bearing source',
+          },
+          {
+            url: 'https://embedded-user:embedded-password@example.com/private',
+            title: 'Password-bearing source',
+          },
+        ],
         measuredTokens: 1_234,
         contextLimitTokens: 8_192,
         thresholdTokens: 6_553,
@@ -84,6 +96,7 @@ describe('conversationMapper', () => {
       clientRequestId: '11111111-1111-4111-8111-111111111111',
       ordinal: 1,
       prompt: 'Compara estas respuestas',
+      webSearchEnabled: true,
       status: 'completed',
       createdAt: '2026-08-06T12:00:00.000Z',
       updatedAt: '2026-08-06T12:00:01.000Z',
@@ -114,6 +127,7 @@ describe('conversationMapper', () => {
           lastIncludedOrdinal: 9,
           protectionApplied: 'turn-window-and-truncate',
         },
+        citations: [{ url: 'https://example.com/source', title: 'Verified source' }],
       },
       startedAt: '2026-08-06T12:00:00.000Z',
       completedAt: '2026-08-06T12:00:01.000Z',
@@ -136,6 +150,7 @@ describe('conversationMapper', () => {
       provider_id: index % 2 === 0 ? ('openrouter' as const) : ('openai' as const),
       model_id: `${slot}-model`,
       display_name: `${slot} display`,
+      supports_web_search: index % 2 === 0,
       context_limit_tokens: 10_000 + index,
       max_output_tokens: 1_000 + index,
       input_modalities: ['text' as const],
@@ -162,6 +177,7 @@ describe('conversationMapper', () => {
         providerId: 'openrouter',
         modelId: 'base-1-model',
         displayName: 'base-1 display',
+        supportsWebSearch: true,
       },
       {
         slot: 'base-2',
@@ -169,6 +185,7 @@ describe('conversationMapper', () => {
         providerId: 'openai',
         modelId: 'base-2-model',
         displayName: 'base-2 display',
+        supportsWebSearch: false,
       },
       {
         slot: 'base-3',
@@ -176,6 +193,7 @@ describe('conversationMapper', () => {
         providerId: 'openai',
         modelId: 'base-3-model',
         displayName: 'base-3 display',
+        supportsWebSearch: false,
       },
       {
         slot: 'consolidator',
@@ -183,6 +201,7 @@ describe('conversationMapper', () => {
         providerId: 'openrouter',
         modelId: 'consolidator-model',
         displayName: 'consolidator display',
+        supportsWebSearch: true,
       },
     ]);
     expect(JSON.stringify(detail)).not.toMatch(

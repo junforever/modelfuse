@@ -7,6 +7,7 @@ import {
   logProviderRequestFailed,
   logProviderRequestStarted,
 } from './providerDiagnostics.js';
+import type { WebCitation } from '../../../types/conversations.js';
 import type {
   LlmErrorCode,
   LlmMessage,
@@ -20,7 +21,7 @@ import type {
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
 interface OpenRouterResponse {
-  choices?: Array<{ message?: { content?: unknown } }>;
+  choices?: Array<{ message?: { content?: unknown; annotations?: unknown } }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
@@ -31,6 +32,43 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 function errorMetadata(value: unknown): Readonly<Record<string, unknown>> | undefined {
   if (!isRecord(value) || !isRecord(value.error) || !isRecord(value.error.metadata)) return;
   return value.error.metadata;
+}
+
+function normalizeCitations(value: unknown): WebCitation[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const citations = value.flatMap(annotation => {
+    if (
+      !isRecord(annotation) ||
+      annotation.type !== 'url_citation' ||
+      !isRecord(annotation.url_citation)
+    ) {
+      return [];
+    }
+    const { url, title } = annotation.url_citation;
+    if (
+      typeof url !== 'string' ||
+      !isSafeHttpUrl(url) ||
+      typeof title !== 'string' ||
+      title.trim() === ''
+    ) {
+      return [];
+    }
+    return [{ url, title: title.trim() }];
+  });
+  return citations.length === 0 ? undefined : citations;
+}
+
+function isSafeHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.username === '' &&
+      url.password === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 export class OpenRouterProvider implements LlmProvider {
@@ -72,6 +110,9 @@ export class OpenRouterProvider implements LlmProvider {
           ...(request.deployment.maxOutputTokens === undefined
             ? {}
             : { max_tokens: request.deployment.maxOutputTokens }),
+          ...(request.webSearchEnabled && request.deployment.supportsWebSearch
+            ? { tools: [{ type: 'openrouter:web_search' }] }
+            : {}),
         },
       });
       data = response.data;
@@ -80,7 +121,8 @@ export class OpenRouterProvider implements LlmProvider {
       logProviderRequestFailed(trace, Date.now() - requestStartedAt, error);
       throw this.failure(this.classify(error), request.deployment.modelId);
     }
-    const content = data.choices?.[0]?.message?.content;
+    const message = data.choices?.[0]?.message;
+    const content = message?.content;
     if (typeof content !== 'string' || content.trim() === '')
       throw this.failure('invalid_response', request.deployment.modelId);
     const metrics: LlmMetrics | undefined = data.usage
@@ -90,6 +132,7 @@ export class OpenRouterProvider implements LlmProvider {
           totalTokens: data.usage.total_tokens,
         }
       : undefined;
+    const citations = normalizeCitations(message?.annotations);
     return {
       content: content.trim(),
       provider: this.providerId,
@@ -97,6 +140,7 @@ export class OpenRouterProvider implements LlmProvider {
       startedAt,
       completedAt: new Date().toISOString(),
       ...(metrics ? { metrics } : {}),
+      ...(citations === undefined ? {} : { citations }),
     };
   }
 

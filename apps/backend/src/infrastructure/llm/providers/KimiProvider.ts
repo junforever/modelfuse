@@ -19,10 +19,94 @@ import type {
 } from '../../../types/llm.js';
 
 const KIMI_ENDPOINT = 'https://api.moonshot.ai/v1/chat/completions';
+const WEB_SEARCH_TOOLS = [
+  { type: 'builtin_function', function: { name: '$web_search' } },
+] as const;
+
+interface KimiMessage {
+  content?: unknown;
+  role?: unknown;
+  tool_calls?: unknown;
+}
 
 interface KimiResponse {
-  choices?: Array<{ message?: { content?: unknown } }>;
+  choices?: Array<{ finish_reason?: unknown; message?: KimiMessage }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isValidJson(value: string): boolean {
+  if (value.trim() === '') return false;
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasToolCalls(data: KimiResponse): boolean {
+  const choice = data.choices?.[0];
+  return (
+    choice?.finish_reason === 'tool_calls' ||
+    (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0)
+  );
+}
+
+function continuationMessages(
+  originalMessages: readonly LlmMessage[],
+  message: KimiMessage | undefined
+): unknown[] | undefined {
+  if (!isRecord(message) || message.role !== 'assistant' || !Array.isArray(message.tool_calls)) {
+    return;
+  }
+
+  const toolMessages = message.tool_calls.flatMap(toolCall => {
+    if (
+      !isRecord(toolCall) ||
+      typeof toolCall.id !== 'string' ||
+      toolCall.id === '' ||
+      toolCall.type !== 'function' ||
+      !isRecord(toolCall.function) ||
+      toolCall.function.name !== '$web_search' ||
+      typeof toolCall.function.arguments !== 'string' ||
+      !isValidJson(toolCall.function.arguments)
+    ) {
+      return [];
+    }
+    return [
+      {
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: toolCall.function.arguments,
+      },
+    ];
+  });
+  if (toolMessages.length !== message.tool_calls.length || toolMessages.length === 0) return;
+  return [...originalMessages, message, ...toolMessages];
+}
+
+function aggregateUsage(usages: readonly (KimiResponse['usage'])[]): LlmMetrics | undefined {
+  function sum(key: keyof NonNullable<KimiResponse['usage']>): number | undefined {
+    const values = usages.flatMap(usage => {
+      const value = usage?.[key];
+      return typeof value === 'number' && Number.isFinite(value) ? [value] : [];
+    });
+    return values.length === 0 ? undefined : values.reduce((total, value) => total + value, 0);
+  }
+
+  const inputTokens = sum('prompt_tokens');
+  const outputTokens = sum('completion_tokens');
+  const totalTokens = sum('total_tokens');
+  if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined) return;
+  return {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+  };
 }
 
 export class KimiProvider implements LlmProvider {
@@ -50,6 +134,14 @@ export class KimiProvider implements LlmProvider {
     );
     logProviderRequestStarted(trace);
 
+    const baseData = {
+      model: request.deployment.modelId,
+      ...(request.deployment.maxOutputTokens === undefined
+        ? {}
+        : { max_completion_tokens: request.deployment.maxOutputTokens }),
+    };
+    const useWebSearch = request.webSearchEnabled && request.deployment.supportsWebSearch;
+
     let data: KimiResponse;
     try {
       const response = await axios.request<KimiResponse>({
@@ -59,11 +151,9 @@ export class KimiProvider implements LlmProvider {
         signal: request.signal,
         headers: { Authorization: `Bearer ${this.config.apiKey}` },
         data: {
-          model: request.deployment.modelId,
+          ...baseData,
           messages: request.messages,
-          ...(request.deployment.maxOutputTokens === undefined
-            ? {}
-            : { max_completion_tokens: request.deployment.maxOutputTokens }),
+          ...(useWebSearch ? { tools: WEB_SEARCH_TOOLS } : {}),
         },
       });
       data = response.data;
@@ -72,19 +162,42 @@ export class KimiProvider implements LlmProvider {
       logProviderRequestFailed(trace, Date.now() - requestStartedAt, error);
       throw this.failure(this.classify(error), request.deployment.modelId);
     }
+    const usages: Array<KimiResponse['usage']> = [data.usage];
+
+    if (useWebSearch && hasToolCalls(data)) {
+      const messages = continuationMessages(request.messages, data.choices?.[0]?.message);
+      if (messages === undefined) {
+        throw this.failure('invalid_response', request.deployment.modelId);
+      }
+
+      try {
+        const response = await axios.request<KimiResponse>({
+          method: 'POST',
+          url: KIMI_ENDPOINT,
+          timeout: this.config.timeoutMs,
+          signal: request.signal,
+          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+          data: { ...baseData, messages },
+        });
+        data = response.data;
+        usages.push(data.usage);
+        logProviderRequestCompleted(trace, Date.now() - requestStartedAt, response.status);
+      } catch (error) {
+        logProviderRequestFailed(trace, Date.now() - requestStartedAt, error);
+        throw this.failure(this.classify(error), request.deployment.modelId);
+      }
+
+      if (hasToolCalls(data)) {
+        throw this.failure('invalid_response', request.deployment.modelId);
+      }
+    }
 
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== 'string' || content.trim() === '') {
       throw this.failure('invalid_response', request.deployment.modelId);
     }
 
-    const metrics: LlmMetrics | undefined = data.usage
-      ? {
-          inputTokens: data.usage.prompt_tokens,
-          outputTokens: data.usage.completion_tokens,
-          totalTokens: data.usage.total_tokens,
-        }
-      : undefined;
+    const metrics = aggregateUsage(usages);
 
     return {
       content: content.trim(),

@@ -19,12 +19,13 @@ export const TEST_DEPLOYMENT_SNAPSHOTS = [
 ] as const satisfies ConversationDeploymentSnapshotTuple;
 
 export const TEST_DEPLOYMENT_SUMMARIES = TEST_DEPLOYMENT_SNAPSHOTS.map(
-  ({ slot, deploymentId, providerId, modelId, displayName }) => ({
+  ({ slot, deploymentId, providerId, modelId, displayName, supportsWebSearch }) => ({
     slot,
     deploymentId,
     providerId,
     modelId,
     displayName,
+    supportsWebSearch,
   })
 ) as readonly ConversationDeploymentSummary[];
 
@@ -46,9 +47,9 @@ export async function insertConversationDeployments(
     await pool.query(
       `INSERT INTO conversation_deployments
          (conversation_id, slot, deployment_id, provider_id, model_id, display_name,
-          context_limit_tokens, max_output_tokens, input_modalities, output_modalities,
-          created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now())`,
+          supports_web_search, context_limit_tokens, max_output_tokens, input_modalities,
+          output_modalities, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())`,
       [
         conversationId,
         deployment.slot,
@@ -56,6 +57,7 @@ export async function insertConversationDeployments(
         deployment.providerId,
         deployment.modelId,
         deployment.displayName,
+        deployment.supportsWebSearch,
         deployment.contextLimitTokens,
         deployment.maxOutputTokens,
         deployment.inputModalities,
@@ -75,6 +77,7 @@ function snapshot<Slot extends ConversationDeploymentSnapshotTuple[number]['slot
     providerId,
     modelId: `integration-${slot}-model`,
     displayName: `Integration ${slot}`,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens: 10_000,
     maxOutputTokens: 1_000,
     inputModalities: ['text'],

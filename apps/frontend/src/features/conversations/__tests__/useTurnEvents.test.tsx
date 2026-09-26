@@ -23,6 +23,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openai',
     modelId: 'stored-gpt',
     displayName: 'Stored GPT',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-2',
@@ -30,6 +31,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'google',
     modelId: 'stored-gemini',
     displayName: 'Stored Gemini',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-3',
@@ -37,6 +39,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'stored-minimax',
     displayName: 'Stored MiniMax',
+    supportsWebSearch: true,
   },
   {
     slot: 'consolidator',
@@ -44,6 +47,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'stored-qwen',
     displayName: 'Stored Qwen',
+    supportsWebSearch: true,
   },
 ];
 

@@ -124,7 +124,10 @@ export function ConversationWorkspace({ withHistory = false }: ConversationWorks
         <p className="text-sm text-muted-foreground">No hay turnos en esta conversación.</p>
       )}
       {workspace.selectedConversationId && workspace.storedDeployments && (
-        <ConversationDeploymentSummary deployments={workspace.storedDeployments} />
+        <ConversationDeploymentSummary
+          deployments={workspace.storedDeployments}
+          webSearchEnabled={workspace.webSearchEnabled}
+        />
       )}
       {workspace.snapshot && (
         <ActiveTimeline
@@ -148,15 +151,19 @@ export function ConversationWorkspace({ withHistory = false }: ConversationWorks
           isLoading={workspace.management.catalog.isPending}
           isError={workspace.management.catalog.isError}
           disabled={workspace.isPending}
+          webSearchEnabled={workspace.webSearchEnabled}
           onChange={workspace.setDraftDeploymentSelection}
         />
       )}
       <PromptComposer
-        key={workspace.activeSelection?.turnId ?? `draft:${workspace.draftGeneration}`}
+        key={`composer:${workspace.draftGeneration}`}
         isBusy={workspace.isBusy}
         isDisabled={workspace.isNewConversation && !workspace.deploymentIds}
         isPending={workspace.isPending}
+        canUseWebSearch={workspace.canUseWebSearch}
+        webSearchEnabled={workspace.webSearchEnabled}
         deploymentIds={workspace.deploymentIds}
+        onWebSearchEnabledChange={workspace.setWebSearchEnabled}
         onSubmit={workspace.execute}
       />
     </section>

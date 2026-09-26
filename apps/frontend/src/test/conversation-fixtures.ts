@@ -18,6 +18,7 @@ export const deploymentSummaries: DeploymentSummaryTuple = [
     providerId: 'openai',
     modelId: 'model-1',
     displayName: 'Model 1',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-2',
@@ -25,6 +26,7 @@ export const deploymentSummaries: DeploymentSummaryTuple = [
     providerId: 'google',
     modelId: 'model-2',
     displayName: 'Model 2',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-3',
@@ -32,6 +34,7 @@ export const deploymentSummaries: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'model-3',
     displayName: 'Model 3',
+    supportsWebSearch: true,
   },
   {
     slot: 'consolidator',
@@ -39,6 +42,7 @@ export const deploymentSummaries: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'model-4',
     displayName: 'Model 4',
+    supportsWebSearch: true,
   },
 ];
 
@@ -82,6 +86,7 @@ export function turnFixture(overrides: Partial<Turn> = {}): Turn {
     clientRequestId,
     ordinal: 1,
     prompt: 'Compara estas respuestas',
+    webSearchEnabled: false,
     status: 'running',
     responses: [
       modelResponse('base-1'),

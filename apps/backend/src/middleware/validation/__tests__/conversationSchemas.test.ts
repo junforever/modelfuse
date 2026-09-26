@@ -29,6 +29,26 @@ describe('conversation request schemas', () => {
     }
   });
 
+  it('defaults per-turn web search to false, accepts booleans, and rejects invalid values', () => {
+    const baseRequest = { clientRequestId, prompt: 'Find current sources' };
+
+    for (const schema of [createConversationBodySchema, createTurnBodySchema]) {
+      expect(schema.parse(baseRequest)).toEqual({ ...baseRequest, webSearchEnabled: false });
+      expect(schema.parse({ ...baseRequest, webSearchEnabled: false })).toEqual({
+        ...baseRequest,
+        webSearchEnabled: false,
+      });
+      expect(schema.parse({ ...baseRequest, webSearchEnabled: true })).toEqual({
+        ...baseRequest,
+        webSearchEnabled: true,
+      });
+
+      for (const invalid of [null, 'true', 1, {}, []]) {
+        expect(schema.safeParse({ ...baseRequest, webSearchEnabled: invalid }).success).toBe(false);
+      }
+    }
+  });
+
   it('accepts only UUID route IDs and the four contracted response slots', () => {
     expect(conversationIdParamsSchema.safeParse({ conversationId }).success).toBe(true);
     expect(conversationIdParamsSchema.safeParse({ conversationId: 'invalid' }).success).toBe(false);
@@ -59,7 +79,10 @@ describe('conversation request schemas', () => {
     };
     const request = { clientRequestId, prompt: 'Compare this', deploymentIds };
 
-    expect(createConversationBodySchema.parse(request)).toEqual(request);
+    expect(createConversationBodySchema.parse(request)).toEqual({
+      ...request,
+      webSearchEnabled: false,
+    });
 
     const invalidAssignments = [
       { ...deploymentIds, 'base-1': undefined },

@@ -56,6 +56,7 @@ const turn: Turn = {
   clientRequestId,
   ordinal: 1,
   prompt: 'Compare this',
+  webSearchEnabled: false,
   status: 'completed',
   responses: [response('base-1'), response('base-2'), response('base-3'), response('consolidator')],
   createdAt: '2026-07-26T20:00:00.000Z',
@@ -69,6 +70,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'openai',
     modelId: 'base-1-model',
     displayName: 'GPT',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-2',
@@ -76,6 +78,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'google',
     modelId: 'base-2-model',
     displayName: 'Gemini',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-3',
@@ -83,6 +86,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'base-3-model',
     displayName: 'MiniMax',
+    supportsWebSearch: true,
   },
   {
     slot: 'consolidator',
@@ -90,6 +94,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'consolidator-model',
     displayName: 'Qwen',
+    supportsWebSearch: true,
   },
 ];
 
@@ -100,6 +105,7 @@ describe('frontend conversation contracts', () => {
       providerId: 'kimi',
       modelId: 'kimi-k3',
       displayName: 'Kimi K3',
+      supportsWebSearch: false,
       contextLimitTokens: 1_048_576,
       inputModalities: ['text', 'image', 'video'],
       outputModalities: ['text'],
@@ -113,11 +119,50 @@ describe('frontend conversation contracts', () => {
       createdAt: updatedAt,
       updatedAt,
     };
-    const creation = { conversation: detail, turn };
+    const creation = {
+      conversation: detail,
+      turn: {
+        ...turn,
+        webSearchEnabled: true,
+        responses: [
+          {
+            ...turn.responses[0],
+            metadata: {
+              citations: [
+                { url: 'https://example.com/research?id=42', title: 'Primary research' },
+              ],
+            },
+          },
+          ...turn.responses.slice(1),
+        ],
+      },
+    };
 
     expect(modelCatalogResponseSchema.parse(catalog)).toEqual(catalog);
     expect(conversationDetailSchema.parse(detail)).toEqual(detail);
     expect(conversationTurnResponseSchema.parse(creation)).toEqual(creation);
+    expect(
+      conversationTurnResponseSchema.safeParse({
+        ...creation,
+        turn: {
+          ...creation.turn,
+          responses: [
+            {
+              ...creation.turn.responses[0],
+              metadata: {
+                citations: [
+                  {
+                    url: 'https://user:secret@example.com/source',
+                    title: 'Credential-bearing source',
+                  },
+                ],
+              },
+            },
+            ...creation.turn.responses.slice(1),
+          ],
+        },
+      }).success
+    ).toBe(false);
     expect(
       modelCatalogResponseSchema.safeParse({
         items: [{ ...catalogItem, credentialEnv: 'SECRET_MUST_NOT_BE_PUBLIC' }],
@@ -127,6 +172,31 @@ describe('frontend conversation contracts', () => {
       conversationTurnResponseSchema.safeParse({
         ...creation,
         conversation: { ...detail, deployments: [...deployments].reverse() },
+      }).success
+    ).toBe(false);
+
+    const { supportsWebSearch: omittedCatalogCapability, ...catalogWithoutCapability } = catalogItem;
+    void omittedCatalogCapability;
+    expect(modelCatalogResponseSchema.safeParse({ items: [catalogWithoutCapability] }).success).toBe(
+      false
+    );
+
+    const { supportsWebSearch: omittedSummaryCapability, ...summaryWithoutCapability } =
+      deployments[0];
+    void omittedSummaryCapability;
+    expect(
+      conversationDetailSchema.safeParse({
+        ...detail,
+        deployments: [summaryWithoutCapability, ...deployments.slice(1)],
+      }).success
+    ).toBe(false);
+
+    const { webSearchEnabled: omittedTurnIntent, ...turnWithoutIntent } = turn;
+    void omittedTurnIntent;
+    expect(
+      turnSnapshotResponseSchema.safeParse({
+        conversation: { id: conversationId, hasWorkInProgress: false },
+        turn: turnWithoutIntent,
       }).success
     ).toBe(false);
   });

@@ -1,3 +1,4 @@
+name: modelfuse-integration
 services:
   postgres_integration:
     image: postgres:16-alpine

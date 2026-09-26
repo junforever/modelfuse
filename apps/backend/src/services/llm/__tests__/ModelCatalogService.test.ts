@@ -186,6 +186,7 @@ function definition(
     displayName,
     providerId,
     modelId,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens: 10_000,
     maxOutputTokens: 1_000,
     inputModalities: ['text'],

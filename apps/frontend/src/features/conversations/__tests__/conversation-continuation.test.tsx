@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -49,6 +49,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openai',
     modelId: 'gpt-5.6',
     displayName: 'GPT-5.6 Sol',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-2',
@@ -56,6 +57,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'google',
     modelId: 'gemini-3.7-flash',
     displayName: 'Gemini 3.7 Flash',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-3',
@@ -63,23 +65,31 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'minimax/m3',
     displayName: 'MiniMax M3',
+    supportsWebSearch: true,
   },
   {
     slot: 'consolidator',
     deploymentId: DEPLOYMENT_IDS.consolidator,
     providerId: 'openrouter',
-    modelId: 'qwen/qwen-3.8-max',
+    modelId: 'qwen/qwen3.8-max-0902',
     displayName: 'Qwen 3.8 Max',
+    supportsWebSearch: true,
   },
 ];
 const CATALOG = {
-  items: DEPLOYMENTS.map(deployment => ({
-    ...deployment,
-    contextLimitTokens: 128_000,
-    maxOutputTokens: 8_192,
-    inputModalities: ['text'] as const,
-    outputModalities: ['text'] as const,
-  })),
+  items: DEPLOYMENTS.map(
+    ({ deploymentId, providerId, modelId, displayName, supportsWebSearch }) => ({
+      deploymentId,
+      providerId,
+      modelId,
+      displayName,
+      supportsWebSearch,
+      contextLimitTokens: 128_000,
+      maxOutputTokens: 8_192,
+      inputModalities: ['text'] as const,
+      outputModalities: ['text'] as const,
+    })
+  ),
 };
 
 type Listener = (event: MessageEvent<string>) => void;
@@ -142,10 +152,10 @@ describe('conversation continuation frontend integration', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps both turns cached while continuation omits the stored assignment', async () => {
+  it('forwards an explicit, independently chosen web-search value exactly once per turn', async () => {
     const user = userEvent.setup();
-    const first = result(FIRST_TURN_ID, FIRST_REQUEST_ID, 1, 'Primer prompt', false);
-    const second = result(SECOND_TURN_ID, SECOND_REQUEST_ID, 2, 'Segundo prompt', true);
+    const first = result(FIRST_TURN_ID, FIRST_REQUEST_ID, 1, 'Primer prompt', false, false);
+    const second = result(SECOND_TURN_ID, SECOND_REQUEST_ID, 2, 'Segundo prompt', true, true);
     let releaseFollowUp!: () => void;
     const followUpGate = new Promise<ConversationTurnResponse>(resolve => {
       releaseFollowUp = () => resolve(second);
@@ -166,17 +176,27 @@ describe('conversation continuation frontend integration', () => {
     );
     const { queryClient, unmount } = renderWithQueryClient(<ConversationWorkspace />);
 
+    const firstTurnToggle = await screen.findByRole('switch', { name: 'Búsqueda web' });
+    expect(firstTurnToggle).toBeEnabled();
+    await user.click(firstTurnToggle);
+    await user.click(firstTurnToggle);
+    expect(firstTurnToggle).not.toBeChecked();
     await user.type(screen.getByLabelText('Prompt'), 'Primer prompt');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Enviar' }));
     expect(await screen.findByRole('heading', { name: 'Turno 1' })).toBeInTheDocument();
+    expect(api.createConversation).toHaveBeenCalledOnce();
     expect(api.createConversation).toHaveBeenCalledWith(expect.anything(), {
       clientRequestId: FIRST_REQUEST_ID,
       prompt: 'Primer prompt',
+      webSearchEnabled: false,
       deploymentIds: DEPLOYMENT_IDS,
     });
     expect(ControlledEventSource.instances).toHaveLength(0);
 
+    const secondTurnToggle = screen.getByRole('switch', { name: 'Búsqueda web' });
+    await user.click(secondTurnToggle);
+    expect(secondTurnToggle).toBeChecked();
     await user.clear(screen.getByLabelText('Prompt'));
     await user.type(screen.getByLabelText('Prompt'), 'Segundo prompt');
     await user.dblClick(screen.getByRole('button', { name: 'Enviar' }));
@@ -185,13 +205,17 @@ describe('conversation continuation frontend integration', () => {
     expect(api.createTurn).toHaveBeenCalledWith(expect.anything(), CONVERSATION_ID, {
       clientRequestId: SECOND_REQUEST_ID,
       prompt: 'Segundo prompt',
+      webSearchEnabled: true,
     });
     expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
 
     act(() => releaseFollowUp());
     expect(await screen.findByRole('heading', { name: 'Turno 2' })).toBeInTheDocument();
-    expect(screen.getByText('Primer prompt')).toBeInTheDocument();
-    expect(screen.getByText('Segundo prompt')).toBeInTheDocument();
+    const conversationHistory = screen.getByRole('region', {
+      name: 'Historial de conversación',
+    });
+    expect(within(conversationHistory).getByText('Primer prompt')).toBeInTheDocument();
+    expect(within(conversationHistory).getByText('Segundo prompt')).toBeInTheDocument();
 
     await waitFor(() => expect(ControlledEventSource.instances).toHaveLength(1));
     expect(new URL(ControlledEventSource.instances[0]!.url).pathname).toBe(
@@ -270,7 +294,8 @@ function result(
   clientRequestId: string,
   ordinal: number,
   prompt: string,
-  hasWorkInProgress: boolean
+  hasWorkInProgress: boolean,
+  webSearchEnabled = false
 ): ConversationTurnResponse {
   return {
     conversation: {
@@ -286,6 +311,7 @@ function result(
       clientRequestId,
       ordinal,
       prompt,
+      webSearchEnabled,
       status: hasWorkInProgress ? 'running' : 'completed',
       responses: [
         modelResponse('base-1', {

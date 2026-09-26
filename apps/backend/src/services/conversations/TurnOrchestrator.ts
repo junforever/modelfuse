@@ -44,6 +44,7 @@ interface ExecuteTurnInput {
   conversationId: string;
   turnId: string;
   prompt: string;
+  webSearchEnabled?: boolean;
   currentOrdinal?: number;
   deployments: ConversationDeploymentSnapshotTuple;
   signal: AbortSignal;
@@ -208,6 +209,7 @@ export class TurnOrchestrator {
         slot: input.slot,
         deployment,
         messages: protectedContext.messages,
+        webSearchEnabled: input.webSearchEnabled === true && deployment.supportsWebSearch,
         signal: input.signal,
       });
       const durationMs = Math.max(0, Date.parse(result.completedAt) - Date.parse(result.startedAt));
@@ -218,6 +220,7 @@ export class TurnOrchestrator {
         metadata: {
           durationMs: Number.isFinite(durationMs) ? durationMs : 0,
           contextWindow: protectedContext.contextWindow,
+          ...(result.citations === undefined ? {} : { citations: result.citations }),
         },
         startedAt: result.startedAt,
         completedAt: result.completedAt,

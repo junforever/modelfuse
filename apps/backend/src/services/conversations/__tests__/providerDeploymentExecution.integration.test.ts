@@ -141,6 +141,7 @@ describe('mixed provider deployment execution integration', () => {
       conversationId: 'conversation-first',
       turnId: 'turn-first',
       prompt: 'Compare the first mixed-provider answers.',
+      webSearchEnabled: false,
       deployments: firstDeployments,
       signal: new AbortController().signal,
     });
@@ -154,6 +155,7 @@ describe('mixed provider deployment execution integration', () => {
       conversationId: 'conversation-second',
       turnId: 'turn-second',
       prompt: 'Compare the second mixed-provider answers.',
+      webSearchEnabled: false,
       deployments: secondDeployments,
       signal: new AbortController().signal,
     });
@@ -303,6 +305,7 @@ function deployment<Slot extends ResponseSlot>(
     providerId,
     modelId: `${prefix}/${slot}/${providerId}-model`,
     displayName: `${prefix} ${slot} ${providerId}`,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens: 1_000_000,
     maxOutputTokens: 12_345,
     inputModalities: ['text'],
@@ -329,6 +332,7 @@ function storedSnapshot(
       clientRequestId: `request-${turnId}`,
       ordinal: 1,
       prompt: `Prompt for ${turnId}`,
+      webSearchEnabled: false,
       status: 'running',
       responses: [
         responseFor(deployments[0]),

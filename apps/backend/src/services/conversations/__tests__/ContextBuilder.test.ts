@@ -15,6 +15,7 @@ function deployment<Slot extends ResponseSlot>(
     providerId: 'openrouter',
     modelId: `model-${slot}`,
     displayName: `Deployment ${slot}`,
+    supportsWebSearch: true,
     contextLimitTokens: 100,
     maxOutputTokens: 32,
     inputModalities: ['text'],

@@ -15,6 +15,7 @@ import {
 import {
   assertModelFuseSchema,
   createIntegrationPool,
+  deleteOwnedConversationRequests,
   deleteOwnedConversations,
 } from '../../../test/integration/testDatabase.js';
 import type { ConversationDeploymentSnapshotTuple } from '../../../types/conversations.js';
@@ -24,6 +25,8 @@ const CONVERSATION_ID = '73000000-0000-4000-8000-000000000077';
 const FIRST_TURN_ID = '73100000-0000-4000-8000-000000000077';
 const SECOND_REQUEST_ID = '73200000-0000-4000-8000-000000000077';
 const THIRD_REQUEST_ID = '73300000-0000-4000-8000-000000000077';
+const ROUTE_CREATION_REQUEST_ID = '73400000-0000-4000-8000-000000000077';
+const ROUTE_CONTINUATION_REQUEST_ID = '73500000-0000-4000-8000-000000000077';
 const NOW = '2026-07-26T20:00:00.000Z';
 
 describe('conversation continuation HTTP/PostgreSQL integration', () => {
@@ -36,15 +39,113 @@ describe('conversation continuation HTTP/PostgreSQL integration', () => {
 
   beforeEach(async () => {
     await deleteOwnedConversations(pool, [CONVERSATION_ID]);
+    await deleteOwnedConversationRequests(pool, [ROUTE_CREATION_REQUEST_ID]);
     await seedCompletedConversation(pool);
   });
 
   afterEach(async () => {
     await deleteOwnedConversations(pool, [CONVERSATION_ID]);
+    await deleteOwnedConversationRequests(pool, [ROUTE_CREATION_REQUEST_ID]);
   });
 
   afterAll(async () => {
     await pool?.end();
+  });
+
+  it('persists independent web-search choices across HTTP creation and continuation', async () => {
+    const providers = createControlledProviders();
+    const gates = Array.from({ length: 6 }, () => deferred());
+    for (const [index, slot] of [
+      'base-1',
+      'base-2',
+      'base-3',
+      'base-1',
+      'base-2',
+      'base-3',
+    ].entries()) {
+      providers[slot as 'base-1' | 'base-2' | 'base-3'].enqueueBlocked(gates[index]!.promise);
+    }
+    const backend = createIntegrationBackend(pool, providers);
+    const idleObservations: IdleObservation[] = [];
+
+    try {
+      const created = await request(backend.app).post('/api/v1/conversations').send({
+        clientRequestId: ROUTE_CREATION_REQUEST_ID,
+        prompt: 'Primer turno con búsqueda',
+        webSearchEnabled: true,
+      });
+      expect(created.status).toBe(201);
+      expect(created.body.turn).toMatchObject({
+        clientRequestId: ROUTE_CREATION_REQUEST_ID,
+        ordinal: 1,
+        webSearchEnabled: true,
+      });
+      const firstIdle = observeIdle(backend.publisher, created.body.turn.id);
+      idleObservations.push(firstIdle);
+
+      await Promise.all([
+        providers['base-1'].waitUntilCalled(1),
+        providers['base-2'].waitUntilCalled(1),
+        providers['base-3'].waitUntilCalled(1),
+      ]);
+      gates.slice(0, 3).forEach(gate => gate.resolve());
+      await firstIdle.promise;
+
+      const continued = await request(backend.app)
+        .post(`/api/v1/conversations/${created.body.conversation.id}/turns`)
+        .send({
+          clientRequestId: ROUTE_CONTINUATION_REQUEST_ID,
+          prompt: 'Segundo turno sin búsqueda',
+          webSearchEnabled: false,
+        });
+      expect(continued.status).toBe(202);
+      expect(continued.body.turn).toMatchObject({
+        clientRequestId: ROUTE_CONTINUATION_REQUEST_ID,
+        ordinal: 2,
+        webSearchEnabled: false,
+      });
+      const secondIdle = observeIdle(backend.publisher, continued.body.turn.id);
+      idleObservations.push(secondIdle);
+
+      await Promise.all([
+        providers['base-1'].waitUntilCalled(2),
+        providers['base-2'].waitUntilCalled(2),
+        providers['base-3'].waitUntilCalled(2),
+      ]);
+      gates.slice(3).forEach(gate => gate.resolve());
+      await secondIdle.promise;
+
+      const persisted = await pool.query<{
+        ordinal: number;
+        clientRequestId: string;
+        webSearchEnabled: boolean;
+      }>(
+        `SELECT ordinal,
+                client_request_id::text AS "clientRequestId",
+                web_search_enabled AS "webSearchEnabled"
+           FROM turns
+          WHERE conversation_id = $1
+          ORDER BY ordinal`,
+        [created.body.conversation.id]
+      );
+      expect(persisted.rows).toEqual([
+        {
+          ordinal: 1,
+          clientRequestId: ROUTE_CREATION_REQUEST_ID,
+          webSearchEnabled: true,
+        },
+        {
+          ordinal: 2,
+          clientRequestId: ROUTE_CONTINUATION_REQUEST_ID,
+          webSearchEnabled: false,
+        },
+      ]);
+    } finally {
+      gates.forEach(gate => gate.resolve());
+      await Promise.all(idleObservations.map(({ promise }) => promise));
+      idleObservations.forEach(({ unsubscribe }) => unsubscribe());
+      await backend.conversationService.stop();
+    }
   });
 
   it('resolves replay before busy, assigns ordinals and accepts new work after terminal release', async () => {
