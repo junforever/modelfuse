@@ -60,6 +60,7 @@ runProviderContract({
         max_tokens: deployment.maxOutputTokens,
       },
     });
+    expect(request).not.toHaveProperty('data.tools');
   },
   assertOutputLimitOmitted: request => {
     expect(request).not.toHaveProperty('data.max_tokens');
@@ -82,8 +83,13 @@ const generationRequest = () => ({
   slot: 'base-3' as const,
   deployment: deployment('openrouter'),
   messages,
+  webSearchEnabled: false,
   signal: new AbortController().signal,
 });
+
+function webSearchRequest(enabled: boolean) {
+  return { ...generationRequest(), webSearchEnabled: enabled };
+}
 
 function rejectedResponse(status: number, data: unknown) {
   return axiosError(status, {
@@ -117,6 +123,147 @@ function expectSafeFailure(
   expect(serialized).not.toContain(SECRET_UPSTREAM_METADATA);
   for (const field of ECONOMIC_FIELDS) expect(serialized).not.toContain(field);
 }
+
+describe('OpenRouter web search contract', () => {
+  beforeEach(() => {
+    mocks.request.mockReset();
+  });
+
+  it('sends the official server tool only when web search is enabled and supported', async () => {
+    mocks.request.mockResolvedValue({
+      data: { choices: [{ message: { content: 'Normalized answer' } }] },
+    });
+    const provider = new OpenRouterProvider(adapterConfig);
+
+    await provider.generate(webSearchRequest(false));
+    await provider.generate(webSearchRequest(true));
+    await provider.generate({
+      ...webSearchRequest(true),
+      deployment: deployment('openrouter', { supportsWebSearch: false }),
+    });
+
+    expect(mocks.request.mock.calls[0]?.[0]).not.toHaveProperty('data.tools');
+    expect(mocks.request.mock.calls[1]?.[0]).toHaveProperty('data.tools', [
+      { type: 'openrouter:web_search' },
+    ]);
+    expect(mocks.request.mock.calls[2]?.[0]).not.toHaveProperty('data.tools');
+  });
+
+  it('normalizes safe URL citations and excludes upstream-only annotation fields', async () => {
+    mocks.request.mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Answer with a source.',
+              annotations: [
+                {
+                  type: 'url_citation',
+                  url_citation: {
+                    url: 'https://example.com/research?id=42',
+                    title: 'Primary research',
+                    content: 'Untrusted upstream excerpt',
+                    start_index: 0,
+                    end_index: 20,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    const provider = new OpenRouterProvider(adapterConfig);
+
+    const result = await provider.generate(webSearchRequest(true));
+
+    expect(result).toMatchObject({
+      citations: [{ url: 'https://example.com/research?id=42', title: 'Primary research' }],
+    });
+    expect(JSON.stringify(result)).not.toContain('Untrusted upstream excerpt');
+    expect(JSON.stringify(result)).not.toContain('start_index');
+  });
+
+  it('ignores credential-bearing URL citations while retaining safe citations', async () => {
+    mocks.request.mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Answer with one safe citation.',
+              annotations: [
+                {
+                  type: 'url_citation',
+                  url_citation: {
+                    url: 'https://example.com/safe-source',
+                    title: 'Safe source',
+                  },
+                },
+                {
+                  type: 'url_citation',
+                  url_citation: {
+                    url: 'https://embedded-user@example.com/private',
+                    title: 'Username-bearing source',
+                  },
+                },
+                {
+                  type: 'url_citation',
+                  url_citation: {
+                    url: 'https://embedded-user:embedded-password@example.com/private',
+                    title: 'Password-bearing source',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    const provider = new OpenRouterProvider(adapterConfig);
+
+    const result = await provider.generate(webSearchRequest(true));
+
+    expect(result.citations).toEqual([
+      { url: 'https://example.com/safe-source', title: 'Safe source' },
+    ]);
+  });
+
+  it('ignores malformed and unsafe URL citation annotations', async () => {
+    mocks.request.mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Answer without usable citations.',
+              annotations: [
+                null,
+                { type: 'other', url_citation: { url: 'https://example.com/ignored' } },
+                { type: 'url_citation', url_citation: null },
+                {
+                  type: 'url_citation',
+                  url_citation: { url: 'javascript:alert(1)', title: 'Unsafe' },
+                },
+                {
+                  type: 'url_citation',
+                  url_citation: { url: 'https://example.com/missing-title' },
+                },
+                {
+                  type: 'url_citation',
+                  url_citation: { url: 'https://example.com/wrong-title', title: 42 },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    const provider = new OpenRouterProvider(adapterConfig);
+
+    const result = await provider.generate(webSearchRequest(true));
+
+    expect(result).not.toHaveProperty('citations');
+  });
+});
 
 describe('OpenRouter closed structural error classification', () => {
   beforeEach(() => {

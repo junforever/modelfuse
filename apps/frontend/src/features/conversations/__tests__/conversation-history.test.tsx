@@ -37,6 +37,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openai',
     modelId: 'stored-gpt',
     displayName: 'Stored GPT',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-2',
@@ -44,6 +45,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'google',
     modelId: 'stored-gemini',
     displayName: 'Stored Gemini',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-3',
@@ -51,6 +53,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'stored-minimax',
     displayName: 'Stored MiniMax',
+    supportsWebSearch: true,
   },
   {
     slot: 'consolidator',
@@ -58,6 +61,7 @@ const DEPLOYMENTS: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'stored-qwen',
     displayName: 'Stored Qwen',
+    supportsWebSearch: true,
   },
 ];
 
@@ -259,13 +263,33 @@ describe('conversation history frontend integration', () => {
 });
 
 async function expectStoredAssignment() {
+  const user = userEvent.setup();
   const deploymentSummary = await screen.findByRole('region', {
     name: 'Deployments de la conversación',
   });
   for (const deployment of DEPLOYMENTS) {
     expect(within(deploymentSummary).getByText(deployment.displayName)).toBeInTheDocument();
   }
-  expect(within(deploymentSummary).queryByRole('button')).not.toBeInTheDocument();
+  const unsupportedMessage = 'La búsqueda web no está soportada por este modelo.';
+  const webSearchToggle = screen.getByRole('switch', { name: 'Búsqueda web' });
+  expect(webSearchToggle).not.toBeChecked();
+  expect(screen.queryByRole('button', { name: unsupportedMessage })).not.toBeInTheDocument();
+  api.listAvailableDeployments.mockClear();
+
+  await user.click(webSearchToggle);
+
+  expect(webSearchToggle).toBeChecked();
+  expect(api.listAvailableDeployments).not.toHaveBeenCalled();
+  for (const deployment of DEPLOYMENTS.filter(({ supportsWebSearch }) => !supportsWebSearch)) {
+    const card = within(deploymentSummary).getByText(deployment.displayName).closest('div');
+    expect(card).not.toBeNull();
+    expect(within(card!).getByRole('button', { name: unsupportedMessage })).toBeInTheDocument();
+  }
+  for (const deployment of DEPLOYMENTS.filter(({ supportsWebSearch }) => supportsWebSearch)) {
+    const card = within(deploymentSummary).getByText(deployment.displayName).closest('div');
+    expect(card).not.toBeNull();
+    expect(within(card!).queryByRole('button', { name: unsupportedMessage })).not.toBeInTheDocument();
+  }
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   expect((await screen.findAllByRole('tab')).map(tab => tab.textContent)).toEqual([
     'Base 1 · Stored GPT',

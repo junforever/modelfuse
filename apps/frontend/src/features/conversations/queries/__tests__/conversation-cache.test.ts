@@ -14,6 +14,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'openai',
     modelId: 'gpt-5.6',
     displayName: 'GPT-5.6 Sol',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-2',
@@ -21,6 +22,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'google',
     modelId: 'gemini-3.7-flash',
     displayName: 'Gemini 3.7 Flash',
+    supportsWebSearch: false,
   },
   {
     slot: 'base-3',
@@ -28,6 +30,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'minimax/m3',
     displayName: 'MiniMax M3',
+    supportsWebSearch: true,
   },
   {
     slot: 'consolidator',
@@ -35,6 +38,7 @@ const deployments: DeploymentSummaryTuple = [
     providerId: 'openrouter',
     modelId: 'qwen/qwen-3.8-max',
     displayName: 'Qwen 3.8 Max',
+    supportsWebSearch: true,
   },
 ];
 
@@ -77,6 +81,7 @@ function snapshot(): TurnEventSnapshot {
       clientRequestId: '323e4567-e89b-42d3-a456-426614174000',
       ordinal: 1,
       prompt: 'Compare this',
+      webSearchEnabled: false,
       status: 'running',
       responses: [
         response('base-1'),

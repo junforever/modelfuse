@@ -1,4 +1,9 @@
-import type { ConversationDeploymentSnapshot, ProviderId, ResponseSlot } from './conversations.js';
+import type {
+  ConversationDeploymentSnapshot,
+  ProviderId,
+  ResponseSlot,
+  WebCitation,
+} from './conversations.js';
 
 export interface LlmMessage {
   readonly role: 'system' | 'user' | 'assistant';
@@ -9,6 +14,7 @@ export interface LlmRequest {
   readonly slot: ResponseSlot;
   readonly deployment: ConversationDeploymentSnapshot;
   readonly messages: readonly LlmMessage[];
+  readonly webSearchEnabled: boolean;
   readonly signal?: AbortSignal;
 }
 
@@ -25,6 +31,7 @@ export interface LlmResult {
   readonly startedAt: string;
   readonly completedAt: string;
   readonly metrics?: LlmMetrics;
+  readonly citations?: readonly WebCitation[];
 }
 
 export interface LlmProvider {

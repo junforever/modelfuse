@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -236,6 +236,68 @@ describe('DeploymentSelectors', () => {
       expect(describedBy.every(id => document.getElementById(id))).toBe(true);
     }
   });
+
+  it('shows selected capability warnings only while web search is enabled', async () => {
+    const user = userEvent.setup();
+    const tooltipText = 'La búsqueda web no está soportada por este modelo.';
+    const capabilityItems = [
+      { ...items[0], supportsWebSearch: true },
+      { ...items[1], supportsWebSearch: false },
+      { ...items[2], supportsWebSearch: false },
+      { ...items[3], supportsWebSearch: true },
+      { ...items[4], supportsWebSearch: false },
+    ];
+    const selection: DeploymentIds = {
+      'base-1': 'deployment-1',
+      'base-2': 'deployment-2',
+      'base-3': 'deployment-3',
+      consolidator: 'deployment-4',
+    };
+    const { rerender } = render(
+      <DeploymentSelectors
+        items={capabilityItems}
+        selection={selection}
+        isLoading={false}
+        disabled={false}
+        webSearchEnabled={false}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: tooltipText })).not.toBeInTheDocument();
+
+    rerender(
+      <DeploymentSelectors
+        items={capabilityItems}
+        selection={selection}
+        isLoading={false}
+        disabled={false}
+        webSearchEnabled
+        onChange={vi.fn()}
+      />
+    );
+
+    const warnings = screen.getAllByRole('button', { name: tooltipText });
+    expect(warnings).toHaveLength(2);
+    for (const warning of warnings) {
+      await user.hover(warning);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(tooltipText);
+      await user.unhover(warning);
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    }
+
+    rerender(
+      <DeploymentSelectors
+        items={capabilityItems.map(item => ({ ...item, supportsWebSearch: true }))}
+        selection={selection}
+        isLoading={false}
+        disabled={false}
+        webSearchEnabled
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: tooltipText })).not.toBeInTheDocument();
+  });
 });
 
 function deployment(
@@ -248,6 +310,7 @@ function deployment(
     displayName,
     providerId,
     modelId: `${deploymentId}-model`,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens: 100_000,
     maxOutputTokens: 8_000,
     inputModalities: ['text'],

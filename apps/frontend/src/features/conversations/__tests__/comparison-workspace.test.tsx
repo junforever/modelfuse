@@ -64,7 +64,10 @@ describe('comparison workspace components', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Base 2 · Model 2' }));
     const googlePanel = screen.getByRole('tabpanel', { name: 'Base 2 · Model 2' });
-    expect(googlePanel).toHaveTextContent('Google no respondió');
+    expect(googlePanel).toHaveTextContent(
+      'Falló el proveedor asignado a Base 2: se agotó el tiempo de espera del proveedor.'
+    );
+    expect(googlePanel).not.toHaveTextContent('Google no respondió');
     expect(
       within(googlePanel).getByRole('button', { name: 'Reintentar Base 2 · Model 2' })
     ).toBeEnabled();
@@ -74,7 +77,10 @@ describe('comparison workspace components', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Base 3 · Model 3' }));
     const minimaxPanel = screen.getByRole('tabpanel', { name: 'Base 3 · Model 3' });
-    expect(minimaxPanel).toHaveTextContent('MiniMax no disponible');
+    expect(minimaxPanel).toHaveTextContent(
+      'Falló el proveedor asignado a Base 3: el proveedor no está disponible por un problema de configuración.'
+    );
+    expect(minimaxPanel).not.toHaveTextContent('MiniMax no disponible');
     expect(
       within(minimaxPanel).queryByRole('button', { name: 'Reintentar Base 3 · Model 3' })
     ).not.toBeInTheDocument();

@@ -101,6 +101,7 @@ describe('ConversationRepository explicit deployment transaction', () => {
       repository.createConversation({
         clientRequestId: CLIENT_REQUEST_ID,
         prompt: 'This explicit creation must remain atomic.',
+        webSearchEnabled: false,
         title: 'This explicit creation must remain atomic.',
         deployments: DEPLOYMENTS,
       })
@@ -150,6 +151,7 @@ describe('ConversationRepository explicit deployment transaction', () => {
       repository.createConversation({
         clientRequestId: DUPLICATE_CLIENT_REQUEST_ID,
         prompt: 'The database guard must reject this duplicate.',
+        webSearchEnabled: false,
         title: 'The database guard must reject this duplicate.',
         deployments: DUPLICATE_DEPLOYMENTS,
       })
@@ -167,6 +169,7 @@ describe('ConversationRepository explicit deployment transaction', () => {
     const created = await repository.createConversation({
       clientRequestId: DISTINCT_CLIENT_REQUEST_ID,
       prompt: 'Distinct IDs may share provider and model.',
+      webSearchEnabled: false,
       title: 'Distinct IDs may share provider and model.',
       deployments: DISTINCT_DEPLOYMENTS,
     });
@@ -198,6 +201,7 @@ describe('ConversationRepository explicit deployment transaction', () => {
     const created = await repository.createConversation({
       clientRequestId: IMMUTABLE_CLIENT_REQUEST_ID,
       prompt: 'Persist immutable deployment snapshots.',
+      webSearchEnabled: false,
       title: 'Persist immutable deployment snapshots.',
       deployments: DEPLOYMENTS,
     });

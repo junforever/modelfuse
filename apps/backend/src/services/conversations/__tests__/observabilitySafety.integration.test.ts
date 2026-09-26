@@ -78,6 +78,7 @@ const DEFINITIONS = SLOTS.map(slot => ({
   displayName: `T060 OpenRouter ${slot}`,
   providerId: 'openrouter',
   modelId: `t060/openrouter/${slot}`,
+  supportsWebSearch: true,
   credentialEnv: 'OPENROUTER_API_KEY',
   contextLimitTokens: 1_000_000,
   maxOutputTokens: 4_096,

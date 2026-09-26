@@ -87,6 +87,7 @@ export function deployment(
     providerId,
     modelId: MODEL,
     displayName: `${providerId} contract deployment`,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens: 262_144,
     inputModalities: ['text'],
     outputModalities: ['text'],
@@ -98,6 +99,7 @@ const generationRequest = (providerId: ProviderId, signal = new AbortController(
   slot: REQUEST_SLOT,
   deployment: deployment(providerId, { maxOutputTokens: MAX_OUTPUT_TOKENS }),
   messages,
+  webSearchEnabled: false,
   signal,
 });
 

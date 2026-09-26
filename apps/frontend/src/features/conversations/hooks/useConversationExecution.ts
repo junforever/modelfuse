@@ -24,6 +24,7 @@ export function useConversationExecution({
       return createTurn(apiClient, conversationId, {
         clientRequestId: payload.clientRequestId,
         prompt: payload.prompt,
+        webSearchEnabled: payload.webSearchEnabled,
       });
     },
     onSuccess,

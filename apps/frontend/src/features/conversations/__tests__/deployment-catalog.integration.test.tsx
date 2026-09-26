@@ -127,9 +127,16 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
   });
 
   it('renders the safe catalog error state without a manual retry control', async () => {
-    let requestCount = 0;
+    const captured: Array<{ method: string; path: string; data: unknown }> = [];
     const adapter: AxiosAdapter = async config => {
-      requestCount += 1;
+      const method = (config.method ?? 'get').toLowerCase();
+      const path = config.url ?? '';
+      const data = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+      captured.push({ method, path, data });
+
+      if (method === 'get' && path === '/conversations') {
+        return response(config, { items: [], nextCursor: null });
+      }
       throw new Error(`Controlled T039 catalog failure: ${config.url}`);
     };
     const { queryClient, unmount } = renderWorkspace(adapter);
@@ -138,7 +145,10 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       expect(
         await screen.findByText('No se pudo cargar el catálogo de deployments.')
       ).toBeVisible();
-      expect(requestCount).toBe(1);
+      expect(captured).toEqual([
+        { method: 'get', path: '/model-catalog', data: undefined },
+        { method: 'get', path: '/conversations', data: undefined },
+      ]);
       expect(screen.getByRole('group', { name: 'Deployments' })).toBeDisabled();
       expect(screen.queryByRole('button', { name: /reintentar/i })).not.toBeInTheDocument();
     } finally {
@@ -230,6 +240,9 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       if (method === 'get' && path === '/model-catalog') {
         return response(config, { items: DEFAULT_CATALOG_ITEMS });
       }
+      if (method === 'get' && path === '/conversations') {
+        return response(config, { items: [], nextCursor: null });
+      }
       if (method === 'post' && path === '/conversations') {
         return response(
           config,
@@ -272,21 +285,29 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
         items: DEFAULT_CATALOG_ITEMS,
       });
 
+      const webSearchToggle = screen.getByRole('switch', { name: 'Búsqueda web' });
+      expect(webSearchToggle).toBeEnabled();
+      await user.click(webSearchToggle);
+      expect(webSearchToggle).toBeChecked();
       await user.type(screen.getByRole('textbox', { name: 'Prompt' }), PROMPT);
       await user.click(screen.getByRole('button', { name: 'Enviar' }));
 
-      await waitFor(() => expect(captured).toHaveLength(2));
-      const createRequest = captured[1]!;
-      expect(createRequest).toMatchObject({
-        method: 'post',
-        path: '/conversations',
-        data: {
-          clientRequestId: expect.any(String),
-          prompt: PROMPT,
-          deploymentIds: DEFAULT_DEPLOYMENT_IDS,
+      await waitFor(() => expect(captured).toHaveLength(3));
+      const createRequest = captured[2]!;
+      expect(captured).toEqual([
+        { method: 'get', path: '/model-catalog', data: undefined },
+        { method: 'get', path: '/conversations', data: undefined },
+        {
+          method: 'post',
+          path: '/conversations',
+          data: {
+            clientRequestId: expect.any(String),
+            prompt: PROMPT,
+            webSearchEnabled: true,
+            deploymentIds: DEFAULT_DEPLOYMENT_IDS,
+          },
         },
-      });
-      expect(captured[0]).toEqual({ method: 'get', path: '/model-catalog', data: undefined });
+      ]);
 
       const expected = creationResponse(
         createRequest.data as { clientRequestId: string; prompt: string },
@@ -321,6 +342,9 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
       if (method === 'get' && path === '/model-catalog') {
         return response(config, { items: CATALOG_ITEMS });
       }
+      if (method === 'get' && path === '/conversations') {
+        return response(config, { items: [], nextCursor: null });
+      }
       if (method === 'post' && path === '/conversations') {
         return response(
           config,
@@ -352,7 +376,10 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
 
       await user.type(screen.getByRole('textbox', { name: 'Prompt' }), PROMPT);
       expect(screen.getByRole('button', { name: 'Enviar' })).toBeDisabled();
-      expect(captured).toEqual([{ method: 'get', path: '/model-catalog', data: undefined }]);
+      expect(captured).toEqual([
+        { method: 'get', path: '/model-catalog', data: undefined },
+        { method: 'get', path: '/conversations', data: undefined },
+      ]);
 
       const choices = [
         ['Base 1', 'GPT-5.6 Terra · openai'],
@@ -369,18 +396,22 @@ describe('deployment catalog query/cache and explicit creation UI boundary', () 
 
       await user.click(screen.getByRole('button', { name: 'Enviar' }));
 
-      await waitFor(() => expect(captured).toHaveLength(2));
-      const createRequest = captured[1]!;
-      expect(createRequest).toMatchObject({
-        method: 'post',
-        path: '/conversations',
-        data: {
-          clientRequestId: expect.any(String),
-          prompt: PROMPT,
-          deploymentIds: DEPLOYMENT_IDS,
+      await waitFor(() => expect(captured).toHaveLength(3));
+      const createRequest = captured[2]!;
+      expect(captured).toEqual([
+        { method: 'get', path: '/model-catalog', data: undefined },
+        { method: 'get', path: '/conversations', data: undefined },
+        {
+          method: 'post',
+          path: '/conversations',
+          data: {
+            clientRequestId: expect.any(String),
+            prompt: PROMPT,
+            webSearchEnabled: false,
+            deploymentIds: DEPLOYMENT_IDS,
+          },
         },
-      });
-      expect(captured[0]).toEqual({ method: 'get', path: '/model-catalog', data: undefined });
+      ]);
 
       const expected = creationResponse(
         createRequest.data as { clientRequestId: string; prompt: string }
@@ -553,6 +584,7 @@ function creationResponse(
   payload: {
     clientRequestId: string;
     prompt: string;
+    webSearchEnabled?: boolean;
   },
   catalogItems: readonly DeploymentCatalogItem[] = CATALOG_ITEMS
 ): ConversationTurnResponse {
@@ -588,6 +620,7 @@ function creationResponse(
       clientRequestId: payload.clientRequestId,
       ordinal: 1,
       prompt: payload.prompt,
+      webSearchEnabled: payload.webSearchEnabled ?? false,
       status: 'completed',
       responses,
       createdAt: EVENT_TIME,
@@ -606,6 +639,7 @@ function deploymentSummary<Slot extends ResponseSlot>(
     providerId: item.providerId,
     modelId: item.modelId,
     displayName: item.displayName,
+    supportsWebSearch: item.supportsWebSearch,
   };
 }
 
@@ -647,6 +681,7 @@ function deployment(
     displayName,
     providerId,
     modelId,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens,
     maxOutputTokens,
     inputModalities,

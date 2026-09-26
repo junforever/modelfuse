@@ -409,7 +409,8 @@ export class TurnRepository {
     if (!conversation) return null;
 
     const turns = await client.query<TurnRow>(
-      `SELECT id, client_request_id, ordinal, user_content, status, created_at, updated_at
+      `SELECT id, client_request_id, ordinal, user_content, web_search_enabled,
+              status, created_at, updated_at
          FROM turns WHERE id = $1 AND conversation_id = $2`,
       [turnId, conversationId]
     );
@@ -425,7 +426,8 @@ export class TurnRepository {
     );
     const deployments = await client.query<ConversationDeploymentRow>(
       `SELECT slot, deployment_id, provider_id, model_id, display_name,
-              context_limit_tokens, max_output_tokens, input_modalities, output_modalities
+              supports_web_search, context_limit_tokens, max_output_tokens,
+              input_modalities, output_modalities
          FROM conversation_deployments
         WHERE conversation_id = $1`,
       [conversationId]

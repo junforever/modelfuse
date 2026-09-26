@@ -17,6 +17,7 @@ import {
   type Turn,
   type TurnResponses,
   type TurnStatus,
+  type WebCitation,
 } from '../../../types/conversations.js';
 
 type Timestamp = Date | string;
@@ -35,6 +36,7 @@ export interface TurnRow {
   client_request_id: string;
   ordinal: number;
   user_content: string;
+  web_search_enabled: boolean;
   status: TurnStatus;
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -68,6 +70,7 @@ export interface ConversationDeploymentRow {
   provider_id: ProviderId;
   model_id: string;
   display_name: string;
+  supports_web_search: boolean;
   context_limit_tokens: number;
   max_output_tokens: number | null;
   input_modalities: Modality[];
@@ -122,7 +125,42 @@ function mapMetadata(value: unknown): ModelResponseMetadata | null {
     metadata.contextWindow = contextWindow;
   }
 
+  const citations = mapCitations(value.citations);
+  if (citations !== undefined) {
+    metadata.citations = citations;
+  }
+
   return Object.keys(metadata).length === 0 ? null : metadata;
+}
+
+function mapCitations(value: unknown): WebCitation[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const citations = value.flatMap(candidate => {
+    if (!isRecord(candidate) || typeof candidate.url !== 'string' || !isSafeHttpUrl(candidate.url)) {
+      return [];
+    }
+    if (candidate.title !== undefined && typeof candidate.title !== 'string') return [];
+    return [
+      {
+        url: candidate.url,
+        ...(candidate.title === undefined ? {} : { title: candidate.title }),
+      },
+    ];
+  });
+  return citations.length === 0 ? undefined : citations;
+}
+
+function isSafeHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.username === '' &&
+      url.password === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 function requireResponse<Slot extends ResponseSlot>(
@@ -174,6 +212,7 @@ export function mapConversationDeploymentRow(
     providerId: row.provider_id,
     modelId: row.model_id,
     displayName: row.display_name,
+    supportsWebSearch: row.supports_web_search,
     contextLimitTokens: row.context_limit_tokens,
     ...(row.max_output_tokens === null ? {} : { maxOutputTokens: row.max_output_tokens }),
     inputModalities: row.input_modalities as [Modality, ...Modality[]],
@@ -226,8 +265,8 @@ export function mapConversationDetail(
 function toDeploymentSummary<Slot extends ResponseSlot>(
   deployment: ConversationDeploymentSnapshot<Slot>
 ): ConversationDeploymentSummary<Slot> {
-  const { slot, deploymentId, providerId, modelId, displayName } = deployment;
-  return { slot, deploymentId, providerId, modelId, displayName };
+  const { slot, deploymentId, providerId, modelId, displayName, supportsWebSearch } = deployment;
+  return { slot, deploymentId, providerId, modelId, displayName, supportsWebSearch };
 }
 
 export function mapModelResponseRow(row: ModelResponseRow): ModelResponse {
@@ -260,6 +299,7 @@ export function mapTurnRow(row: TurnRow, responses: readonly ModelResponse[]): T
     clientRequestId: row.client_request_id,
     ordinal: row.ordinal,
     prompt: row.user_content,
+    webSearchEnabled: row.web_search_enabled,
     status: row.status,
     responses: orderResponses(responses),
     createdAt: toIsoDateTime(row.created_at),

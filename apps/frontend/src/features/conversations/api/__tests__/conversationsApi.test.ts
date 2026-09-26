@@ -34,6 +34,7 @@ const conversation: ConversationDetail = {
       providerId: 'openai',
       modelId: 'model-1',
       displayName: 'Model 1',
+      supportsWebSearch: false,
     },
     {
       slot: 'base-2',
@@ -41,6 +42,7 @@ const conversation: ConversationDetail = {
       providerId: 'google',
       modelId: 'model-2',
       displayName: 'Model 2',
+      supportsWebSearch: false,
     },
     {
       slot: 'base-3',
@@ -48,6 +50,7 @@ const conversation: ConversationDetail = {
       providerId: 'openrouter',
       modelId: 'model-3',
       displayName: 'Model 3',
+      supportsWebSearch: true,
     },
     {
       slot: 'consolidator',
@@ -55,6 +58,7 @@ const conversation: ConversationDetail = {
       providerId: 'openrouter',
       modelId: 'model-4',
       displayName: 'Model 4',
+      supportsWebSearch: true,
     },
   ],
   createdAt: eventTime,
@@ -121,7 +125,12 @@ describe('conversations API contract', () => {
     await expect(listAvailableDeployments(client)).resolves.toEqual(catalog);
     await expect(getConversation(client, conversationId)).resolves.toEqual(conversation);
     await expect(
-      createConversation(client, { clientRequestId, prompt: 'Primer prompt', deploymentIds })
+      createConversation(client, {
+        clientRequestId,
+        prompt: 'Primer prompt',
+        webSearchEnabled: false,
+        deploymentIds,
+      })
     ).resolves.toEqual(conversationTurn);
     await expect(getTurnSnapshot(client, conversationId, turnId)).resolves.toEqual(snapshot);
     await expect(retryResponse(client, conversationId, turnId, 'base-1')).resolves.toEqual(
@@ -151,7 +160,12 @@ describe('conversations API contract', () => {
       {
         method: 'post',
         url: '/conversations',
-        body: { clientRequestId, prompt: 'Primer prompt', deploymentIds },
+        body: {
+          clientRequestId,
+          prompt: 'Primer prompt',
+          webSearchEnabled: false,
+          deploymentIds,
+        },
       },
       {
         method: 'get',
@@ -185,7 +199,11 @@ describe('conversations API contract', () => {
 
     let failure: unknown;
     try {
-      await createConversation(client, { clientRequestId, prompt: 'Primer prompt' });
+      await createConversation(client, {
+        clientRequestId,
+        prompt: 'Primer prompt',
+        webSearchEnabled: false,
+      });
     } catch (error) {
       failure = error;
     }
@@ -279,7 +297,11 @@ describe('conversations API contract', () => {
     const client = createApiClient({ baseURL: '/api/v1', adapter });
 
     await expect(
-      createConversation(client, { clientRequestId, prompt: 'Primer prompt' })
+      createConversation(client, {
+        clientRequestId,
+        prompt: 'Primer prompt',
+        webSearchEnabled: false,
+      })
     ).rejects.toEqual(apiError);
   });
 
@@ -336,7 +358,11 @@ describe('conversations API contract', () => {
       const client = createApiClient({ baseURL: '/api/v1', adapter });
 
       await expect(
-        createConversation(client, { clientRequestId, prompt: 'Primer prompt' })
+        createConversation(client, {
+          clientRequestId,
+          prompt: 'Primer prompt',
+          webSearchEnabled: false,
+        })
       ).rejects.toEqual({
         code: 'INTERNAL_ERROR',
         message: 'No se pudo completar la solicitud',

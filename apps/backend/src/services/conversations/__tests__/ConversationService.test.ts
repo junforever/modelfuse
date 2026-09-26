@@ -44,6 +44,7 @@ describe('ConversationService background execution', () => {
       (input: {
         clientRequestId: string;
         prompt: string;
+        webSearchEnabled: boolean;
         title: string;
         deployments: ConversationDeploymentSnapshotTuple;
       }) => {
@@ -51,6 +52,7 @@ describe('ConversationService background execution', () => {
         expect(input).toEqual({
           clientRequestId: stored.turn.clientRequestId,
           prompt: stored.turn.prompt,
+          webSearchEnabled: false,
           title: stored.turn.prompt,
           deployments: catalogDeployments,
         });
@@ -388,6 +390,7 @@ describe('ConversationService background execution', () => {
     expect(conversationRepository.createConversation).toHaveBeenCalledWith({
       clientRequestId: '423e4567-e89b-42d3-a456-426614174003',
       prompt: 'Preserve this input',
+      webSearchEnabled: false,
       title: 'Preserve this input',
       deployments,
     });
@@ -451,6 +454,7 @@ describe('ConversationRepository duplicate constraint mapping', () => {
       boundary.repository.createConversation({
         clientRequestId: '423e4567-e89b-42d3-a456-426614174004',
         prompt: 'Prompt',
+        webSearchEnabled: false,
         title: 'Prompt',
         deployments,
       })
@@ -466,6 +470,7 @@ describe('ConversationRepository duplicate constraint mapping', () => {
       deployments[0].providerId,
       deployments[0].modelId,
       deployments[0].displayName,
+      deployments[0].supportsWebSearch,
       deployments[0].contextLimitTokens,
       deployments[0].maxOutputTokens,
       deployments[0].inputModalities,
@@ -496,6 +501,7 @@ describe('ConversationRepository duplicate constraint mapping', () => {
         boundary.repository.createConversation({
           clientRequestId: '423e4567-e89b-42d3-a456-426614174005',
           prompt: 'Prompt',
+          webSearchEnabled: false,
           title: 'Prompt',
           deployments: deploymentSnapshots(),
         })
@@ -542,13 +548,16 @@ function storedTurnSnapshot(deployments: ConversationDeploymentSnapshotTuple): S
 }
 
 function publicDeployments(deployments: ConversationDeploymentSnapshotTuple) {
-  return deployments.map(({ slot, deploymentId, providerId, modelId, displayName }) => ({
-    slot,
-    deploymentId,
-    providerId,
-    modelId,
-    displayName,
-  }));
+  return deployments.map(
+    ({ slot, deploymentId, providerId, modelId, displayName, supportsWebSearch }) => ({
+      slot,
+      deploymentId,
+      providerId,
+      modelId,
+      displayName,
+      supportsWebSearch,
+    })
+  );
 }
 
 function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {
@@ -561,6 +570,7 @@ function deploymentSnapshots(): ConversationDeploymentSnapshotTuple {
     providerId: index % 2 === 0 ? ('openrouter' as const) : ('openai' as const),
     modelId: `model-${index}`,
     displayName: `Deployment ${index}`,
+    supportsWebSearch: index % 2 === 0,
     contextLimitTokens: 10_000 + index,
     maxOutputTokens: 1_000 + index,
     inputModalities: ['text'] as const,
@@ -602,7 +612,7 @@ function defaultDeploymentSnapshots(): ConversationDeploymentSnapshotTuple {
       ...snapshots[3],
       deploymentId: 'openrouter-qwen-3.8-max',
       providerId: 'openrouter',
-      modelId: 'qwen/qwen3.8-max',
+      modelId: 'qwen/qwen3.8-max-0902',
       displayName: 'Qwen 3.8 Max',
     },
   ];

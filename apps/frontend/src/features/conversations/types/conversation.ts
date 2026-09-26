@@ -24,6 +24,7 @@ export interface DeploymentCatalogItem {
   readonly providerId: ProviderId;
   readonly modelId: string;
   readonly displayName: string;
+  readonly supportsWebSearch: boolean;
   readonly contextLimitTokens: number;
   readonly maxOutputTokens?: number;
   readonly inputModalities: readonly [Modality, ...Modality[]];
@@ -47,6 +48,7 @@ export interface ConversationDeploymentSummary<Slot extends ResponseSlot = Respo
   readonly providerId: ProviderId;
   readonly modelId: string;
   readonly displayName: string;
+  readonly supportsWebSearch: boolean;
 }
 
 export type DeploymentSummaryTuple = readonly [
@@ -79,9 +81,15 @@ export interface ContextWindowMetadata {
   readonly protectionApplied: string;
 }
 
+export interface WebCitation {
+  readonly url: string;
+  readonly title?: string;
+}
+
 export interface ModelResponseMetadata {
   readonly durationMs?: number;
   readonly contextWindow?: ContextWindowMetadata;
+  readonly citations?: readonly WebCitation[];
 }
 
 export interface ModelResponse<Slot extends ResponseSlot = ResponseSlot> {
@@ -127,6 +135,7 @@ export interface Turn {
   readonly clientRequestId: string;
   readonly ordinal: number;
   readonly prompt: string;
+  readonly webSearchEnabled: boolean;
   readonly status: TurnStatus;
   readonly responses: TurnResponses;
   readonly createdAt: IsoDateTime;
@@ -136,6 +145,7 @@ export interface Turn {
 export interface CreateTurnRequest {
   readonly clientRequestId: string;
   readonly prompt: string;
+  readonly webSearchEnabled: boolean;
 }
 
 export interface CreateConversationRequest extends CreateTurnRequest {

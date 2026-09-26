@@ -108,6 +108,7 @@ function Get-EnvFileValue {
 function Get-ServiceRow {
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [object[]]$Rows,
         [Parameter(Mandatory)]
         [string]$Service

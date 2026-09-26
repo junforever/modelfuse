@@ -24,6 +24,7 @@ describe('canonical integration fixtures', () => {
       slot: 'consolidator' as const,
       deployment: deployment('consolidator', 'qwen'),
       messages: [{ role: 'user' as const, content: 'Consolidate deterministically.' }],
+      webSearchEnabled: false,
       signal: new AbortController().signal,
     };
     const pending = providers.consolidator.generate(request);
@@ -68,6 +69,7 @@ function deployment(
     displayName: `${providerId} test deployment`,
     providerId,
     modelId: `${providerId}-test-model`,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens: 10_000,
     maxOutputTokens: 1_000,
     inputModalities: ['text'],

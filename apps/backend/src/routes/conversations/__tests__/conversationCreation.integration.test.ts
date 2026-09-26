@@ -80,6 +80,7 @@ function publicSummaries(selectedDefinitions: readonly DeploymentDefinition[]) {
       providerId: selected.providerId,
       modelId: selected.modelId,
       displayName: selected.displayName,
+      supportsWebSearch: selected.supportsWebSearch,
     };
   }) as readonly ConversationDeploymentSummary[];
 }
@@ -136,6 +137,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
         clientRequestId: CLIENT_REQUEST_ID,
         prompt: PROMPT,
         deploymentIds: DEPLOYMENT_IDS,
+        webSearchEnabled: true,
       });
 
       expect(created.status).toBe(201);
@@ -144,6 +146,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
         clientRequestId: CLIENT_REQUEST_ID,
         ordinal: 1,
         prompt: PROMPT,
+        webSearchEnabled: true,
         responses: [
           { slot: 'base-1', role: 'base', provider: 'openai', model: 'gpt-5.6-terra' },
           { slot: 'base-2', role: 'base', provider: 'google', model: 'gemini-3.7-flash' },
@@ -157,7 +160,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
             slot: 'consolidator',
             role: 'consolidator',
             provider: 'openrouter',
-            model: 'qwen/qwen3.8-max',
+            model: 'qwen/qwen3.8-max-0902',
           },
         ],
       });
@@ -172,7 +175,9 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       expect(new Set(callOrder)).toEqual(new Set<ResponseSlot>(['base-1', 'base-2', 'base-3']));
       expect(openrouter.calls.map(call => call.slot)).toEqual(['base-3']);
       expect(statesAtProviderStart).toHaveLength(3);
-      statesAtProviderStart.forEach(({ state }) => expectCompleteCommittedState(state));
+      statesAtProviderStart.forEach(({ state }) =>
+        expectCompleteCommittedState(state, SELECTED_DEFINITIONS, true)
+      );
 
       const detail = await request(backend.app).get(
         `/api/v1/conversations/${created.body.conversation.id}`
@@ -185,6 +190,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
         'providerId',
         'modelId',
         'displayName',
+        'supportsWebSearch',
       ]);
 
       baseGates.forEach(gate => gate.resolve());
@@ -192,6 +198,16 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       expect(callOrder.slice(0, 3).sort()).toEqual(['base-1', 'base-2', 'base-3']);
       expect(callOrder[3]).toBe('consolidator');
       expect(openrouter.calls.map(call => call.slot)).toEqual(['base-3', 'consolidator']);
+      expect(
+        [...openai.calls, ...google.calls, ...openrouter.calls]
+          .map(call => [call.slot, requestedWebSearch(call)] as const)
+          .sort(([left], [right]) => left.localeCompare(right))
+      ).toEqual([
+        ['base-1', false],
+        ['base-2', false],
+        ['base-3', true],
+        ['consolidator', true],
+      ]);
       expect(openrouter.calls[1]?.messages).toEqual(
         expect.arrayContaining([
           { role: 'user', content: 'base-1:\nOpenAI base response' },
@@ -318,6 +334,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
 
       expect(created.status).toBe(201);
       expect(created.body.conversation.deployments).toEqual(DEFAULT_PUBLIC_SUMMARIES);
+      expect(created.body.turn.webSearchEnabled).toBe(false);
       await Promise.all([
         openai.waitUntilCalled(),
         google.waitUntilCalled(),
@@ -372,6 +389,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
         expect(await readCreationState(pool, clientRequestId)).toEqual({
           conversations: 0,
           turns: 0,
+          webSearchEnabled: null,
           deployments: [],
           responses: [],
         });
@@ -412,6 +430,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       expect(await readCreationState(pool, UNAVAILABLE_CLIENT_REQUEST_ID)).toEqual({
         conversations: 0,
         turns: 0,
+        webSearchEnabled: null,
         deployments: [],
         responses: [],
       });
@@ -456,6 +475,7 @@ describe('conversation creation across REST, PostgreSQL, and deterministic adapt
       expect(await readCreationState(pool, DUPLICATE_CLIENT_REQUEST_ID)).toEqual({
         conversations: 0,
         turns: 0,
+        webSearchEnabled: null,
         deployments: [],
         responses: [],
       });
@@ -500,6 +520,7 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
         providerId: string;
         modelId: string;
         displayName: string;
+        supportsWebSearch: boolean;
         contextLimitTokens: number;
         maxOutputTokens: number | null;
         inputModalities: string[];
@@ -512,6 +533,7 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
                 provider_id AS "providerId",
                 model_id AS "modelId",
                 display_name AS "displayName",
+                supports_web_search AS "supportsWebSearch",
                 context_limit_tokens AS "contextLimitTokens",
                 max_output_tokens AS "maxOutputTokens",
                 input_modalities AS "inputModalities",
@@ -527,9 +549,11 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
       )
     : { rows: [] };
   const turns = conversationId
-    ? await pool.query<{ id: string }>('SELECT id FROM turns WHERE conversation_id = $1', [
-        conversationId,
-      ])
+    ? await pool.query<{ id: string; webSearchEnabled: boolean }>(
+        `SELECT id, web_search_enabled AS "webSearchEnabled"
+           FROM turns WHERE conversation_id = $1`,
+        [conversationId]
+      )
     : { rowCount: 0, rows: [] };
   const responses = turns.rows[0]
     ? await pool.query<{
@@ -551,6 +575,7 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
   return {
     conversations: conversation.rowCount ?? 0,
     turns: turns.rowCount ?? 0,
+    webSearchEnabled: turns.rows[0]?.webSearchEnabled ?? null,
     deployments: deployments.rows,
     responses: responses.rows,
   };
@@ -558,10 +583,12 @@ async function readCreationState(pool: Pool, clientRequestId = CLIENT_REQUEST_ID
 
 function expectCompleteCommittedState(
   state: Awaited<ReturnType<typeof readCreationState>>,
-  selectedDefinitions: readonly DeploymentDefinition[] = SELECTED_DEFINITIONS
+  selectedDefinitions: readonly DeploymentDefinition[] = SELECTED_DEFINITIONS,
+  webSearchEnabled = false
 ): void {
   expect(state.conversations).toBe(1);
   expect(state.turns).toBe(1);
+  expect(state.webSearchEnabled).toBe(webSearchEnabled);
   expect(
     state.deployments.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...row }) => row)
   ).toEqual(
@@ -573,6 +600,7 @@ function expectCompleteCommittedState(
         providerId: selected.providerId,
         modelId: selected.modelId,
         displayName: selected.displayName,
+        supportsWebSearch: selected.supportsWebSearch,
         contextLimitTokens: selected.contextLimitTokens,
         maxOutputTokens: selected.maxOutputTokens ?? null,
         inputModalities: [...selected.inputModalities],
@@ -589,6 +617,10 @@ function expectCompleteCommittedState(
       model: selectedDefinitions[index]!.modelId,
     }))
   );
+}
+
+function requestedWebSearch(request: { readonly webSearchEnabled: boolean }): boolean {
+  return request.webSearchEnabled;
 }
 
 function definition(deploymentId: string): DeploymentDefinition {

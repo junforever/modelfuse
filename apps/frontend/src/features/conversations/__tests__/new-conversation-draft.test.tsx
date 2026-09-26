@@ -126,6 +126,7 @@ describe('new conversation draft', () => {
         ...item,
         providerId: 'openrouter' as const,
         modelId: 'shared-model',
+        supportsWebSearch: true,
       })),
     });
     api.createConversation.mockResolvedValue({
@@ -154,6 +155,7 @@ describe('new conversation draft', () => {
       expect(api.createConversation).toHaveBeenCalledWith(expect.anything(), {
         clientRequestId: '623e4567-e89b-42d3-a456-426614174000',
         prompt: 'Usar perfil completo',
+        webSearchEnabled: false,
         deploymentIds: defaultDeploymentIds,
       })
     );
@@ -226,6 +228,7 @@ describe('new conversation draft', () => {
       result.current.execute({
         clientRequestId: '423e4567-e89b-42d3-a456-426614174000',
         prompt: 'Crear',
+        webSearchEnabled: false,
         deploymentIds,
       })
     );
@@ -233,6 +236,7 @@ describe('new conversation draft', () => {
       expect(api.createConversation).toHaveBeenCalledWith(client, {
         clientRequestId: '423e4567-e89b-42d3-a456-426614174000',
         prompt: 'Crear',
+        webSearchEnabled: false,
         deploymentIds,
       })
     );
@@ -243,6 +247,7 @@ describe('new conversation draft', () => {
       result.current.execute({
         clientRequestId: '523e4567-e89b-42d3-a456-426614174000',
         prompt: 'Continuar',
+        webSearchEnabled: false,
         deploymentIds,
       })
     );
@@ -250,6 +255,7 @@ describe('new conversation draft', () => {
       expect(api.createTurn).toHaveBeenCalledWith(client, FIRST_ID, {
         clientRequestId: '523e4567-e89b-42d3-a456-426614174000',
         prompt: 'Continuar',
+        webSearchEnabled: false,
       })
     );
 
@@ -298,6 +304,7 @@ function detail(id: string, title: string): ConversationDetail {
         providerId: 'openai',
         modelId: 'model-1',
         displayName: 'GPT',
+        supportsWebSearch: false,
       },
       {
         slot: 'base-2',
@@ -305,6 +312,7 @@ function detail(id: string, title: string): ConversationDetail {
         providerId: 'google',
         modelId: 'model-2',
         displayName: 'Gemini',
+        supportsWebSearch: false,
       },
       {
         slot: 'base-3',
@@ -312,6 +320,7 @@ function detail(id: string, title: string): ConversationDetail {
         providerId: 'openrouter',
         modelId: 'model-3',
         displayName: 'MiniMax',
+        supportsWebSearch: true,
       },
       {
         slot: 'consolidator',
@@ -319,6 +328,7 @@ function detail(id: string, title: string): ConversationDetail {
         providerId: 'openrouter',
         modelId: 'model-4',
         displayName: 'Qwen',
+        supportsWebSearch: true,
       },
     ],
   };
@@ -343,6 +353,7 @@ function catalogItem(
     displayName,
     providerId,
     modelId: `${deploymentId}-model`,
+    supportsWebSearch: providerId === 'openrouter',
     contextLimitTokens: 100_000,
     maxOutputTokens: 8_000,
     inputModalities: ['text'] as const,

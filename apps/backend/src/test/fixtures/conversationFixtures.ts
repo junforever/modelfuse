@@ -59,6 +59,7 @@ export function createConversationFixture(): ConversationTurnResponse {
           providerId: 'openai',
           modelId: 'openai-test-model',
           displayName: 'OpenAI test deployment',
+          supportsWebSearch: false,
         },
         {
           slot: 'base-2',
@@ -66,6 +67,7 @@ export function createConversationFixture(): ConversationTurnResponse {
           providerId: 'google',
           modelId: 'google-test-model',
           displayName: 'Google test deployment',
+          supportsWebSearch: false,
         },
         {
           slot: 'base-3',
@@ -73,6 +75,7 @@ export function createConversationFixture(): ConversationTurnResponse {
           providerId: 'minimax',
           modelId: 'minimax-test-model',
           displayName: 'MiniMax test deployment',
+          supportsWebSearch: false,
         },
         {
           slot: 'consolidator',
@@ -80,6 +83,7 @@ export function createConversationFixture(): ConversationTurnResponse {
           providerId: 'qwen',
           modelId: 'qwen-test-model',
           displayName: 'Qwen test deployment',
+          supportsWebSearch: false,
         },
       ],
     },
@@ -88,6 +92,7 @@ export function createConversationFixture(): ConversationTurnResponse {
       clientRequestId: '00000000-0000-4000-8000-000000000003',
       ordinal: 1,
       prompt: 'Compare this deterministic prompt.',
+      webSearchEnabled: false,
       status: 'completed',
       responses,
       createdAt: FIXED_AT,

@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@workspace/ui/components/select';
+import { TooltipProvider } from '@workspace/ui/components/tooltip';
 
 import {
   RESPONSE_SLOTS,
@@ -16,6 +17,7 @@ import {
   type ResponseSlot,
 } from '../types/conversation';
 
+import { WebSearchUnsupportedWarning } from './ConversationDeploymentSummary';
 import {
   getDefaultDeploymentSelection,
   getDuplicateDeploymentIds,
@@ -34,6 +36,7 @@ interface DeploymentSelectorsProps {
   readonly isLoading: boolean;
   readonly isError?: boolean;
   readonly disabled: boolean;
+  readonly webSearchEnabled?: boolean;
   readonly onChange: (selection: DeploymentIds) => void;
 }
 
@@ -43,6 +46,7 @@ export function DeploymentSelectors({
   isLoading,
   isError = false,
   disabled,
+  webSearchEnabled = false,
   onChange,
 }: DeploymentSelectorsProps) {
   const duplicateErrorId = useId();
@@ -62,81 +66,89 @@ export function DeploymentSelectors({
   const selectorsDisabled = disabled || isLoading || isError || isEmpty;
 
   return (
-    <fieldset className="grid gap-3" aria-busy={isLoading} disabled={selectorsDisabled}>
-      <legend className="mb-1 text-sm font-medium">Deployments</legend>
-      {isLoading && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Cargando deployments…
-        </p>
-      )}
-      {isError && (
-        <p role="alert" className="text-sm text-destructive">
-          No se pudo cargar el catálogo de deployments.
-        </p>
-      )}
-      {isEmpty && (
-        <p role="status" className="text-sm text-muted-foreground">
-          No hay deployments disponibles.
-        </p>
-      )}
-      {unavailableSelectionMessageVisible && (
-        <p id={unavailableErrorId} role="alert" className="text-sm text-destructive">
-          Una selección ya no está disponible. Elige otro deployment para continuar.
-        </p>
-      )}
-      {duplicateDeploymentIds.size > 0 && (
-        <p id={duplicateErrorId} role="alert" className="text-sm text-destructive">
-          Cada slot debe usar un deployment distinto.
-        </p>
-      )}
-      {isDefaultUnavailable && !hasUnavailableSelection && (
-        <p role="status" className="text-sm text-muted-foreground">
-          El perfil predeterminado no está disponible. Selecciona un deployment para cada slot.
-        </p>
-      )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {RESPONSE_SLOTS.map(slot => {
-          const selectedUnavailable = Boolean(
-            selection[slot] && !availableDeploymentIds.has(selection[slot])
-          );
-          const selectedDuplicate = duplicateDeploymentIds.has(selection[slot]);
+    <TooltipProvider>
+      <fieldset className="grid gap-3" aria-busy={isLoading} disabled={selectorsDisabled}>
+        <legend className="mb-1 text-sm font-medium">Deployments</legend>
+        {isLoading && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Cargando deployments…
+          </p>
+        )}
+        {isError && (
+          <p role="alert" className="text-sm text-destructive">
+            No se pudo cargar el catálogo de deployments.
+          </p>
+        )}
+        {isEmpty && (
+          <p role="status" className="text-sm text-muted-foreground">
+            No hay deployments disponibles.
+          </p>
+        )}
+        {unavailableSelectionMessageVisible && (
+          <p id={unavailableErrorId} role="alert" className="text-sm text-destructive">
+            Una selección ya no está disponible. Elige otro deployment para continuar.
+          </p>
+        )}
+        {duplicateDeploymentIds.size > 0 && (
+          <p id={duplicateErrorId} role="alert" className="text-sm text-destructive">
+            Cada slot debe usar un deployment distinto.
+          </p>
+        )}
+        {isDefaultUnavailable && !hasUnavailableSelection && (
+          <p role="status" className="text-sm text-muted-foreground">
+            El perfil predeterminado no está disponible. Selecciona un deployment para cada slot.
+          </p>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {RESPONSE_SLOTS.map(slot => {
+            const selectedUnavailable = Boolean(
+              selection[slot] && !availableDeploymentIds.has(selection[slot])
+            );
+            const selectedDuplicate = duplicateDeploymentIds.has(selection[slot]);
+            const selectedDeployment = items.find(item => item.deploymentId === selection[slot]);
+            const showWebSearchWarning =
+              webSearchEnabled && selectedDeployment?.supportsWebSearch === false;
 
-          return (
-            <Select
-              key={slot}
-              value={selection[slot] || null}
-              disabled={selectorsDisabled}
-              onValueChange={deploymentId => {
-                if (deploymentId) onChange({ ...selection, [slot]: deploymentId });
-              }}
-            >
-              <SelectLabel>{SLOT_LABELS[slot]}</SelectLabel>
-              <SelectTrigger
-                aria-invalid={selectedUnavailable || selectedDuplicate}
-                aria-describedby={
-                  [
-                    selectedUnavailable && unavailableSelectionMessageVisible
-                      ? unavailableErrorId
-                      : undefined,
-                    selectedDuplicate ? duplicateErrorId : undefined,
-                  ]
-                    .filter(Boolean)
-                    .join(' ') || undefined
-                }
+            return (
+              <Select
+                key={slot}
+                value={selection[slot] || null}
+                disabled={selectorsDisabled}
+                onValueChange={deploymentId => {
+                  if (deploymentId) onChange({ ...selection, [slot]: deploymentId });
+                }}
               >
-                <SelectValue placeholder="Selecciona un deployment" />
-              </SelectTrigger>
-              <SelectContent>
-                {items.map(item => (
-                  <SelectItem key={item.deploymentId} value={item.deploymentId}>
-                    {item.displayName} · {item.providerId}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          );
-        })}
-      </div>
-    </fieldset>
+                <SelectLabel>{SLOT_LABELS[slot]}</SelectLabel>
+                <div className="flex items-center gap-2">
+                  <SelectTrigger
+                    aria-invalid={selectedUnavailable || selectedDuplicate}
+                    aria-describedby={
+                      [
+                        selectedUnavailable && unavailableSelectionMessageVisible
+                          ? unavailableErrorId
+                          : undefined,
+                        selectedDuplicate ? duplicateErrorId : undefined,
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                  >
+                    <SelectValue placeholder="Selecciona un deployment" />
+                  </SelectTrigger>
+                  {showWebSearchWarning && <WebSearchUnsupportedWarning />}
+                </div>
+                <SelectContent>
+                  {items.map(item => (
+                    <SelectItem key={item.deploymentId} value={item.deploymentId}>
+                      {item.displayName} · {item.providerId}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          })}
+        </div>
+      </fieldset>
+    </TooltipProvider>
   );
 }

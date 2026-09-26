@@ -8,5 +8,7 @@
     <include file="001-create-conversations-and-turns.sql" relativeToChangelogFile="true"/>
     <include file="002-create-conversation-deployments.sql" relativeToChangelogFile="true"/>
     <include file="003-make-conversation-deployment-max-output-optional.sql" relativeToChangelogFile="true"/>
+    <include file="004-add-per-turn-web-search.sql" relativeToChangelogFile="true"/>
+    <include file="005-upgrade-direct-web-search-capabilities.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

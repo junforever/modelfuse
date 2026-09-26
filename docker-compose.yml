@@ -1,3 +1,4 @@
+name: modelfuse-dev
 services:
   postgres_modelfuse:
     image: postgres:16-alpine
