@@ -101,6 +101,53 @@ describe('ResponsePanel completed responses', () => {
   );
 });
 
+describe('ResponsePanel copy action', () => {
+  it('copies the full raw completed response while its rendered content is collapsed', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText');
+    const content = 'Visible prefix and the exact hidden response tail.';
+
+    render(
+      <ResponsePanel
+        response={modelResponse('base-1', { status: 'completed', content })}
+        responseLabel="Base 1"
+        hasWorkInProgress={false}
+        collapseThreshold={14}
+        onRetry={vi.fn()}
+        onContinueWithout={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(content)).not.toBeInTheDocument();
+    const copyAction = screen.getByRole('button', { name: 'Copiar' });
+    expect(copyAction).not.toHaveTextContent('Copiar');
+    const expansionAction = screen.getByRole('button', { name: 'Mostrar más' });
+    expect(expansionAction.parentElement).toContainElement(copyAction);
+
+    await user.hover(copyAction);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Copiar');
+
+    await user.click(copyAction);
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText).toHaveBeenCalledWith(content);
+  });
+
+  it('does not offer copying before a generated response is completed', () => {
+    render(
+      <ResponsePanel
+        response={modelResponse('base-1')}
+        responseLabel="Base 1"
+        hasWorkInProgress
+        onRetry={vi.fn()}
+        onContinueWithout={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Generando respuesta…');
+    expect(screen.queryByRole('button', { name: 'Copiar' })).not.toBeInTheDocument();
+  });
+});
+
 describe('ResponsePanel async failures', () => {
   it('announces a received slot error together with its recovery actions', async () => {
     const user = userEvent.setup();
