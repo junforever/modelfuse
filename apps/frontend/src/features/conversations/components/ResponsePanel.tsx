@@ -44,6 +44,7 @@ export function ResponsePanel({
           content={response.content}
           threshold={collapseThreshold}
           renderMarkdown
+          showCopyAction
         />
       </div>
     );

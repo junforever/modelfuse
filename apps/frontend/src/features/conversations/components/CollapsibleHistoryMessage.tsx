@@ -1,13 +1,21 @@
+import { Copy } from 'lucide-react';
 import { useState } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Button } from '@workspace/ui/components/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@workspace/ui/components/tooltip';
 
 interface CollapsibleHistoryMessageProps {
   readonly content: string;
   readonly threshold?: number;
   readonly renderMarkdown?: boolean;
+  readonly showCopyAction?: boolean;
 }
 
 const markdownComponents = {
@@ -109,27 +117,53 @@ export function CollapsibleHistoryMessage({
   content,
   threshold,
   renderMarkdown,
+  showCopyAction = false,
 }: CollapsibleHistoryMessageProps) {
   const [expanded, setExpanded] = useState(false);
   const characters = Array.from(content);
+  const canCollapse = Boolean(threshold && characters.length > threshold);
 
-  if (!threshold || characters.length <= threshold) {
+  if (!canCollapse && !showCopyAction) {
     return <MessageContent content={content} renderMarkdown={renderMarkdown} />;
   }
 
-  const visibleContent = expanded ? content : `${characters.slice(0, threshold).join('')}…`;
+  const visibleContent =
+    canCollapse && !expanded ? `${characters.slice(0, threshold).join('')}…` : content;
 
   return (
     <div className="grid gap-2">
       <MessageContent content={visibleContent} renderMarkdown={renderMarkdown} />
-      <Button
-        className="w-fit"
-        variant="link"
-        size="sm"
-        onClick={() => setExpanded(value => !value)}
-      >
-        {expanded ? 'Mostrar menos' : 'Mostrar más'}
-      </Button>
+      <div className="flex items-center gap-2">
+        {canCollapse && (
+          <Button
+            className="w-fit"
+            variant="link"
+            size="sm"
+            onClick={() => setExpanded(value => !value)}
+          >
+            {expanded ? 'Mostrar menos' : 'Mostrar más'}
+          </Button>
+        )}
+        {showCopyAction && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Copiar"
+                    onClick={() => void navigator.clipboard.writeText(content)}
+                  >
+                    <Copy aria-hidden="true" />
+                  </Button>
+                }
+              />
+              <TooltipContent>Copiar</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
     </div>
   );
 }
