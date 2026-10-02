@@ -132,8 +132,8 @@ describe('ResponsePanel copy action', () => {
     expect(writeText).toHaveBeenCalledWith(content);
   });
 
-  it('does not offer copying before a generated response is completed', () => {
-    render(
+  it('uses a theme-aware gradient while a response is pending or generating', () => {
+    const { rerender } = render(
       <ResponsePanel
         response={modelResponse('base-1')}
         responseLabel="Base 1"
@@ -143,8 +143,33 @@ describe('ResponsePanel copy action', () => {
       />
     );
 
-    expect(screen.getByRole('status')).toHaveTextContent('Generando respuesta…');
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Generando respuesta…');
+    expect(status).toHaveClass(
+      'bg-linear-to-r',
+      'from-blue-800',
+      'via-cyan-700',
+      'to-blue-800',
+      'bg-size-[200%_100%]',
+      'bg-clip-text',
+      'text-transparent',
+      'motion-safe:animate-response-shimmer',
+      'dark:from-blue-300',
+      'dark:via-cyan-200',
+      'dark:to-blue-300'
+    );
     expect(screen.queryByRole('button', { name: 'Copiar' })).not.toBeInTheDocument();
+
+    rerender(
+      <ResponsePanel
+        response={modelResponse('base-1', { status: 'pending' })}
+        responseLabel="Base 1"
+        hasWorkInProgress
+        onRetry={vi.fn()}
+        onContinueWithout={vi.fn()}
+      />
+    );
+    expect(status).toHaveTextContent('En espera…');
   });
 });
 

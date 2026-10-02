@@ -52,7 +52,10 @@ export function ResponsePanel({
 
   if (response.status !== 'failed') {
     return (
-      <p className="text-muted-foreground" role="status">
+      <p
+        className="bg-linear-to-r from-blue-800 via-cyan-700 to-blue-800 bg-size-[200%_100%] bg-clip-text text-transparent motion-safe:animate-response-shimmer dark:from-blue-300 dark:via-cyan-200 dark:to-blue-300"
+        role="status"
+      >
         {runtimeStage ?? (response.status === 'pending' ? 'En espera…' : 'Generando respuesta…')}
       </p>
     );

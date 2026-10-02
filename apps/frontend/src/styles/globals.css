@@ -1,3 +1,17 @@
 @import '@workspace/ui/globals.css';
 
 @source '../**/*.{ts,tsx}';
+
+@theme {
+  --animate-response-shimmer: response-shimmer 1.8s linear infinite;
+
+  @keyframes response-shimmer {
+    0% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+}
