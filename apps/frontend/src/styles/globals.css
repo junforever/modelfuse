@@ -3,7 +3,7 @@
 @source '../**/*.{ts,tsx}';
 
 @theme {
-  --animate-response-shimmer: response-shimmer 1.8s linear infinite;
+  --animate-response-shimmer: response-shimmer 1.1s linear infinite;
 
   @keyframes response-shimmer {
     0% {
