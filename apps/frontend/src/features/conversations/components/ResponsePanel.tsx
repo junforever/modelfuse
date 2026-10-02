@@ -2,10 +2,7 @@ import { useId, useState } from 'react';
 
 import { Button } from '@workspace/ui/components/button';
 
-import {
-  type ModelResponse,
-  type ResponseSlot,
-} from '../types/conversation';
+import { type ModelResponse, type ResponseSlot } from '../types/conversation';
 import { responseFailureMessage } from '../utils/responseFailure';
 import { CollapsibleHistoryMessage } from './CollapsibleHistoryMessage';
 import { ContinueWithoutDialog } from './ContinueWithoutDialog';
@@ -53,7 +50,7 @@ export function ResponsePanel({
   if (response.status !== 'failed') {
     return (
       <p
-        className="bg-linear-to-r from-blue-800 via-cyan-700 to-blue-800 bg-size-[200%_100%] bg-clip-text text-transparent motion-safe:animate-response-shimmer dark:from-blue-300 dark:via-cyan-200 dark:to-blue-300"
+        className="motion-safe:animate-response-shimmer bg-linear-to-r from-blue-800 via-amber-600 to-blue-800 bg-size-[200%_100%] bg-clip-text text-transparent dark:from-blue-300 dark:via-violet-600 dark:to-blue-300"
         role="status"
       >
         {runtimeStage ?? (response.status === 'pending' ? 'En espera…' : 'Generando respuesta…')}
